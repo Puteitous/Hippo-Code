@@ -3,7 +3,15 @@ package com.example.agent;
 import com.example.agent.config.Config;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.console.InputHandler;
-import com.example.agent.llm.*;
+import com.example.agent.llm.exception.LlmApiException;
+import com.example.agent.llm.exception.LlmConnectionException;
+import com.example.agent.llm.exception.LlmException;
+import com.example.agent.llm.exception.LlmTimeoutException;
+import com.example.agent.llm.client.DefaultLlmClient;
+import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.model.ChatResponse;
+import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.ToolCall;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.tools.*;
@@ -295,19 +303,28 @@ public class SimpleJavaAgent {
             try {
                 print(ConsoleStyle.gray("  "));
                 println(ConsoleStyle.thinking());
+                println();
+                print(ConsoleStyle.aiLabel() + ": ");
 
-                ChatResponse response = llmClient.chat(conversationManager.getHistory(), toolRegistry.toTools());
+                StringBuilder contentBuilder = new StringBuilder();
+
+                ChatResponse response = llmClient.chatStream(
+                    conversationManager.getHistory(), 
+                    toolRegistry.toTools(),
+                    chunk -> {
+                        if (chunk.hasContent()) {
+                            print(chunk.getContent());
+                            contentBuilder.append(chunk.getContent());
+                        }
+                    }
+                );
+
+                println();
 
                 Message assistantMessage = response.getFirstMessage();
                 if (assistantMessage == null) {
                     println(ConsoleStyle.error("未收到有效响应"));
                     break;
-                }
-
-                if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
-                    println();
-                    println(ConsoleStyle.aiLabel() + ":");
-                    println(ConsoleStyle.white(assistantMessage.getContent()));
                 }
 
                 if (response.hasToolCalls()) {

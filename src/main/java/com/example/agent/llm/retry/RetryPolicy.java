@@ -1,4 +1,9 @@
-package com.example.agent.llm;
+package com.example.agent.llm.retry;
+
+import com.example.agent.llm.exception.LlmApiException;
+import com.example.agent.llm.exception.LlmConnectionException;
+import com.example.agent.llm.exception.LlmException;
+import com.example.agent.llm.exception.LlmTimeoutException;
 
 public class RetryPolicy {
 

@@ -1,6 +1,14 @@
-package com.example.agent.llm;
+package com.example.agent.llm.client;
 
 import java.util.List;
+import java.util.function.Consumer;
+
+import com.example.agent.llm.exception.LlmException;
+import com.example.agent.llm.model.ChatRequest;
+import com.example.agent.llm.model.ChatResponse;
+import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.Tool;
+import com.example.agent.llm.stream.StreamChunk;
 
 public interface LlmClient {
 
@@ -9,6 +17,10 @@ public interface LlmClient {
     ChatResponse chat(List<Message> messages, List<Tool> tools) throws LlmException;
 
     ChatResponse chatWithTools(List<Message> messages, List<Tool> tools) throws LlmException;
+
+    ChatResponse chatStream(List<Message> messages, Consumer<StreamChunk> onChunk) throws LlmException;
+
+    ChatResponse chatStream(List<Message> messages, List<Tool> tools, Consumer<StreamChunk> onChunk) throws LlmException;
 
     ChatResponse executeRequest(ChatRequest request) throws LlmException;
 

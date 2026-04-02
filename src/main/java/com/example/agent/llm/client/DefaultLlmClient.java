@@ -1,26 +1,49 @@
-package com.example.agent.llm;
+package com.example.agent.llm.client;
 
 import com.example.agent.config.Config;
+import com.example.agent.llm.exception.LlmApiException;
+import com.example.agent.llm.exception.LlmConnectionException;
+import com.example.agent.llm.exception.LlmException;
+import com.example.agent.llm.exception.LlmTimeoutException;
+import com.example.agent.llm.model.ChatRequest;
+import com.example.agent.llm.model.ChatResponse;
+import com.example.agent.llm.model.Choice;
+import com.example.agent.llm.model.FunctionCall;
+import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.Tool;
+import com.example.agent.llm.model.ToolCall;
+import com.example.agent.llm.retry.RetryPolicy;
+import com.example.agent.llm.stream.SseParser;
+import com.example.agent.llm.stream.StreamChunk;
+import com.example.agent.llm.stream.ToolCallDelta;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class DefaultLlmClient implements LlmClient {
 
     private static final String CHAT_COMPLETIONS_PATH = "/compatible-mode/v1/chat/completions";
     private static final int API_TIMEOUT_SECONDS = 60;
+    private static final int STREAM_TIMEOUT_SECONDS = 120;
     private static final int CONNECT_TIMEOUT_SECONDS = 30;
     
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Config config;
     private final RetryPolicy retryPolicy;
+    private final SseParser sseParser;
 
     public DefaultLlmClient() {
         this(Config.getInstance());
@@ -34,6 +57,7 @@ public class DefaultLlmClient implements LlmClient {
         this.config = config;
         this.retryPolicy = retryPolicy;
         this.objectMapper = new ObjectMapper();
+        this.sseParser = new SseParser();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
                 .build();
@@ -59,6 +83,198 @@ public class DefaultLlmClient implements LlmClient {
     @Override
     public ChatResponse chatWithTools(List<Message> messages, List<Tool> tools) throws LlmException {
         return chat(messages, tools);
+    }
+
+    @Override
+    public ChatResponse chatStream(List<Message> messages, Consumer<StreamChunk> onChunk) throws LlmException {
+        return chatStream(messages, null, onChunk);
+    }
+
+    @Override
+    public ChatResponse chatStream(List<Message> messages, List<Tool> tools, Consumer<StreamChunk> onChunk) throws LlmException {
+        ChatRequest request = ChatRequest.of(config.getModel(), messages)
+                .stream(true)
+                .maxTokens(config.getMaxTokens());
+        
+        if (tools != null && !tools.isEmpty()) {
+            request.tools(tools).toolChoiceAuto();
+        }
+        
+        return executeStreamRequest(request, onChunk);
+    }
+
+    private ChatResponse executeStreamRequest(ChatRequest request, Consumer<StreamChunk> onChunk) throws LlmException {
+        try {
+            String requestBody = objectMapper.writeValueAsString(request);
+            String url = config.getBaseUrl() + CHAT_COMPLETIONS_PATH;
+            
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + config.getApiKey())
+                    .header("Accept", "text/event-stream")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .timeout(Duration.ofSeconds(STREAM_TIMEOUT_SECONDS))
+                    .build();
+
+            HttpResponse<InputStream> response = httpClient.send(
+                    httpRequest, 
+                    HttpResponse.BodyHandlers.ofInputStream()
+            );
+            
+            return processStreamResponse(response, onChunk);
+            
+        } catch (LlmException e) {
+            throw e;
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new LlmTimeoutException(
+                "流式请求超时（" + STREAM_TIMEOUT_SECONDS + "秒）。请检查网络连接或稍后重试。", 
+                STREAM_TIMEOUT_SECONDS, e);
+        } catch (java.net.ConnectException e) {
+            throw new LlmConnectionException(
+                "无法连接到 API 服务器: " + config.getBaseUrl() + "。请检查网络连接。", 
+                config.getBaseUrl(), e);
+        } catch (Exception e) {
+            throw new LlmException("流式请求失败: " + e.getMessage(), e);
+        }
+    }
+
+    private ChatResponse processStreamResponse(
+            HttpResponse<InputStream> response, 
+            Consumer<StreamChunk> onChunk) throws LlmException {
+        
+        int statusCode = response.statusCode();
+        
+        if (statusCode < 200 || statusCode >= 300) {
+            try {
+                String body = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
+                String errorMessage = parseErrorMessage(body, statusCode);
+                throw new LlmApiException("API 返回错误 (HTTP " + statusCode + "): " + errorMessage, statusCode, body);
+            } catch (Exception e) {
+                if (e instanceof LlmException) {
+                    throw (LlmException) e;
+                }
+                throw new LlmApiException("API 返回错误 (HTTP " + statusCode + ")", statusCode, null);
+            }
+        }
+        
+        StringBuilder fullContent = new StringBuilder();
+        List<ToolCall> toolCalls = new ArrayList<>();
+        String finishReason = null;
+        
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+            
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+                
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                
+                StreamChunk chunk = sseParser.parse(line);
+                
+                if (chunk == null) {
+                    if (sseParser.isDone(line)) {
+                        break;
+                    }
+                    continue;
+                }
+                
+                if (chunk.hasContent()) {
+                    fullContent.append(chunk.getContent());
+                    if (onChunk != null) {
+                        onChunk.accept(chunk);
+                    }
+                }
+                
+                if (chunk.isToolCall() && chunk.hasToolCalls()) {
+                    mergeToolCallDeltas(toolCalls, chunk.getToolCallDeltas());
+                }
+                
+                if (chunk.getFinishReason() != null) {
+                    finishReason = chunk.getFinishReason();
+                }
+            }
+            
+        } catch (Exception e) {
+            if (e instanceof LlmException) {
+                throw (LlmException) e;
+            }
+            throw new LlmException("读取流式响应失败: " + e.getMessage(), e);
+        }
+        
+        return buildChatResponse(fullContent.toString(), toolCalls, finishReason);
+    }
+
+    private void mergeToolCallDeltas(List<ToolCall> toolCalls, List<ToolCallDelta> deltas) {
+        for (ToolCallDelta delta : deltas) {
+            int index = delta.getIndex() != null ? delta.getIndex() : toolCalls.size();
+            
+            while (toolCalls.size() <= index) {
+                toolCalls.add(new ToolCall());
+            }
+            
+            ToolCall toolCall = toolCalls.get(index);
+            
+            if (delta.getId() != null) {
+                toolCall.setId(delta.getId());
+            }
+            
+            if (delta.getType() != null) {
+                toolCall.setType(delta.getType());
+            }
+            
+            if (delta.getFunction() != null) {
+                ToolCallDelta.FunctionDelta funcDelta = delta.getFunction();
+                
+                if (toolCall.getFunction() == null) {
+                    toolCall.setFunction(new FunctionCall());
+                }
+                
+                FunctionCall func = toolCall.getFunction();
+                
+                if (funcDelta.getName() != null) {
+                    func.setName(funcDelta.getName());
+                }
+                
+                if (funcDelta.getArguments() != null) {
+                    String currentArgs = func.getArguments() != null ? func.getArguments() : "";
+                    func.setArguments(currentArgs + funcDelta.getArguments());
+                }
+            }
+        }
+    }
+
+    private ChatResponse buildChatResponse(String content, List<ToolCall> toolCalls, String finishReason) {
+        ChatResponse response = new ChatResponse();
+        response.setId("stream-" + System.currentTimeMillis());
+        response.setObject("chat.completion");
+        response.setCreated(System.currentTimeMillis() / 1000);
+        response.setModel(config.getModel());
+        
+        Message message = new Message();
+        message.setRole("assistant");
+        
+        if (content != null && !content.isEmpty()) {
+            message.setContent(content);
+        }
+        
+        if (!toolCalls.isEmpty()) {
+            message.setToolCalls(toolCalls);
+        }
+        
+        Choice choice = new Choice();
+        choice.setIndex(0);
+        choice.setMessage(message);
+        choice.setFinishReason(finishReason);
+        
+        response.setChoices(List.of(choice));
+        
+        return response;
     }
 
     @Override

@@ -1,9 +1,9 @@
 package com.example.agent.service;
 
-import com.example.agent.llm.Message;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import com.example.agent.llm.model.Message;
 
 public class ConversationManager {
 

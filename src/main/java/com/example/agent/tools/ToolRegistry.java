@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.llm.Tool;
+import com.example.agent.llm.model.Tool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 

@@ -1,4 +1,4 @@
-package com.example.agent.llm;
+package com.example.agent.llm.exception;
 
 public class LlmApiException extends LlmException {
 

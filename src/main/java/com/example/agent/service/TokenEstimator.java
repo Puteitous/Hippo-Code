@@ -1,10 +1,10 @@
 // 文件路径: e:\Trae_projects\Hippo Code\src\main\java\com\example\agent\service\TokenEstimator.java
 package com.example.agent.service;
 
-import com.example.agent.llm.Message;
-import com.example.agent.llm.ToolCall;
-
 import java.util.List;
+
+import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.ToolCall;
 
 public class TokenEstimator {
 
