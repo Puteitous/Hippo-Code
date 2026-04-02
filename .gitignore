@@ -1,0 +1,25 @@
+# 敏感配置文件 - 包含 API Key
+config.json
+
+# 构建产物
+target/
+*.jar
+*.class
+
+# IDE 配置
+.idea/
+*.iml
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 历史文件
+.agent_history
+
+# 日志文件
+*.log
+
+# Maven
+dependency-reduced-pom.xml
