@@ -1,5 +1,6 @@
 package com.example.agent;
 
+import com.example.agent.config.Config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.AfterEach;

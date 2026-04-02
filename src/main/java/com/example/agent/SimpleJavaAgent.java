@@ -1,6 +1,11 @@
 package com.example.agent;
 
+import com.example.agent.config.Config;
+import com.example.agent.console.ConsoleStyle;
+import com.example.agent.console.InputHandler;
 import com.example.agent.llm.*;
+import com.example.agent.service.ConversationManager;
+import com.example.agent.service.TokenEstimator;
 import com.example.agent.tools.*;
 import org.jline.reader.*;
 import org.jline.reader.impl.completer.StringsCompleter;
@@ -8,7 +13,6 @@ import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 public class SimpleJavaAgent {
@@ -28,14 +32,13 @@ public class SimpleJavaAgent {
         """;
 
     private static final int MAX_RETRIES = 3;
-    private static final int MAX_HISTORY_MESSAGES = 20;
-    private static final int MAX_CONTEXT_TOKENS = 30000;
-    private static final int MAX_SINGLE_INPUT_TOKENS = 10000;
 
     private Config config;
     private LlmClient llmClient;
     private ToolRegistry toolRegistry;
-    private List<Message> conversationHistory;
+    private TokenEstimator tokenEstimator;
+    private ConversationManager conversationManager;
+    private InputHandler inputHandler;
     private Terminal terminal;
     private LineReader reader;
     private int conversationRound = 0;
@@ -60,8 +63,8 @@ public class SimpleJavaAgent {
 
             llmClient = new LlmClient(config);
             toolRegistry = createToolRegistry();
-            conversationHistory = new ArrayList<>();
-            conversationHistory.add(Message.system(SYSTEM_PROMPT));
+            tokenEstimator = new TokenEstimator();
+            conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator);
 
             Completer completer = new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config");
 
@@ -70,6 +73,8 @@ public class SimpleJavaAgent {
                     .completer(completer)
                     .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                     .build();
+
+            inputHandler = new InputHandler(reader, tokenEstimator);
 
             printWelcome();
 
@@ -99,8 +104,7 @@ public class SimpleJavaAgent {
                     }
 
                     if ("reset".equalsIgnoreCase(line)) {
-                        conversationHistory.clear();
-                        conversationHistory.add(Message.system(SYSTEM_PROMPT));
+                        conversationManager.reset();
                         println(ConsoleStyle.success("会话已重置"));
                         println();
                         continue;
@@ -112,7 +116,7 @@ public class SimpleJavaAgent {
                     }
 
                     if ("\"\"\"".equals(line) || "multi".equalsIgnoreCase(line)) {
-                        line = readMultilineInput();
+                        line = inputHandler.readMultilineInput();
                         if (line == null || line.trim().isEmpty()) {
                             continue;
                         }
@@ -131,52 +135,6 @@ public class SimpleJavaAgent {
         } catch (IOException e) {
             System.err.println(ConsoleStyle.error("终端错误: " + e.getMessage()));
         }
-    }
-
-    private String readMultilineInput() {
-        println(ConsoleStyle.boldCyan("╔══════════════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldCyan("║              多行输入模式                        ║"));
-        println(ConsoleStyle.boldCyan("╚══════════════════════════════════════════════════╝"));
-        println();
-        println(ConsoleStyle.gray("输入或粘贴多行内容，单独输入 \"\"\" 结束"));
-        println(ConsoleStyle.gray("或按 Ctrl+C 取消"));
-        println();
-
-        StringBuilder buffer = new StringBuilder();
-        int lineCount = 0;
-
-        while (true) {
-            try {
-                String line = reader.readLine(ConsoleStyle.yellow("... "));
-                
-                if ("\"\"\"".equals(line.trim())) {
-                    break;
-                }
-                
-                if (buffer.length() > 0) {
-                    buffer.append("\n");
-                }
-                buffer.append(line);
-                lineCount++;
-                
-            } catch (UserInterruptException e) {
-                println(ConsoleStyle.info("已取消多行输入"));
-                return null;
-            } catch (EndOfFileException e) {
-                break;
-            }
-        }
-
-        if (buffer.length() == 0) {
-            println(ConsoleStyle.yellow("输入为空，已取消"));
-            return null;
-        }
-
-        println();
-        println(ConsoleStyle.success("已接收 " + lineCount + " 行内容 (" + buffer.length() + " 字符)"));
-        println();
-
-        return buffer.toString();
     }
 
     private boolean validateConfig() {
@@ -308,17 +266,20 @@ public class SimpleJavaAgent {
     private void processUserInput(String userInput) {
         conversationRound++;
         
-        int inputTokens = estimateTextTokens(userInput);
-        if (inputTokens > MAX_SINGLE_INPUT_TOKENS) {
-            userInput = handleLongInput(userInput, inputTokens);
+        int inputTokens = tokenEstimator.estimateTextTokens(userInput);
+        if (inputTokens > inputHandler.getMaxInputTokens()) {
+            userInput = inputHandler.handleLongInput(userInput, inputTokens);
             if (userInput == null) {
                 conversationRound--;
                 return;
             }
         }
         
-        conversationHistory.add(Message.user(userInput));
-        trimHistory();
+        conversationManager.addUserMessage(userInput);
+        conversationManager.trimHistory((messageCount, tokenCount) -> {
+            println(ConsoleStyle.gray("[历史已精简: " + messageCount + " 条消息, 约 " + tokenCount + " tokens]"));
+            println();
+        });
         
         println();
         println(ConsoleStyle.conversationDivider(conversationRound));
@@ -329,138 +290,13 @@ public class SimpleJavaAgent {
         processAgentLoop();
     }
 
-    private String handleLongInput(String input, int tokens) {
-        println();
-        println(ConsoleStyle.boldYellow("╔══════════════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldYellow("║              ⚠ 输入内容过长                        ║"));
-        println(ConsoleStyle.boldYellow("╚══════════════════════════════════════════════════╝"));
-        println();
-        println(ConsoleStyle.yellow("当前大小: " + tokens + " tokens"));
-        println(ConsoleStyle.yellow("最大限制: " + MAX_SINGLE_INPUT_TOKENS + " tokens"));
-        println(ConsoleStyle.yellow("超出部分: " + (tokens - MAX_SINGLE_INPUT_TOKENS) + " tokens"));
-        println();
-        
-        int maxChars = MAX_SINGLE_INPUT_TOKENS * 2;
-        String truncated = input.substring(0, maxChars);
-        String removed = input.substring(maxChars);
-        
-        println(ConsoleStyle.gray("── 保留部分预览 (前 200 字符) ──"));
-        println(ConsoleStyle.dim(truncate(truncated, 200)));
-        println();
-        println(ConsoleStyle.gray("── 将被删除部分预览 (前 200 字符) ──"));
-        println(ConsoleStyle.red(truncate(removed, 200)));
-        println();
-        
-        println(ConsoleStyle.cyan("请选择操作:"));
-        println(ConsoleStyle.green("  [Enter] ") + ConsoleStyle.white("继续提交（截断内容）"));
-        println(ConsoleStyle.green("  [E]     ") + ConsoleStyle.white("编辑输入"));
-        println(ConsoleStyle.green("  [C]     ") + ConsoleStyle.white("取消本次输入"));
-        println();
-        
-        try {
-            String choice = reader.readLine(ConsoleStyle.yellow("请选择: ")).trim().toUpperCase();
-            
-            switch (choice) {
-                case "":
-                case "Y":
-                    println(ConsoleStyle.success("已截断并提交"));
-                    return truncated;
-                case "E":
-                    println(ConsoleStyle.info("请重新输入（按 Ctrl+C 取消）:"));
-                    String newInput = reader.readLine(ConsoleStyle.prompt());
-                    if (newInput != null && !newInput.trim().isEmpty()) {
-                        int newTokens = estimateTextTokens(newInput);
-                        if (newTokens > MAX_SINGLE_INPUT_TOKENS) {
-                            return handleLongInput(newInput, newTokens);
-                        }
-                        return newInput;
-                    }
-                    return null;
-                case "C":
-                case "N":
-                    println(ConsoleStyle.info("已取消"));
-                    return null;
-                default:
-                    println(ConsoleStyle.yellow("无效选择，已取消"));
-                    return null;
-            }
-        } catch (Exception e) {
-            println(ConsoleStyle.info("已取消"));
-            return null;
-        }
-    }
-
-    private void trimHistory() {
-        boolean trimmed = false;
-        
-        while (conversationHistory.size() > 2) {
-            int totalTokens = estimateTokens();
-            
-            if (totalTokens <= MAX_CONTEXT_TOKENS && conversationHistory.size() <= MAX_HISTORY_MESSAGES + 1) {
-                break;
-            }
-            
-            conversationHistory.remove(1);
-            trimmed = true;
-        }
-        
-        if (trimmed) {
-            int currentTokens = estimateTokens();
-            println(ConsoleStyle.gray("[历史已精简: " + conversationHistory.size() + " 条消息, 约 " + currentTokens + " tokens]"));
-            println();
-        }
-    }
-
-    private int estimateTokens() {
-        int total = 0;
-        for (Message msg : conversationHistory) {
-            total += estimateMessageTokens(msg);
-        }
-        return total;
-    }
-
-    private int estimateMessageTokens(Message msg) {
-        int tokens = 4;
-        
-        if (msg.getContent() != null) {
-            tokens += estimateTextTokens(msg.getContent());
-        }
-        
-        if (msg.getToolCalls() != null) {
-            for (ToolCall tc : msg.getToolCalls()) {
-                if (tc.getFunction() != null && tc.getFunction().getArguments() != null) {
-                    tokens += estimateTextTokens(tc.getFunction().getArguments());
-                }
-            }
-        }
-        
-        return tokens;
-    }
-
-    private int estimateTextTokens(String text) {
-        if (text == null) return 0;
-        
-        int chineseChars = 0;
-        int otherChars = 0;
-        
-        for (char c : text.toCharArray()) {
-            if (Character.toString(c).matches("[\\u4e00-\\u9fa5]")) {
-                chineseChars++;
-            } else {
-                otherChars++;
-            }
-        }
-        
-        return chineseChars + otherChars / 4;
-    }
-
     private void processAgentLoop() {
         while (true) {
             try {
                 print(ConsoleStyle.gray("  "));
                 println(ConsoleStyle.thinking());
 
-                ChatResponse response = llmClient.chat(conversationHistory, toolRegistry.toTools());
+                ChatResponse response = llmClient.chat(conversationManager.getHistory(), toolRegistry.toTools());
 
                 Message assistantMessage = response.getFirstMessage();
                 if (assistantMessage == null) {
@@ -475,7 +311,7 @@ public class SimpleJavaAgent {
                 }
 
                 if (response.hasToolCalls()) {
-                    conversationHistory.add(assistantMessage);
+                    conversationManager.addAssistantMessage(assistantMessage);
 
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     println();
@@ -484,7 +320,7 @@ public class SimpleJavaAgent {
                         processToolCall(toolCall);
                     }
                 } else {
-                    conversationHistory.add(assistantMessage);
+                    conversationManager.addAssistantMessage(assistantMessage);
                     println();
                     println(ConsoleStyle.conversationEnd());
                     println();
@@ -548,14 +384,14 @@ public class SimpleJavaAgent {
             String displayResult = truncate(result, 100);
             println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.dim(displayResult));
 
-            conversationHistory.add(Message.toolResult(toolCallId, toolName, result));
+            conversationManager.addToolResult(toolCallId, toolName, result);
 
         } catch (ToolExecutionException e) {
             String errorMessage = "工具执行失败: " + e.getMessage();
             println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.red(errorMessage));
 
             String errorResult = "Error: " + e.getMessage() + "\nPlease try a different approach or check if the path is correct.";
-            conversationHistory.add(Message.toolResult(toolCallId, toolName, errorResult));
+            conversationManager.addToolResult(toolCallId, toolName, errorResult);
         }
     }
 

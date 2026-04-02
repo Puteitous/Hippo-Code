@@ -1,4 +1,4 @@
-package com.example.agent;
+package com.example.agent.console;
 
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
