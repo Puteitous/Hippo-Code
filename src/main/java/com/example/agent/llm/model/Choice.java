@@ -1,4 +1,4 @@
-package com.example.agent.llm;
+package com.example.agent.llm.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
