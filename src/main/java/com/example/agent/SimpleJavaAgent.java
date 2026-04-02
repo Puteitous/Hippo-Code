@@ -111,6 +111,13 @@ public class SimpleJavaAgent {
                         continue;
                     }
 
+                    if ("\"\"\"".equals(line) || "multi".equalsIgnoreCase(line)) {
+                        line = readMultilineInput();
+                        if (line == null || line.trim().isEmpty()) {
+                            continue;
+                        }
+                    }
+
                     processUserInput(line);
 
                 } catch (UserInterruptException e) {
@@ -124,6 +131,52 @@ public class SimpleJavaAgent {
         } catch (IOException e) {
             System.err.println(ConsoleStyle.error("终端错误: " + e.getMessage()));
         }
+    }
+
+    private String readMultilineInput() {
+        println(ConsoleStyle.boldCyan("╔══════════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldCyan("║              多行输入模式                        ║"));
+        println(ConsoleStyle.boldCyan("╚══════════════════════════════════════════════════╝"));
+        println();
+        println(ConsoleStyle.gray("输入或粘贴多行内容，单独输入 \"\"\" 结束"));
+        println(ConsoleStyle.gray("或按 Ctrl+C 取消"));
+        println();
+
+        StringBuilder buffer = new StringBuilder();
+        int lineCount = 0;
+
+        while (true) {
+            try {
+                String line = reader.readLine(ConsoleStyle.yellow("... "));
+                
+                if ("\"\"\"".equals(line.trim())) {
+                    break;
+                }
+                
+                if (buffer.length() > 0) {
+                    buffer.append("\n");
+                }
+                buffer.append(line);
+                lineCount++;
+                
+            } catch (UserInterruptException e) {
+                println(ConsoleStyle.info("已取消多行输入"));
+                return null;
+            } catch (EndOfFileException e) {
+                break;
+            }
+        }
+
+        if (buffer.length() == 0) {
+            println(ConsoleStyle.yellow("输入为空，已取消"));
+            return null;
+        }
+
+        println();
+        println(ConsoleStyle.success("已接收 " + lineCount + " 行内容 (" + buffer.length() + " 字符)"));
+        println();
+
+        return buffer.toString();
     }
 
     private boolean validateConfig() {
@@ -177,13 +230,20 @@ public class SimpleJavaAgent {
 
     private void printWelcome() {
         println();
-        println(ConsoleStyle.boldCyan("╔════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldCyan("║     Simple Java Agent - AI 编程助手    ║"));
-        println(ConsoleStyle.boldCyan("╚════════════════════════════════════════╝"));
+        println(ConsoleStyle.boldCyan("╔════════════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldCyan("║       Simple Java Agent - AI 编程助手                ║"));
+        println(ConsoleStyle.boldCyan("╚════════════════════════════════════════════════════╝"));
         println();
         println(ConsoleStyle.info("模型: " + config.getModel()));
         println(ConsoleStyle.info("API: " + config.getBaseUrl()));
-        println(ConsoleStyle.gray("输入 'help' 查看帮助, 'exit' 退出"));
+        println();
+        println(ConsoleStyle.bold("快捷命令:"));
+        println(ConsoleStyle.green("  help  ") + ConsoleStyle.gray(" - 显示帮助"));
+        println(ConsoleStyle.green("  multi ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));
+        println(ConsoleStyle.green("  reset ") + ConsoleStyle.gray(" - 重置会话"));
+        println(ConsoleStyle.green("  exit  ") + ConsoleStyle.gray(" - 退出程序"));
+        println();
+        println(ConsoleStyle.yellow("提示: 粘贴多行内容请先输入 \"\"\" 或 multi"));
         println();
     }
 
@@ -216,13 +276,17 @@ public class SimpleJavaAgent {
         println(ConsoleStyle.green("  clear  ") + " - 清屏");
         println(ConsoleStyle.green("  reset  ") + " - 重置会话历史");
         println(ConsoleStyle.green("  config ") + " - 显示当前配置");
+        println(ConsoleStyle.green("  multi  ") + " - 进入多行输入模式");
         println(ConsoleStyle.green("  exit   ") + " - 退出程序");
         println(ConsoleStyle.green("  quit   ") + " - 退出程序");
         println();
         println(ConsoleStyle.gray("其他输入将发送给 AI 模型处理。"));
         println(ConsoleStyle.gray("AI 可以使用 read_file 和 write_file 工具来读写文件。"));
         println();
-        println(ConsoleStyle.gray("当 API 调用失败时，可以输入 'retry' 重试上一次请求。"));
+        println(ConsoleStyle.boldYellow("多行输入:"));
+        println(ConsoleStyle.gray("  输入 \"\"\" 或 multi 进入多行模式"));
+        println(ConsoleStyle.gray("  适合粘贴代码、日志等长文本"));
+        println(ConsoleStyle.gray("  再次输入 \"\"\" 结束多行输入"));
         println();
     }
 
@@ -246,9 +310,11 @@ public class SimpleJavaAgent {
         
         int inputTokens = estimateTextTokens(userInput);
         if (inputTokens > MAX_SINGLE_INPUT_TOKENS) {
-            println();
-            println(ConsoleStyle.yellow("⚠ 输入内容过长（约 " + inputTokens + " tokens），已截断至 " + MAX_SINGLE_INPUT_TOKENS + " tokens"));
-            userInput = userInput.substring(0, MAX_SINGLE_INPUT_TOKENS * 2);
+            userInput = handleLongInput(userInput, inputTokens);
+            if (userInput == null) {
+                conversationRound--;
+                return;
+            }
         }
         
         conversationHistory.add(Message.user(userInput));
@@ -261,6 +327,67 @@ public class SimpleJavaAgent {
         println();
         
         processAgentLoop();
+    }
+
+    private String handleLongInput(String input, int tokens) {
+        println();
+        println(ConsoleStyle.boldYellow("╔══════════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldYellow("║              ⚠ 输入内容过长                        ║"));
+        println(ConsoleStyle.boldYellow("╚══════════════════════════════════════════════════╝"));
+        println();
+        println(ConsoleStyle.yellow("当前大小: " + tokens + " tokens"));
+        println(ConsoleStyle.yellow("最大限制: " + MAX_SINGLE_INPUT_TOKENS + " tokens"));
+        println(ConsoleStyle.yellow("超出部分: " + (tokens - MAX_SINGLE_INPUT_TOKENS) + " tokens"));
+        println();
+        
+        int maxChars = MAX_SINGLE_INPUT_TOKENS * 2;
+        String truncated = input.substring(0, maxChars);
+        String removed = input.substring(maxChars);
+        
+        println(ConsoleStyle.gray("── 保留部分预览 (前 200 字符) ──"));
+        println(ConsoleStyle.dim(truncate(truncated, 200)));
+        println();
+        println(ConsoleStyle.gray("── 将被删除部分预览 (前 200 字符) ──"));
+        println(ConsoleStyle.red(truncate(removed, 200)));
+        println();
+        
+        println(ConsoleStyle.cyan("请选择操作:"));
+        println(ConsoleStyle.green("  [Enter] ") + ConsoleStyle.white("继续提交（截断内容）"));
+        println(ConsoleStyle.green("  [E]     ") + ConsoleStyle.white("编辑输入"));
+        println(ConsoleStyle.green("  [C]     ") + ConsoleStyle.white("取消本次输入"));
+        println();
+        
+        try {
+            String choice = reader.readLine(ConsoleStyle.yellow("请选择: ")).trim().toUpperCase();
+            
+            switch (choice) {
+                case "":
+                case "Y":
+                    println(ConsoleStyle.success("已截断并提交"));
+                    return truncated;
+                case "E":
+                    println(ConsoleStyle.info("请重新输入（按 Ctrl+C 取消）:"));
+                    String newInput = reader.readLine(ConsoleStyle.prompt());
+                    if (newInput != null && !newInput.trim().isEmpty()) {
+                        int newTokens = estimateTextTokens(newInput);
+                        if (newTokens > MAX_SINGLE_INPUT_TOKENS) {
+                            return handleLongInput(newInput, newTokens);
+                        }
+                        return newInput;
+                    }
+                    return null;
+                case "C":
+                case "N":
+                    println(ConsoleStyle.info("已取消"));
+                    return null;
+                default:
+                    println(ConsoleStyle.yellow("无效选择，已取消"));
+                    return null;
+            }
+        } catch (Exception e) {
+            println(ConsoleStyle.info("已取消"));
+            return null;
+        }
     }
 
     private void trimHistory() {
