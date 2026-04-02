@@ -1,12 +1,12 @@
-# Simple Java Agent 项目架构文档
+# Code Agent 项目架构文档
 
 ## 📋 项目概述
 
-**Simple Java Agent** 是一个基于命令行的智能 AI Agent 应用，提供与 AI 模型交互的终端界面。
+**Code Agent** 是一个基于命令行的智能 AI Agent 应用，提供与 AI 模型交互的终端界面。
 
 | 属性 | 值 |
 |------|-----|
-| 项目名称 | Simple Java Agent |
+| 项目名称 | Code Agent |
 | 版本 | 1.0.0 |
 | Java 版本 | 21 (启用 Preview 特性) |
 | 构建工具 | Maven |
