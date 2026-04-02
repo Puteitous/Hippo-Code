@@ -61,7 +61,7 @@ public class SimpleJavaAgent {
                 return;
             }
 
-            llmClient = new LlmClient(config);
+            llmClient = new DefaultLlmClient(config);
             toolRegistry = createToolRegistry();
             tokenEstimator = new TokenEstimator();
             conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator);
@@ -358,18 +358,20 @@ public class SimpleJavaAgent {
     }
 
     private boolean isRetryableError(LlmException e) {
-        String message = e.getMessage();
-        if (message == null) return false;
+        if (e instanceof LlmTimeoutException) {
+            return true;
+        }
         
-        return message.contains("超时") ||
-               message.contains("网络") ||
-               message.contains("连接") ||
-               message.contains("限流") ||
-               message.contains("服务器错误") ||
-               message.contains("503") ||
-               message.contains("502") ||
-               message.contains("500") ||
-               message.contains("429");
+        if (e instanceof LlmConnectionException) {
+            return true;
+        }
+        
+        if (e instanceof LlmApiException) {
+            LlmApiException apiException = (LlmApiException) e;
+            return apiException.isServerError() || apiException.isRateLimited();
+        }
+        
+        return false;
     }
 
     private void processToolCall(ToolCall toolCall) {

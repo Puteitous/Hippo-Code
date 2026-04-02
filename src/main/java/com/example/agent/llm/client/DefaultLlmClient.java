@@ -10,9 +10,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
-public class LlmClient {
+public class DefaultLlmClient implements LlmClient {
 
     private static final String CHAT_COMPLETIONS_PATH = "/compatible-mode/v1/chat/completions";
     private static final int API_TIMEOUT_SECONDS = 60;
@@ -21,23 +20,31 @@ public class LlmClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Config config;
+    private final RetryPolicy retryPolicy;
 
-    public LlmClient() {
+    public DefaultLlmClient() {
         this(Config.getInstance());
     }
 
-    public LlmClient(Config config) {
+    public DefaultLlmClient(Config config) {
+        this(config, RetryPolicy.defaultPolicy());
+    }
+
+    public DefaultLlmClient(Config config, RetryPolicy retryPolicy) {
         this.config = config;
+        this.retryPolicy = retryPolicy;
         this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECONDS))
                 .build();
     }
 
+    @Override
     public ChatResponse chat(List<Message> messages) throws LlmException {
         return chat(messages, null);
     }
 
+    @Override
     public ChatResponse chat(List<Message> messages, List<Tool> tools) throws LlmException {
         ChatRequest request = ChatRequest.of(config.getModel(), messages)
                 .maxTokens(config.getMaxTokens());
@@ -49,11 +56,44 @@ public class LlmClient {
         return executeRequest(request);
     }
 
+    @Override
     public ChatResponse chatWithTools(List<Message> messages, List<Tool> tools) throws LlmException {
         return chat(messages, tools);
     }
 
+    @Override
     public ChatResponse executeRequest(ChatRequest request) throws LlmException {
+        LlmException lastException = null;
+        int attempt = 0;
+        
+        while (attempt <= retryPolicy.getMaxRetries()) {
+            try {
+                return doExecuteRequest(request);
+            } catch (LlmException e) {
+                lastException = e;
+                
+                if (!retryPolicy.shouldRetry(e, attempt)) {
+                    throw e;
+                }
+                
+                if (attempt < retryPolicy.getMaxRetries()) {
+                    long delayMs = retryPolicy.getDelayMs(attempt);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new LlmException("请求被中断", ie);
+                    }
+                }
+                
+                attempt++;
+            }
+        }
+        
+        throw lastException;
+    }
+
+    private ChatResponse doExecuteRequest(ChatRequest request) throws LlmException {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
             
@@ -74,11 +114,17 @@ public class LlmClient {
         } catch (LlmException e) {
             throw e;
         } catch (java.net.http.HttpTimeoutException e) {
-            throw new LlmException("API 请求超时（" + API_TIMEOUT_SECONDS + "秒）。请检查网络连接或稍后重试。", e);
+            throw new LlmTimeoutException(
+                "API 请求超时（" + API_TIMEOUT_SECONDS + "秒）。请检查网络连接或稍后重试。", 
+                API_TIMEOUT_SECONDS, e);
         } catch (java.net.ConnectException e) {
-            throw new LlmException("无法连接到 API 服务器: " + config.getBaseUrl() + "。请检查网络连接。", e);
+            throw new LlmConnectionException(
+                "无法连接到 API 服务器: " + config.getBaseUrl() + "。请检查网络连接。", 
+                config.getBaseUrl(), e);
         } catch (java.net.SocketTimeoutException e) {
-            throw new LlmException("连接超时。请检查网络连接或稍后重试。", e);
+            throw new LlmTimeoutException(
+                "连接超时。请检查网络连接或稍后重试。", 
+                CONNECT_TIMEOUT_SECONDS, e);
         } catch (Exception e) {
             throw new LlmException("API 请求失败: " + e.getMessage(), e);
         }
@@ -92,7 +138,9 @@ public class LlmClient {
             try {
                 return objectMapper.readValue(body, ChatResponse.class);
             } catch (Exception e) {
-                throw new LlmException("解析 API 响应失败: " + e.getMessage() + "\n响应内容: " + truncate(body, 500));
+                throw new LlmApiException(
+                    "解析 API 响应失败: " + e.getMessage() + "\n响应内容: " + truncate(body, 500), 
+                    statusCode, body);
             }
         }
         
@@ -100,21 +148,27 @@ public class LlmClient {
         
         switch (statusCode) {
             case 400:
-                throw new LlmException("请求参数错误: " + errorMessage);
+                throw new LlmApiException("请求参数错误: " + errorMessage, statusCode, body);
             case 401:
-                throw new LlmException("API Key 无效或已过期。请检查 config.json 中的 apiKey 配置。");
+                throw new LlmApiException(
+                    "API Key 无效或已过期。请检查 config.json 中的 apiKey 配置。", statusCode, body);
             case 403:
-                throw new LlmException("访问被拒绝。请检查 API Key 权限或账户状态。");
+                throw new LlmApiException(
+                    "访问被拒绝。请检查 API Key 权限或账户状态。", statusCode, body);
             case 404:
-                throw new LlmException("API 端点不存在。请检查 baseUrl 配置: " + config.getBaseUrl());
+                throw new LlmApiException(
+                    "API 端点不存在。请检查 baseUrl 配置: " + config.getBaseUrl(), statusCode, body);
             case 429:
-                throw new LlmException("请求过于频繁，已触发限流。请稍后重试。\n" + errorMessage);
+                throw new LlmApiException(
+                    "请求过于频繁，已触发限流。请稍后重试。\n" + errorMessage, statusCode, body);
             case 500:
             case 502:
             case 503:
-                throw new LlmException("API 服务器错误 (" + statusCode + ")。请稍后重试。");
+                throw new LlmApiException(
+                    "API 服务器错误 (" + statusCode + ")。请稍后重试。", statusCode, body);
             default:
-                throw new LlmException("API 请求失败 (HTTP " + statusCode + "): " + errorMessage);
+                throw new LlmApiException(
+                    "API 请求失败 (HTTP " + statusCode + "): " + errorMessage, statusCode, body);
         }
     }
 
@@ -153,6 +207,7 @@ public class LlmClient {
         return text.substring(0, maxLength) + "...";
     }
 
+    @Override
     public ChatResponse continueWithToolResult(ChatResponse previousResponse, List<Message> messages, String toolCallId, String toolName, String toolResult) throws LlmException {
         Message assistantMessage = previousResponse.getFirstMessage();
         
@@ -162,6 +217,7 @@ public class LlmClient {
         return chat(messages);
     }
 
+    @Override
     public ChatResponse continueWithToolResults(ChatResponse previousResponse, List<Message> messages, List<ToolResult> toolResults) throws LlmException {
         Message assistantMessage = previousResponse.getFirstMessage();
         messages.add(assistantMessage);
@@ -171,29 +227,5 @@ public class LlmClient {
         }
         
         return chat(messages);
-    }
-
-    public static class ToolResult {
-        private final String toolCallId;
-        private final String toolName;
-        private final String result;
-
-        public ToolResult(String toolCallId, String toolName, String result) {
-            this.toolCallId = toolCallId;
-            this.toolName = toolName;
-            this.result = result;
-        }
-
-        public String getToolCallId() {
-            return toolCallId;
-        }
-
-        public String getToolName() {
-            return toolName;
-        }
-
-        public String getResult() {
-            return result;
-        }
     }
 }
