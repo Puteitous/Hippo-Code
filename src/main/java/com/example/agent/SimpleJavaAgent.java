@@ -285,7 +285,7 @@ public class SimpleJavaAgent {
         
         conversationManager.addUserMessage(userInput);
         conversationManager.trimHistory((messageCount, tokenCount) -> {
-            println(ConsoleStyle.gray("[历史已精简: " + messageCount + " 条消息, 约 " + tokenCount + " tokens]"));
+            println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]"));
             println();
         });
         
@@ -301,10 +301,11 @@ public class SimpleJavaAgent {
     private void processAgentLoop() {
         while (true) {
             try {
-                print(ConsoleStyle.gray("  "));
-                println(ConsoleStyle.thinking());
+                println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
+                println(ConsoleStyle.gray("  │"));
+                print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
                 println();
-                print(ConsoleStyle.aiLabel() + ": ");
+                println();
 
                 StringBuilder contentBuilder = new StringBuilder();
 
@@ -313,7 +314,7 @@ public class SimpleJavaAgent {
                     toolRegistry.toTools(),
                     chunk -> {
                         if (chunk.hasContent()) {
-                            print(chunk.getContent());
+                            print(ConsoleStyle.white(chunk.getContent()));
                             contentBuilder.append(chunk.getContent());
                         }
                     }
@@ -323,7 +324,9 @@ public class SimpleJavaAgent {
 
                 Message assistantMessage = response.getFirstMessage();
                 if (assistantMessage == null) {
-                    println(ConsoleStyle.error("未收到有效响应"));
+                    println();
+                    println(ConsoleStyle.gray("  │"));
+                    println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("未收到有效响应"));
                     break;
                 }
 
@@ -332,12 +335,18 @@ public class SimpleJavaAgent {
 
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     println();
+                    println(ConsoleStyle.gray("  │"));
+                    println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.boldYellow("工具调用:"));
 
                     for (ToolCall toolCall : toolCalls) {
                         processToolCall(toolCall);
                     }
+                    
+                    println(ConsoleStyle.gray("  │"));
                 } else {
                     conversationManager.addAssistantMessage(assistantMessage);
+                    println();
+                    println(ConsoleStyle.gray(" ---  ") + ConsoleStyle.green("完成✅"));
                     println();
                     println(ConsoleStyle.conversationEnd());
                     println();
@@ -348,7 +357,9 @@ public class SimpleJavaAgent {
                 handleApiError(e);
                 break;
             } catch (Exception e) {
-                println(ConsoleStyle.error("处理错误: " + e.getMessage()));
+                println();
+                println(ConsoleStyle.gray("  │"));
+                println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
                 e.printStackTrace();
                 break;
             }
