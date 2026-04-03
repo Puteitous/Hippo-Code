@@ -2,6 +2,8 @@ package com.example.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Collections;
+import java.util.List;
 
 public interface ToolExecutor {
     
@@ -12,4 +14,12 @@ public interface ToolExecutor {
     String getParametersSchema();
     
     String execute(JsonNode arguments) throws ToolExecutionException;
+
+    default List<String> getAffectedPaths(JsonNode arguments) {
+        return Collections.emptyList();
+    }
+
+    default boolean requiresFileLock() {
+        return false;
+    }
 }

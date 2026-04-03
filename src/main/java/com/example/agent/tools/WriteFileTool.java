@@ -7,6 +7,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.List;
 
 public class WriteFileTool implements ToolExecutor {
 
@@ -38,6 +40,19 @@ public class WriteFileTool implements ToolExecutor {
                 "required": ["path", "content"]
             }
             """;
+    }
+
+    @Override
+    public List<String> getAffectedPaths(JsonNode arguments) {
+        if (arguments.has("path")) {
+            return Collections.singletonList(arguments.get("path").asText());
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean requiresFileLock() {
+        return true;
     }
 
     @Override

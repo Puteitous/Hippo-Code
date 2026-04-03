@@ -15,6 +15,8 @@ import com.example.agent.llm.model.ToolCall;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.tools.*;
+import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
+import com.example.agent.tools.concurrent.ToolExecutionResult;
 import org.jline.reader.*;
 import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
@@ -44,6 +46,7 @@ public class SimpleJavaAgent {
     private Config config;
     private LlmClient llmClient;
     private ToolRegistry toolRegistry;
+    private ConcurrentToolExecutor concurrentToolExecutor;
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
     private InputHandler inputHandler;
@@ -72,6 +75,7 @@ public class SimpleJavaAgent {
 
             llmClient = new DefaultLlmClient(config);
             toolRegistry = createToolRegistry();
+            concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
             tokenEstimator = new TokenEstimator();
             conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator);
 
@@ -363,14 +367,13 @@ public class SimpleJavaAgent {
                     println(ConsoleStyle.gray("  │"));
                     println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.boldYellow("工具调用:"));
 
-                    for (ToolCall toolCall : toolCalls) {
-                        if (interrupted) {
-                            println();
-                            println(ConsoleStyle.yellow("  └─ 工具调用已中断"));
-                            throw new UserInterruptException("User interrupted");
-                        }
-                        processToolCall(toolCall);
+                    if (interrupted) {
+                        println();
+                        println(ConsoleStyle.yellow("  └─ 工具调用已中断"));
+                        throw new UserInterruptException("User interrupted");
                     }
+
+                    processToolCallsConcurrently(toolCalls);
                     
                     println(ConsoleStyle.gray("  │"));
                 } else {
@@ -448,6 +451,36 @@ public class SimpleJavaAgent {
         }
         
         return false;
+    }
+
+    private void processToolCallsConcurrently(List<ToolCall> toolCalls) {
+        long startTime = System.currentTimeMillis();
+        
+        List<ToolExecutionResult> results = concurrentToolExecutor.executeConcurrently(toolCalls);
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        
+        for (ToolExecutionResult result : results) {
+            if (result.isSuccess()) {
+                println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "成功"));
+                String displayResult = truncate(result.getResult(), 100);
+                println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.dim(displayResult));
+                
+                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), result.getResult());
+            } else {
+                println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "失败"));
+                println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.red(result.getErrorMessage()));
+                
+                String errorResult = "Error: " + result.getErrorMessage() + "\nPlease try a different approach or check if the path is correct.";
+                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), errorResult);
+            }
+        }
+        
+        if (toolCalls.size() > 1) {
+            println(ConsoleStyle.gray("  │"));
+            println(ConsoleStyle.gray("  │  ") + ConsoleStyle.dim(
+                String.format("并发执行 %d 个工具，总耗时 %d ms", toolCalls.size(), totalTime)));
+        }
     }
 
     private void processToolCall(ToolCall toolCall) {
