@@ -32,10 +32,20 @@ public class SimpleJavaAgent {
         
         你可以访问以下工具：
         - read_file: 读取文件内容
-        - write_file: 写入文件内容
+        - write_file: 写入文件内容（覆盖整个文件）
+        - edit_file: 精确编辑文件内容（替换特定文本片段）
+        - list_directory: 列出目录内容，支持递归显示目录树
+        - glob: 使用 glob 模式查找文件（如 **/*.java 查找所有 Java 文件）
+        - grep: 在文件内容中搜索文本（支持正则表达式）
+        - ask_user: 向用户提问并等待回答（用于确认或获取信息）
+        - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
         
         当用户请求涉及文件操作时，请使用相应的工具完成任务。
         在修改文件之前，请先读取文件内容了解当前状态。
+        优先使用 edit_file 进行精确修改，只有在创建新文件或需要完全重写时才使用 write_file。
+        在处理项目相关任务时，先用 list_directory 了解项目结构，用 glob 快速定位文件，用 grep 搜索代码内容。
+        当遇到不确定的情况或需要用户确认时，使用 ask_user 向用户提问。
+        需要执行构建、测试、版本控制等操作时，使用 bash 工具（注意：只允许白名单内的命令）。
         完成任务后，请简要说明你做了什么。
         
         请始终使用中文回复。
@@ -251,6 +261,12 @@ public class SimpleJavaAgent {
         ToolRegistry registry = new ToolRegistry();
         registry.register(new ReadFileTool());
         registry.register(new WriteFileTool());
+        registry.register(new ListDirectoryTool());
+        registry.register(new GlobTool());
+        registry.register(new GrepTool());
+        registry.register(new EditFileTool());
+        registry.register(new AskUserTool());
+        registry.register(new BashTool());
         return registry;
     }
 

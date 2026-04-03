@@ -1,0 +1,193 @@
+package com.example.agent.tools;
+
+import com.fasterxml.jackson.databind.JsonNode;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.List;
+
+public class EditFileTool implements ToolExecutor {
+
+    @Override
+    public String getName() {
+        return "edit_file";
+    }
+
+    @Override
+    public String getDescription() {
+        return "精确替换文件中的文本内容。通过查找并替换指定的文本片段来编辑文件。" +
+               "要求 old_text 必须在文件中唯一匹配，否则会报错。" +
+               "比 write_file 更安全，适合精确修改代码片段。只能编辑项目目录内的文件。";
+    }
+
+    @Override
+    public String getParametersSchema() {
+        return """
+            {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "要编辑的文件路径（绝对路径或相对路径）"
+                    },
+                    "old_text": {
+                        "type": "string",
+                        "description": "要被替换的文本（必须在文件中唯一匹配）"
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "替换后的新文本"
+                    }
+                },
+                "required": ["path", "old_text", "new_text"]
+            }
+            """;
+    }
+
+    @Override
+    public List<String> getAffectedPaths(JsonNode arguments) {
+        if (arguments.has("path")) {
+            return Collections.singletonList(arguments.get("path").asText());
+        }
+        return Collections.emptyList();
+    }
+
+    @Override
+    public boolean requiresFileLock() {
+        return true;
+    }
+
+    @Override
+    public String execute(JsonNode arguments) throws ToolExecutionException {
+        if (!arguments.has("path")) {
+            throw new ToolExecutionException("缺少必需参数: path");
+        }
+        if (!arguments.has("old_text")) {
+            throw new ToolExecutionException("缺少必需参数: old_text");
+        }
+        if (!arguments.has("new_text")) {
+            throw new ToolExecutionException("缺少必需参数: new_text");
+        }
+
+        String filePath = arguments.get("path").asText();
+        String oldText = arguments.get("old_text").asText();
+        String newText = arguments.get("new_text").asText();
+
+        Path path = PathSecurityUtils.validateAndResolve(filePath);
+
+        if (!Files.exists(path)) {
+            throw new ToolExecutionException("文件不存在: " + filePath);
+        }
+
+        if (!Files.isRegularFile(path)) {
+            throw new ToolExecutionException("不是常规文件: " + filePath);
+        }
+
+        if (!Files.isReadable(path)) {
+            throw new ToolExecutionException("文件不可读: " + filePath);
+        }
+
+        if (!Files.isWritable(path)) {
+            throw new ToolExecutionException("文件不可写: " + filePath);
+        }
+
+        try {
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            
+            int firstIndex = content.indexOf(oldText);
+            if (firstIndex == -1) {
+                throw new ToolExecutionException(
+                    "未找到要替换的文本。\n" +
+                    "请确保 old_text 与文件中的内容完全一致（包括空格、缩进、换行符等）。\n" +
+                    "提示：可以先使用 read_file 查看文件内容，然后精确复制要替换的文本。"
+                );
+            }
+
+            int lastIndex = content.lastIndexOf(oldText);
+            if (firstIndex != lastIndex) {
+                int count = countOccurrences(content, oldText);
+                throw new ToolExecutionException(
+                    String.format(
+                        "要替换的文本在文件中出现 %d 次，必须唯一匹配才能替换。\n" +
+                        "请提供更多上下文使其唯一，或使用更精确的文本片段。",
+                        count
+                    )
+                );
+            }
+
+            String newContent = content.substring(0, firstIndex) + newText + content.substring(firstIndex + oldText.length());
+            
+            Files.writeString(path, newContent, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
+
+            String relativePath = PathSecurityUtils.getRelativePath(path);
+            
+            return formatResult(relativePath, oldText, newText, content, newContent);
+            
+        } catch (IOException e) {
+            throw new ToolExecutionException("编辑文件失败: " + e.getMessage(), e);
+        }
+    }
+
+    private int countOccurrences(String text, String substring) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.indexOf(substring, index)) != -1) {
+            count++;
+            index += substring.length();
+        }
+        return count;
+    }
+
+    private String formatResult(String filePath, String oldText, String newText, String oldContent, String newContent) {
+        StringBuilder result = new StringBuilder();
+        
+        result.append("文件编辑成功\n");
+        result.append("─────────────────────────────────────────────────────────────\n");
+        result.append("文件: ").append(filePath).append("\n");
+        result.append("─────────────────────────────────────────────────────────────\n");
+        
+        int oldLines = oldText.split("\n", -1).length;
+        int newLines = newText.split("\n", -1).length;
+        
+        result.append("替换统计:\n");
+        result.append(String.format("  - 原文本: %d 行, %d 字符\n", oldLines, oldText.length()));
+        result.append(String.format("  - 新文本: %d 行, %d 字符\n", newLines, newText.length()));
+        result.append(String.format("  - 文件总大小: %d → %d 字符 (变化: %+d)\n", 
+            oldContent.length(), newContent.length(), newContent.length() - oldContent.length()));
+        
+        result.append("\n─────────────────────────────────────────────────────────────\n");
+        result.append("替换内容预览:\n");
+        result.append("─────────────────────────────────────────────────────────────\n");
+        
+        result.append("\n❌ 原文本:\n");
+        result.append(formatTextBlock(oldText));
+        
+        result.append("\n✅ 新文本:\n");
+        result.append(formatTextBlock(newText));
+        
+        result.append("─────────────────────────────────────────────────────────────\n");
+        
+        return result.toString();
+    }
+
+    private String formatTextBlock(String text) {
+        if (text.isEmpty()) {
+            return "  (空文本)\n";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        String[] lines = text.split("\n", -1);
+        
+        for (int i = 0; i < lines.length; i++) {
+            sb.append("  ").append(i + 1).append(": ").append(lines[i]).append("\n");
+        }
+        
+        return sb.toString();
+    }
+}
