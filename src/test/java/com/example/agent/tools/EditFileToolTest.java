@@ -28,17 +28,27 @@ class EditFileToolTest {
     }
 
     @AfterEach
-    void tearDown() throws IOException {
-        if (Files.exists(testDir)) {
-            Files.walk(testDir)
+    void tearDown() {
+        cleanupDirectory(testDir);
+    }
+    
+    private void cleanupDirectory(Path dir) {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        
+        try {
+            Files.walk(dir)
                 .sorted((a, b) -> -a.compareTo(b))
                 .forEach(path -> {
                     try {
                         Files.delete(path);
                     } catch (IOException e) {
-                        // ignore
+                        System.err.println("警告: 清理测试文件失败: " + path + " - " + e.getMessage());
                     }
                 });
+        } catch (IOException e) {
+            System.err.println("警告: 清理测试目录失败: " + dir + " - " + e.getMessage());
         }
     }
 
