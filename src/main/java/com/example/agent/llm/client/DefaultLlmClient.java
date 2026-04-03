@@ -200,6 +200,8 @@ public class DefaultLlmClient implements LlmClient {
                 }
             }
             
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             if (e instanceof LlmException) {
                 throw (LlmException) e;

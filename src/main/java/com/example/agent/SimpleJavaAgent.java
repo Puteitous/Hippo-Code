@@ -50,6 +50,7 @@ public class SimpleJavaAgent {
     private Terminal terminal;
     private LineReader reader;
     private int conversationRound = 0;
+    private volatile boolean interrupted = false;
 
     public static void main(String[] args) {
         SimpleJavaAgent agent = new SimpleJavaAgent();
@@ -81,6 +82,10 @@ public class SimpleJavaAgent {
                     .completer(completer)
                     .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                     .build();
+            
+            terminal.handle(Terminal.Signal.INT, signal -> {
+                interrupted = true;
+            });
 
             inputHandler = new InputHandler(reader, tokenEstimator);
 
@@ -133,7 +138,16 @@ public class SimpleJavaAgent {
                     processUserInput(line);
 
                 } catch (UserInterruptException e) {
-                    println(ConsoleStyle.red("^C"));
+                    if (interrupted) {
+                        println();
+                        println(ConsoleStyle.yellow("对话已中断，开始新对话"));
+                        println();
+                        interrupted = false;
+                    } else {
+                        println(ConsoleStyle.red("^C"));
+                        println(ConsoleStyle.cyan("再见！"));
+                        break;
+                    }
                 } catch (EndOfFileException e) {
                     println(ConsoleStyle.cyan("再见！"));
                     break;
@@ -196,9 +210,9 @@ public class SimpleJavaAgent {
 
     private void printWelcome() {
         println();
-        println(ConsoleStyle.boldCyan("╔════════════════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldCyan("║       Simple Java Agent - AI 编程助手                ║"));
-        println(ConsoleStyle.boldCyan("╚════════════════════════════════════════════════════╝"));
+        println(ConsoleStyle.boldCyan("╔═════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldCyan("║       Code Agent - AI 编程助手               ║"));
+        println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
         println(ConsoleStyle.info("模型: " + config.getModel()));
         println(ConsoleStyle.info("API: " + config.getBaseUrl()));
@@ -272,6 +286,7 @@ public class SimpleJavaAgent {
     }
 
     private void processUserInput(String userInput) {
+        interrupted = false;
         conversationRound++;
         
         int inputTokens = tokenEstimator.estimateTextTokens(userInput);
@@ -299,12 +314,11 @@ public class SimpleJavaAgent {
     }
 
     private void processAgentLoop() {
-        while (true) {
+        while (!interrupted) {
             try {
                 println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
                 println(ConsoleStyle.gray("  │"));
                 print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
-                println();
                 println();
 
                 StringBuilder contentBuilder = new StringBuilder();
@@ -313,12 +327,23 @@ public class SimpleJavaAgent {
                     conversationManager.getHistory(), 
                     toolRegistry.toTools(),
                     chunk -> {
+                        if (interrupted) {
+                            throw new RuntimeException("Interrupted");
+                        }
                         if (chunk.hasContent()) {
                             print(ConsoleStyle.white(chunk.getContent()));
                             contentBuilder.append(chunk.getContent());
                         }
                     }
                 );
+
+                if (interrupted) {
+                    println();
+                    println();
+                    println(ConsoleStyle.gray("  │"));
+                    println(ConsoleStyle.yellow("  └─ 对话已中断"));
+                    throw new UserInterruptException("User interrupted");
+                }
 
                 println();
 
@@ -339,6 +364,11 @@ public class SimpleJavaAgent {
                     println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.boldYellow("工具调用:"));
 
                     for (ToolCall toolCall : toolCalls) {
+                        if (interrupted) {
+                            println();
+                            println(ConsoleStyle.yellow("  └─ 工具调用已中断"));
+                            throw new UserInterruptException("User interrupted");
+                        }
                         processToolCall(toolCall);
                     }
                     
@@ -356,6 +386,15 @@ public class SimpleJavaAgent {
             } catch (LlmException e) {
                 handleApiError(e);
                 break;
+            } catch (RuntimeException e) {
+                if ("Interrupted".equals(e.getMessage())) {
+                    throw new UserInterruptException("User interrupted");
+                }
+                println();
+                println(ConsoleStyle.gray("  │"));
+                println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
+                e.printStackTrace();
+                break;
             } catch (Exception e) {
                 println();
                 println(ConsoleStyle.gray("  │"));
@@ -366,7 +405,16 @@ public class SimpleJavaAgent {
         }
     }
 
-    private void handleApiError(LlmException e) {
+    private void handleApiError(LlmException e) throws UserInterruptException {
+        // 检查是否是用户中断
+        String message = e.getMessage();
+        if (message != null && message.contains("Interrupted")) {
+            println();
+            println(ConsoleStyle.yellow("用户已终止对话"));
+            println();
+            throw new UserInterruptException("User interrupted");
+        }
+        
         println();
         println(ConsoleStyle.red("╔══════════════════════════════════════════════════╗"));
         println(ConsoleStyle.red("║                  API 调用失败                    ║"));
