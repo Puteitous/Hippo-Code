@@ -64,6 +64,18 @@ public class ConcurrentToolExecutor {
     }
 
     private ToolExecutionResult executeSingle(ToolCall toolCall, int index) {
+        if (toolCall.getFunction() == null || toolCall.getFunction().getName() == null 
+            || toolCall.getFunction().getName().isEmpty()) {
+            return ToolExecutionResult.builder()
+                    .index(index)
+                    .toolCallId(toolCall.getId())
+                    .toolName("")
+                    .success(false)
+                    .errorMessage("无效的工具调用: 工具名称为空")
+                    .executionTimeMs(0)
+                    .build();
+        }
+        
         String toolName = toolCall.getFunction().getName();
         String arguments = toolCall.getFunction().getArguments();
         String toolCallId = toolCall.getId();

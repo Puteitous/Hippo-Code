@@ -131,7 +131,10 @@ public class SseParser {
             }
 
             if (node.has("id")) {
-                delta.setId(node.get("id").asText());
+                String id = node.get("id").asText();
+                if (id != null && !id.isEmpty()) {
+                    delta.setId(id);
+                }
             }
 
             if (node.has("type")) {
@@ -143,7 +146,10 @@ public class SseParser {
                 ToolCallDelta.FunctionDelta funcDelta = new ToolCallDelta.FunctionDelta();
 
                 if (function.has("name")) {
-                    funcDelta.setName(function.get("name").asText());
+                    String name = function.get("name").asText();
+                    if (name != null && !name.isEmpty()) {
+                        funcDelta.setName(name);
+                    }
                 }
 
                 if (function.has("arguments")) {

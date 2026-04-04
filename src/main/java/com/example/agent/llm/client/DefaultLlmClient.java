@@ -163,6 +163,9 @@ public class DefaultLlmClient implements LlmClient {
         List<ToolCall> toolCalls = new ArrayList<>();
         String finishReason = null;
         Usage usage = null;
+        int chunkCount = 0;
+        int contentChunkCount = 0;
+        int toolCallChunkCount = 0;
         
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
@@ -177,6 +180,7 @@ public class DefaultLlmClient implements LlmClient {
                     continue;
                 }
                 
+                chunkCount++;
                 StreamChunk chunk = sseParser.parse(line);
                 
                 if (chunk == null) {
@@ -187,6 +191,7 @@ public class DefaultLlmClient implements LlmClient {
                 }
                 
                 if (chunk.hasContent()) {
+                    contentChunkCount++;
                     fullContent.append(chunk.getContent());
                     if (onChunk != null) {
                         onChunk.accept(chunk);
@@ -194,6 +199,7 @@ public class DefaultLlmClient implements LlmClient {
                 }
                 
                 if (chunk.isToolCall() && chunk.hasToolCalls()) {
+                    toolCallChunkCount++;
                     mergeToolCallDeltas(toolCalls, chunk.getToolCallDeltas());
                 }
                 
@@ -215,6 +221,29 @@ public class DefaultLlmClient implements LlmClient {
             throw new LlmException("读取流式响应失败: " + e.getMessage(), e);
         }
         
+        // 记录解析统计（仅在出现问题时输出详细信息）
+        if (contentChunkCount == 0 && toolCallChunkCount > 0) {
+            System.err.println("[DEBUG] 流式响应: chunks=" + chunkCount + ", contentChunks=" + contentChunkCount + ", toolCallChunks=" + toolCallChunkCount + ", finishReason=" + finishReason);
+            System.err.println("[DEBUG] 工具调用列表: size=" + toolCalls.size());
+            for (int i = 0; i < toolCalls.size(); i++) {
+                ToolCall tc = toolCalls.get(i);
+                String name = tc.getFunction() != null ? tc.getFunction().getName() : "null";
+                System.err.println("[DEBUG]   ToolCall[" + i + "]: id=" + tc.getId() + ", name=" + name);
+            }
+        }
+        
+        // 一致性检查：finishReason=tool_calls 但没有有效工具调用时，记录警告
+        if ("tool_calls".equals(finishReason)) {
+            long validCount = toolCalls.stream()
+                .filter(tc -> tc.getFunction() != null 
+                    && tc.getFunction().getName() != null 
+                    && !tc.getFunction().getName().isEmpty())
+                .count();
+            if (validCount == 0) {
+                System.err.println("[WARN] finishReason=tool_calls 但没有有效的工具调用");
+            }
+        }
+        
         return buildChatResponse(fullContent.toString(), toolCalls, finishReason, usage);
     }
 
@@ -228,7 +257,8 @@ public class DefaultLlmClient implements LlmClient {
             
             ToolCall toolCall = toolCalls.get(index);
             
-            if (delta.getId() != null) {
+            // 只有当新 id 不为空时才覆盖
+            if (delta.getId() != null && !delta.getId().isEmpty()) {
                 toolCall.setId(delta.getId());
             }
             
@@ -245,10 +275,12 @@ public class DefaultLlmClient implements LlmClient {
                 
                 FunctionCall func = toolCall.getFunction();
                 
-                if (funcDelta.getName() != null) {
+                // 只有当新 name 不为空时才覆盖
+                if (funcDelta.getName() != null && !funcDelta.getName().isEmpty()) {
                     func.setName(funcDelta.getName());
                 }
                 
+                // arguments 是追加的，不是覆盖
                 if (funcDelta.getArguments() != null) {
                     String currentArgs = func.getArguments() != null ? func.getArguments() : "";
                     func.setArguments(currentArgs + funcDelta.getArguments());
@@ -271,8 +303,18 @@ public class DefaultLlmClient implements LlmClient {
             message.setContent(content);
         }
         
-        if (!toolCalls.isEmpty()) {
-            message.setToolCalls(toolCalls);
+        // 过滤掉无效的工具调用（id 为空或 function.name 为空）
+        List<ToolCall> validToolCalls = new ArrayList<>();
+        for (ToolCall tc : toolCalls) {
+            if (tc.getFunction() != null 
+                && tc.getFunction().getName() != null 
+                && !tc.getFunction().getName().isEmpty()) {
+                validToolCalls.add(tc);
+            }
+        }
+        
+        if (!validToolCalls.isEmpty()) {
+            message.setToolCalls(validToolCalls);
         }
         
         Choice choice = new Choice();

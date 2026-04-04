@@ -133,6 +133,18 @@ public class ConversationLogger {
             conversationId, totalInputTokens.get() + totalOutputTokens.get(), totalToolCalls.get());
     }
     
+    public void logDebug(String message) {
+        StringBuilder entry = new StringBuilder();
+        entry.append("\n┌─ DEBUG ───────────────────────────────────\n");
+        entry.append("│ 时间: ").append(LocalDateTime.now().format(TIMESTAMP_FORMAT)).append("\n");
+        entry.append("├────────────────────────────────────────────\n");
+        entry.append("│ ").append(message.replace("\n", "\n│ ")).append("\n");
+        entry.append("└────────────────────────────────────────────\n");
+        
+        writeToFile(entry.toString());
+        logger.debug("DEBUG: {}", message);
+    }
+    
     private void writeToFile(String content) {
         try {
             Files.writeString(logFile, content, 

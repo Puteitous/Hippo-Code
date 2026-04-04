@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 public class SimpleJavaAgent {
@@ -423,87 +424,33 @@ public class SimpleJavaAgent {
         processAgentLoop();
     }
 
+    private static final int MAX_EMPTY_RESPONSE_RETRIES = 2;
+
     private void processAgentLoop() {
+        int emptyResponseRetries = 0;
+        
         while (!interrupted) {
             try {
-                println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
-                println(ConsoleStyle.gray("  │"));
-                print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
-                println();
-
-                StringBuilder contentBuilder = new StringBuilder();
-
-                ChatResponse response = llmClient.chatStream(
-                    conversationManager.getHistory(), 
-                    toolRegistry.toTools(),
-                    chunk -> {
-                        if (interrupted) {
-                            throw new RuntimeException("Interrupted");
-                        }
-                        if (chunk.hasContent()) {
-                            print(ConsoleStyle.white(chunk.getContent()));
-                            contentBuilder.append(chunk.getContent());
-                        }
-                    }
-                );
-
-                if (interrupted) {
-                    println();
-                    println();
-                    println(ConsoleStyle.gray("  │"));
-                    println(ConsoleStyle.yellow("  └─ 对话已中断"));
-                    throw new UserInterruptException("User interrupted");
-                }
-
-                println();
-
-                Message assistantMessage = response.getFirstMessage();
-                if (assistantMessage == null) {
-                    println();
-                    println(ConsoleStyle.gray("  │"));
-                    println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("未收到有效响应"));
-                    break;
-                }
-
-                if (response.hasToolCalls()) {
-                    conversationManager.addAssistantMessage(assistantMessage);
-
-                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
-                    println();
-                    println(ConsoleStyle.gray("  │"));
-                    println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.boldYellow("工具调用:"));
-
-                    if (interrupted) {
+                AgentTurnResult result = executeAgentTurn();
+                
+                if (result == AgentTurnResult.EMPTY_RESPONSE) {
+                    emptyResponseRetries++;
+                    if (emptyResponseRetries <= MAX_EMPTY_RESPONSE_RETRIES) {
+                        println(ConsoleStyle.gray("  │"));
+                        println(ConsoleStyle.yellow("  │  检测到空响应，正在重试 (" + emptyResponseRetries + "/" + MAX_EMPTY_RESPONSE_RETRIES + ")..."));
+                        println(ConsoleStyle.gray("  │"));
+                        continue;
+                    } else {
+                        println(ConsoleStyle.gray("  │"));
+                        println(ConsoleStyle.yellow("  └─ AI 多次返回空响应，请尝试重新描述您的需求。"));
                         println();
-                        println(ConsoleStyle.yellow("  └─ 工具调用已中断"));
-                        throw new UserInterruptException("User interrupted");
+                        break;
                     }
-
-                    processToolCallsConcurrently(toolCalls);
-                    
-                    println(ConsoleStyle.gray("  │"));
-                } else {
-                    conversationManager.addAssistantMessage(assistantMessage);
-                    
-                    Usage usage = response.getUsage();
-                    conversationLogger.logAiResponse(contentBuilder.toString(), usage);
-                    
-                    if (usage != null) {
-                        tokenMetricsCollector.recordConversation(
-                            currentConversationId,
-                            java.time.LocalDateTime.now(),
-                            conversationManager.getTokenCount(),
-                            usage
-                        );
-                    }
-                    
-                    conversationLogger.logSummary();
-                    
-                    println();
-                    println(ConsoleStyle.gray(" ---  ") + ConsoleStyle.green("完成✅"));
-                    println();
-                    println(ConsoleStyle.conversationEnd());
-                    println();
+                }
+                
+                emptyResponseRetries = 0;
+                
+                if (result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
                     break;
                 }
 
@@ -526,6 +473,107 @@ public class SimpleJavaAgent {
                 e.printStackTrace();
                 break;
             }
+        }
+    }
+
+    private enum AgentTurnResult {
+        DONE, CONTINUE, EMPTY_RESPONSE, ERROR
+    }
+
+    private AgentTurnResult executeAgentTurn() throws LlmException {
+        println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
+        println(ConsoleStyle.gray("  │"));
+        print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
+        println();
+
+        StringBuilder contentBuilder = new StringBuilder();
+
+        ChatResponse response = llmClient.chatStream(
+            conversationManager.getHistory(), 
+            toolRegistry.toTools(),
+            chunk -> {
+                if (interrupted) {
+                    throw new RuntimeException("Interrupted");
+                }
+                if (chunk.hasContent()) {
+                    print(ConsoleStyle.white(chunk.getContent()));
+                    contentBuilder.append(chunk.getContent());
+                }
+            }
+        );
+
+        if (interrupted) {
+            println();
+            println();
+            println(ConsoleStyle.gray("  │"));
+            println(ConsoleStyle.yellow("  └─ 对话已中断"));
+            throw new UserInterruptException("User interrupted");
+        }
+
+        println();
+
+        Message assistantMessage = response.getFirstMessage();
+        if (assistantMessage == null) {
+            println();
+            println(ConsoleStyle.gray("  │"));
+            println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("未收到有效响应"));
+            conversationLogger.logDebug("LLM 返回 null 消息, response: " + responseToString(response));
+            return AgentTurnResult.ERROR;
+        }
+
+        if (response.hasToolCalls()) {
+            conversationManager.addAssistantMessage(assistantMessage);
+
+            List<ToolCall> toolCalls = assistantMessage.getToolCalls();
+            println();
+            println(ConsoleStyle.gray("  │"));
+            println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.boldYellow("工具调用:"));
+
+            conversationLogger.logDebug("工具调用数量: " + toolCalls.size());
+            for (int i = 0; i < toolCalls.size(); i++) {
+                ToolCall tc = toolCalls.get(i);
+                String toolName = tc.getFunction() != null ? tc.getFunction().getName() : "null";
+                conversationLogger.logDebug("  ToolCall[" + i + "]: id=" + tc.getId() + ", name=" + toolName);
+            }
+
+            if (interrupted) {
+                println();
+                println(ConsoleStyle.yellow("  └─ 工具调用已中断"));
+                throw new UserInterruptException("User interrupted");
+            }
+
+            processToolCallsConcurrently(toolCalls);
+            
+            println(ConsoleStyle.gray("  │"));
+            return AgentTurnResult.CONTINUE;
+        } else {
+            if (!response.hasContent() && contentBuilder.length() == 0) {
+                conversationLogger.logDebug("空响应检测: " + responseToString(response));
+                return AgentTurnResult.EMPTY_RESPONSE;
+            }
+            
+            conversationManager.addAssistantMessage(assistantMessage);
+            
+            Usage usage = response.getUsage();
+            conversationLogger.logAiResponse(contentBuilder.toString(), usage);
+            
+            if (usage != null) {
+                tokenMetricsCollector.recordConversation(
+                    currentConversationId,
+                    java.time.LocalDateTime.now(),
+                    conversationManager.getTokenCount(),
+                    usage
+                );
+            }
+            
+            conversationLogger.logSummary();
+            
+            println();
+            println(ConsoleStyle.gray(" ---  ") + ConsoleStyle.green("完成✅"));
+            println();
+            println(ConsoleStyle.conversationEnd());
+            println();
+            return AgentTurnResult.DONE;
         }
     }
 
@@ -577,12 +625,24 @@ public class SimpleJavaAgent {
     private void processToolCallsConcurrently(List<ToolCall> toolCalls) {
         long startTime = System.currentTimeMillis();
         
+        List<ToolCall> validToolCalls = new ArrayList<>();
         java.util.Map<String, String> argumentsMap = new java.util.HashMap<>();
+        
         for (ToolCall toolCall : toolCalls) {
-            argumentsMap.put(toolCall.getId(), toolCall.getFunction().getArguments());
+            if (toolCall.getFunction() != null && toolCall.getFunction().getName() != null 
+                && !toolCall.getFunction().getName().isEmpty()) {
+                validToolCalls.add(toolCall);
+                argumentsMap.put(toolCall.getId(), toolCall.getFunction().getArguments());
+            } else {
+                println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.red("跳过无效工具调用: 工具名称为空"));
+            }
         }
         
-        List<ToolExecutionResult> results = concurrentToolExecutor.executeConcurrently(toolCalls);
+        if (validToolCalls.isEmpty()) {
+            return;
+        }
+        
+        List<ToolExecutionResult> results = concurrentToolExecutor.executeConcurrently(validToolCalls);
         
         long totalTime = System.currentTimeMillis() - startTime;
         
@@ -628,6 +688,12 @@ public class SimpleJavaAgent {
     }
 
     private void processToolCall(ToolCall toolCall) {
+        if (toolCall.getFunction() == null || toolCall.getFunction().getName() == null 
+            || toolCall.getFunction().getName().isEmpty()) {
+            println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.red("跳过无效工具调用: 工具名称为空"));
+            return;
+        }
+        
         String toolName = toolCall.getFunction().getName();
         String arguments = toolCall.getFunction().getArguments();
         String toolCallId = toolCall.getId();
@@ -659,5 +725,38 @@ public class SimpleJavaAgent {
             return singleLine;
         }
         return singleLine.substring(0, maxLength) + "...";
+    }
+
+    private String responseToString(ChatResponse response) {
+        if (response == null) {
+            return "ChatResponse{null}";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("ChatResponse{");
+        sb.append("id='").append(response.getId()).append("', ");
+        sb.append("model='").append(response.getModel()).append("', ");
+        sb.append("hasContent=").append(response.hasContent()).append(", ");
+        sb.append("hasToolCalls=").append(response.hasToolCalls()).append(", ");
+        
+        Message msg = response.getFirstMessage();
+        if (msg != null) {
+            sb.append("message{");
+            sb.append("role='").append(msg.getRole()).append("', ");
+            sb.append("content=").append(msg.getContent() != null ? "'" + truncate(msg.getContent(), 50) + "'" : "null");
+            if (msg.getToolCalls() != null) {
+                sb.append(", toolCallsCount=").append(msg.getToolCalls().size());
+            }
+            sb.append("}");
+        } else {
+            sb.append("message=null");
+        }
+        
+        if (response.getUsage() != null) {
+            sb.append(", usage{prompt=").append(response.getUsage().getPromptTokens())
+              .append(", completion=").append(response.getUsage().getCompletionTokens()).append("}");
+        }
+        
+        sb.append("}");
+        return sb.toString();
     }
 }

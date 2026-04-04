@@ -77,6 +77,11 @@ public class ChatResponse {
         return message != null && message.getToolCalls() != null && !message.getToolCalls().isEmpty();
     }
 
+    public boolean hasContent() {
+        String content = getContent();
+        return content != null && !content.isEmpty();
+    }
+
     public String getContent() {
         Message message = getFirstMessage();
         return message != null ? message.getContent() : null;
