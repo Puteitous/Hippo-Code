@@ -1,5 +1,8 @@
 # 敏感配置文件 - 包含 API Key
 config.json
+config.yaml
+config.yml
+config.properties
 
 # 构建产物
 target/

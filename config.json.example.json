@@ -1,6 +1,0 @@
-{
-  "apiKey" : "your-api-key-here",
-  "model" : "qwen3.5-plus",
-  "maxTokens" : 2048,
-  "baseUrl" : "https://dashscope.aliyuncs.com"
-}

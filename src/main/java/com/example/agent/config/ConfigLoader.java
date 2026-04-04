@@ -1,0 +1,177 @@
+package com.example.agent.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Properties;
+
+public class ConfigLoader {
+
+    private static final String[] CONFIG_FILE_NAMES = {
+        "config.yaml",
+        "config.yml",
+        "config.json"
+    };
+
+    private final String configDir;
+
+    public ConfigLoader() {
+        this.configDir = getConfigDirectory();
+    }
+
+    public ConfigLoader(String configDir) {
+        this.configDir = configDir;
+    }
+
+    public Config load() {
+        for (String fileName : CONFIG_FILE_NAMES) {
+            File configFile = new File(configDir, fileName);
+            if (configFile.exists()) {
+                Config config = loadFromFile(configFile);
+                if (config != null) {
+                    System.out.println("Configuration loaded from: " + configFile.getAbsolutePath());
+                    return config;
+                }
+            }
+        }
+        
+        Config defaultConfig = createDefaultConfig();
+        saveDefaultConfig(defaultConfig);
+        return defaultConfig;
+    }
+
+    private Config loadFromFile(File file) {
+        String fileName = file.getName().toLowerCase();
+        
+        try {
+            if (fileName.endsWith(".yaml") || fileName.endsWith(".yml")) {
+                return loadYaml(file);
+            } else if (fileName.endsWith(".json")) {
+                return loadJson(file);
+            } else if (fileName.endsWith(".properties")) {
+                return loadProperties(file);
+            }
+        } catch (IOException e) {
+            System.err.println("Error loading config file: " + e.getMessage());
+        }
+        
+        return null;
+    }
+
+    private Config loadYaml(File file) throws IOException {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        mapper.findAndRegisterModules();
+        Config config = mapper.readValue(file, Config.class);
+        resolveEnvVariables(config);
+        return config;
+    }
+
+    private Config loadJson(File file) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        Config config = mapper.readValue(file, Config.class);
+        resolveEnvVariables(config);
+        return config;
+    }
+
+    private Config loadProperties(File file) throws IOException {
+        Properties props = new Properties();
+        try (InputStreamReader reader = new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8)) {
+            props.load(reader);
+        }
+        
+        Config config = new Config();
+        config.getLlm().setApiKey(props.getProperty("api.key", props.getProperty("llm.api_key")));
+        config.getLlm().setBaseUrl(props.getProperty("api.url", props.getProperty("llm.base_url")));
+        config.getLlm().setModel(props.getProperty("model.name", props.getProperty("llm.model")));
+        
+        if (props.containsKey("llm.max_tokens")) {
+            config.getLlm().setMaxTokens(Integer.parseInt(props.getProperty("llm.max_tokens")));
+        }
+        
+        resolveEnvVariables(config);
+        return config;
+    }
+
+    private void resolveEnvVariables(Config config) {
+        LlmConfig llm = config.getLlm();
+        if (llm != null) {
+            llm.setApiKey(EnvVariableResolver.resolve(llm.getApiKey()));
+            llm.setBaseUrl(EnvVariableResolver.resolve(llm.getBaseUrl()));
+            llm.setModel(EnvVariableResolver.resolve(llm.getModel()));
+        }
+    }
+
+    private Config createDefaultConfig() {
+        Config config = new Config();
+        System.out.println("No configuration file found. Creating default configuration.");
+        return config;
+    }
+
+    private void saveDefaultConfig(Config config) {
+        File configFile = new File(configDir, "config.yaml");
+        try {
+            ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+            mapper.enable(SerializationFeature.INDENT_OUTPUT);
+            mapper.writeValue(configFile, config);
+            System.out.println("Default configuration created at: " + configFile.getAbsolutePath());
+        } catch (IOException e) {
+            System.err.println("Error creating default config file: " + e.getMessage());
+        }
+    }
+
+    private String getConfigDirectory() {
+        String userDir = System.getProperty("user.dir");
+        if (userDir != null) {
+            for (String fileName : CONFIG_FILE_NAMES) {
+                if (new File(userDir, fileName).exists()) {
+                    return userDir;
+                }
+            }
+        }
+        
+        try {
+            java.net.URI uri = ConfigLoader.class.getProtectionDomain()
+                .getCodeSource().getLocation().toURI();
+            File file = new File(uri);
+            String jarDir = file.isFile() ? file.getParent() : file.getAbsolutePath();
+            
+            if (jarDir != null && jarDir.endsWith("target")) {
+                File parentDir = new File(jarDir).getParentFile();
+                if (parentDir != null) {
+                    return parentDir.getAbsolutePath();
+                }
+            }
+            
+            if (jarDir != null) {
+                return jarDir;
+            }
+        } catch (Exception e) {
+            System.err.println("Warning: Could not determine config directory: " + e.getMessage());
+        }
+        
+        return userDir;
+    }
+
+    public File getConfigFile() {
+        for (String fileName : CONFIG_FILE_NAMES) {
+            File file = new File(configDir, fileName);
+            if (file.exists()) {
+                return file;
+            }
+        }
+        return new File(configDir, "config.yaml");
+    }
+
+    public String getConfigFilePath() {
+        return getConfigFile().getAbsolutePath();
+    }
+}

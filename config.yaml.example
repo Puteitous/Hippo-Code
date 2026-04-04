@@ -1,0 +1,46 @@
+llm:
+  provider: dashscope
+  api_key: ${DASHSCOPE_API_KEY:-your-api-key-here}
+  model: qwen3.5-plus
+  base_url: https://dashscope.aliyuncs.com
+  max_tokens: 2048
+  temperature: 0.7
+  timeout: 60000
+
+tools:
+  bash:
+    enabled: true
+    whitelist:
+      - git
+      - mvn
+      - npm
+      - docker
+      - ls
+      - cat
+      - grep
+      - find
+    require_confirmation: true
+  file:
+    enabled: true
+    allowed_paths:
+      - .
+    max_file_size: 10MB
+    blocked_extensions:
+      - .env
+      - .pem
+      - .key
+      - .p12
+      - .jks
+
+session:
+  auto_save: true
+  max_history: 50
+  history_file: .agent_history
+
+ui:
+  theme: dark
+  prompt: "agent>"
+  syntax_highlight: true
+  show_token_usage: true
+  show_timestamp: false
+  color_output: true

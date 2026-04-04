@@ -208,22 +208,25 @@ public class SimpleJavaAgent {
             println(ConsoleStyle.red("║           API Key 未配置                         ║"));
             println(ConsoleStyle.red("╚══════════════════════════════════════════════════╝"));
             println();
-            println(ConsoleStyle.yellow("请在 config.json 中设置您的 API Key:"));
-            println(ConsoleStyle.gray("  文件位置: " + getConfigFilePath()));
+            println(ConsoleStyle.yellow("请在配置文件中设置您的 API Key:"));
+            println(ConsoleStyle.gray("  文件位置: " + config.getConfigFilePath()));
             println();
-            println(ConsoleStyle.gray("配置示例:"));
-            println(ConsoleStyle.cyan("  {"));
-            println(ConsoleStyle.cyan("    \"apiKey\" : \"sk-your-api-key-here\","));
-            println(ConsoleStyle.cyan("    \"model\" : \"qwen3.5-plus\","));
-            println(ConsoleStyle.cyan("    \"baseUrl\" : \"https://dashscope.aliyuncs.com\""));
-            println(ConsoleStyle.cyan("  }"));
+            println(ConsoleStyle.gray("支持的配置格式: config.yaml, config.yml, config.json"));
+            println();
+            println(ConsoleStyle.gray("YAML 配置示例 (config.yaml):"));
+            println(ConsoleStyle.cyan("  llm:"));
+            println(ConsoleStyle.cyan("    api_key: ${DASHSCOPE_API_KEY}"));
+            println(ConsoleStyle.cyan("    model: qwen3.5-plus"));
+            println(ConsoleStyle.cyan("    base_url: https://dashscope.aliyuncs.com"));
+            println();
+            println(ConsoleStyle.gray("或设置环境变量: DASHSCOPE_API_KEY 或 OPENAI_API_KEY"));
             println();
             return false;
         }
 
         if (config.getApiKey().equals("your-api-key-here")) {
-            println(ConsoleStyle.yellow("警告: API Key 仍为默认值，请修改 config.json"));
-            println(ConsoleStyle.gray("配置文件位置: " + getConfigFilePath()));
+            println(ConsoleStyle.yellow("警告: API Key 仍为默认值，请修改配置文件"));
+            println(ConsoleStyle.gray("配置文件位置: " + config.getConfigFilePath()));
             println();
             println(ConsoleStyle.yellow("是否继续？(y/n)"));
             
@@ -241,14 +244,6 @@ public class SimpleJavaAgent {
         }
 
         return true;
-    }
-
-    private String getConfigFilePath() {
-        try {
-            return new java.io.File("config.json").getAbsolutePath();
-        } catch (Exception e) {
-            return "config.json";
-        }
     }
 
     private void printWelcome() {
@@ -272,10 +267,29 @@ public class SimpleJavaAgent {
 
     private void printConfig() {
         println(ConsoleStyle.bold("当前配置:"));
+        println(ConsoleStyle.green("  配置文件: ") + config.getConfigFilePath());
+        println();
+        println(ConsoleStyle.boldCyan("  [LLM 配置]"));
+        println(ConsoleStyle.green("  Provider: ") + config.getLlm().getProvider());
         println(ConsoleStyle.green("  模型: ") + config.getModel());
         println(ConsoleStyle.green("  API: ") + config.getBaseUrl());
         println(ConsoleStyle.green("  MaxTokens: ") + config.getMaxTokens());
+        println(ConsoleStyle.green("  Temperature: ") + config.getLlm().getTemperature());
+        println(ConsoleStyle.green("  Timeout: ") + config.getLlm().getTimeout() + "ms");
         println(ConsoleStyle.green("  API Key: ") + maskApiKey(config.getApiKey()));
+        println();
+        println(ConsoleStyle.boldCyan("  [工具配置]"));
+        println(ConsoleStyle.green("  Bash: ") + (config.getTools().getBash().isEnabled() ? "启用" : "禁用"));
+        println(ConsoleStyle.green("  File: ") + (config.getTools().getFile().isEnabled() ? "启用" : "禁用"));
+        println();
+        println(ConsoleStyle.boldCyan("  [会话配置]"));
+        println(ConsoleStyle.green("  自动保存: ") + (config.getSession().isAutoSave() ? "是" : "否"));
+        println(ConsoleStyle.green("  最大历史: ") + config.getSession().getMaxHistory());
+        println();
+        println(ConsoleStyle.boldCyan("  [UI 配置]"));
+        println(ConsoleStyle.green("  主题: ") + config.getUi().getTheme());
+        println(ConsoleStyle.green("  提示符: ") + config.getUi().getPrompt());
+        println(ConsoleStyle.green("  语法高亮: ") + (config.getUi().isSyntaxHighlight() ? "是" : "否"));
         println();
     }
 

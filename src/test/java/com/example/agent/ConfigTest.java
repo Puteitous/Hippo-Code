@@ -1,8 +1,13 @@
 package com.example.agent;
 
 import com.example.agent.config.Config;
+import com.example.agent.config.LlmConfig;
+import com.example.agent.config.ToolsConfig;
+import com.example.agent.config.SessionConfig;
+import com.example.agent.config.UiConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,14 +27,17 @@ class ConfigTest {
     Path tempDir;
 
     private File testConfigFile;
-    private ObjectMapper mapper;
+    private ObjectMapper jsonMapper;
+    private ObjectMapper yamlMapper;
 
     @BeforeEach
     void setUp() throws Exception {
         resetConfigInstance();
         testConfigFile = tempDir.resolve("config.json").toFile();
-        mapper = new ObjectMapper();
-        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        jsonMapper = new ObjectMapper();
+        jsonMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        yamlMapper = new ObjectMapper(new YAMLFactory());
+        yamlMapper.enable(SerializationFeature.INDENT_OUTPUT);
     }
 
     @AfterEach
@@ -46,7 +54,25 @@ class ConfigTest {
     private Config createConfigInstance() throws Exception {
         Constructor<Config> constructor = Config.class.getDeclaredConstructor();
         constructor.setAccessible(true);
-        return constructor.newInstance();
+        Config config = constructor.newInstance();
+        
+        Field llmField = Config.class.getDeclaredField("llm");
+        llmField.setAccessible(true);
+        llmField.set(config, new LlmConfig());
+        
+        Field toolsField = Config.class.getDeclaredField("tools");
+        toolsField.setAccessible(true);
+        toolsField.set(config, new ToolsConfig());
+        
+        Field sessionField = Config.class.getDeclaredField("session");
+        sessionField.setAccessible(true);
+        sessionField.set(config, new SessionConfig());
+        
+        Field uiField = Config.class.getDeclaredField("ui");
+        uiField.setAccessible(true);
+        uiField.set(config, new UiConfig());
+        
+        return config;
     }
 
     @Test
@@ -72,6 +98,53 @@ class ConfigTest {
         assertEquals("qwen-max", config.getModel());
         assertEquals("https://custom.api.com", config.getBaseUrl());
         assertEquals(4096, config.getMaxTokens());
+    }
+
+    @Test
+    void testLlmConfigDefaults() throws Exception {
+        Config config = createConfigInstance();
+        LlmConfig llm = config.getLlm();
+        
+        assertEquals("dashscope", llm.getProvider());
+        assertEquals(0.7, llm.getTemperature());
+        assertEquals(60000, llm.getTimeout());
+    }
+
+    @Test
+    void testToolsConfigDefaults() throws Exception {
+        Config config = createConfigInstance();
+        ToolsConfig tools = config.getTools();
+        
+        assertTrue(tools.getBash().isEnabled());
+        assertTrue(tools.getBash().isRequireConfirmation());
+        assertTrue(tools.getBash().getWhitelist().contains("git"));
+        assertTrue(tools.getBash().getWhitelist().contains("mvn"));
+        
+        assertTrue(tools.getFile().isEnabled());
+        assertEquals("10MB", tools.getFile().getMaxFileSize());
+        assertTrue(tools.getFile().getBlockedExtensions().contains(".env"));
+    }
+
+    @Test
+    void testSessionConfigDefaults() throws Exception {
+        Config config = createConfigInstance();
+        SessionConfig session = config.getSession();
+        
+        assertTrue(session.isAutoSave());
+        assertEquals(50, session.getMaxHistory());
+        assertEquals(".agent_history", session.getHistoryFile());
+    }
+
+    @Test
+    void testUiConfigDefaults() throws Exception {
+        Config config = createConfigInstance();
+        UiConfig ui = config.getUi();
+        
+        assertEquals("dark", ui.getTheme());
+        assertEquals("agent>", ui.getPrompt());
+        assertTrue(ui.isSyntaxHighlight());
+        assertTrue(ui.isShowTokenUsage());
+        assertTrue(ui.isColorOutput());
     }
 
     @Test
@@ -105,85 +178,140 @@ class ConfigTest {
     void testMaskApiKeyWithNull() throws Exception {
         Config config = createConfigInstance();
         config.setApiKey(null);
-        String masked = config.toString();
-        assertTrue(masked.contains("apiKey='****'"));
+        String masked = config.getLlm().maskApiKey();
+        assertEquals("****", masked);
     }
 
     @Test
     void testMaskApiKeyWithShortKey() throws Exception {
         Config config = createConfigInstance();
         config.setApiKey("abc");
-        String masked = config.toString();
-        assertTrue(masked.contains("apiKey='****'"));
+        String masked = config.getLlm().maskApiKey();
+        assertEquals("****", masked);
     }
 
     @Test
     void testMaskApiKeyWithLongKey() throws Exception {
         Config config = createConfigInstance();
         config.setApiKey("sk-1234567890abcdefghijklmnop");
-        String masked = config.toString();
-        assertTrue(masked.contains("sk-1****mnop"));
-        assertFalse(masked.contains("1234567890abcdefghijkl"));
+        String masked = config.getLlm().maskApiKey();
+        assertEquals("sk-1****mnop", masked);
     }
 
     @Test
-    void testToString() throws Exception {
+    void testBashToolCommandAllowed() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("sk-test12345678key");
-        config.setModel("qwen-max");
-        config.setBaseUrl("https://api.test.com");
-        config.setMaxTokens(1024);
+        ToolsConfig.BashToolConfig bash = config.getTools().getBash();
         
-        String str = config.toString();
-        assertTrue(str.contains("model='qwen-max'"));
-        assertTrue(str.contains("baseUrl='https://api.test.com'"));
-        assertTrue(str.contains("maxTokens=1024"));
+        assertTrue(bash.isCommandAllowed("git status"));
+        assertTrue(bash.isCommandAllowed("mvn compile"));
+        assertFalse(bash.isCommandAllowed("rm -rf /"));
+        assertFalse(bash.isCommandAllowed("format c:"));
     }
 
     @Test
-    void testJsonSerialization() throws Exception {
+    void testFileToolExtensionBlocked() throws Exception {
+        Config config = createConfigInstance();
+        ToolsConfig.FileToolConfig file = config.getTools().getFile();
+        
+        assertTrue(file.isExtensionBlocked("config.env"));
+        assertTrue(file.isExtensionBlocked("secret.key"));
+        assertFalse(file.isExtensionBlocked("Main.java"));
+        assertFalse(file.isExtensionBlocked("README.md"));
+    }
+
+    @Test
+    void testFileToolMaxFileSizeParsing() throws Exception {
+        Config config = createConfigInstance();
+        ToolsConfig.FileToolConfig file = config.getTools().getFile();
+        
+        assertEquals(10 * 1024 * 1024, file.getMaxFileSizeBytes());
+        
+        file.setMaxFileSize("5MB");
+        assertEquals(5 * 1024 * 1024, file.getMaxFileSizeBytes());
+        
+        file.setMaxFileSize("1GB");
+        assertEquals(1L * 1024 * 1024 * 1024, file.getMaxFileSizeBytes());
+    }
+
+    @Test
+    void testYamlSerialization() throws Exception {
         Config config = createConfigInstance();
         config.setApiKey("test-key-123");
         config.setModel("qwen-max");
         config.setBaseUrl("https://test.api.com");
         config.setMaxTokens(8192);
         
-        String json = mapper.writeValueAsString(config);
+        String yaml = yamlMapper.writeValueAsString(config);
         
-        assertTrue(json.contains("\"apiKey\" : \"test-key-123\""));
-        assertTrue(json.contains("\"model\" : \"qwen-max\""));
-        assertTrue(json.contains("\"baseUrl\" : \"https://test.api.com\""));
-        assertTrue(json.contains("\"maxTokens\" : 8192"));
+        assertTrue(yaml.contains("llm:"));
+        assertTrue(yaml.contains("model: qwen-max"));
+        assertTrue(yaml.contains("base_url: https://test.api.com"));
+        assertTrue(yaml.contains("max_tokens: 8192"));
     }
 
     @Test
-    void testJsonDeserialization() throws IOException {
-        String json = """
-            {
-                "apiKey" : "deserialized-key",
-                "model" : "qwen-turbo",
-                "baseUrl" : "https://deserialized.api.com",
-                "maxTokens" : 512
-            }
+    void testYamlDeserialization() throws IOException {
+        String yaml = """
+            llm:
+              provider: openai
+              api_key: yaml-test-key
+              model: gpt-4
+              base_url: https://api.openai.com/v1
+              max_tokens: 4096
+              temperature: 0.5
+              timeout: 30000
+            tools:
+              bash:
+                enabled: false
+                whitelist: [git, npm]
+                require_confirmation: false
+              file:
+                enabled: true
+                max_file_size: 5MB
+            session:
+              auto_save: false
+              max_history: 100
+            ui:
+              theme: light
+              prompt: "ai>"
+              syntax_highlight: false
             """;
         
-        Config config = mapper.readValue(json, Config.class);
+        Config config = yamlMapper.readValue(yaml, Config.class);
         
-        assertEquals("deserialized-key", config.getApiKey());
-        assertEquals("qwen-turbo", config.getModel());
-        assertEquals("https://deserialized.api.com", config.getBaseUrl());
-        assertEquals(512, config.getMaxTokens());
+        assertEquals("openai", config.getLlm().getProvider());
+        assertEquals("yaml-test-key", config.getApiKey());
+        assertEquals("gpt-4", config.getModel());
+        assertEquals("https://api.openai.com/v1", config.getBaseUrl());
+        assertEquals(4096, config.getMaxTokens());
+        assertEquals(0.5, config.getLlm().getTemperature());
+        assertEquals(30000, config.getLlm().getTimeout());
+        
+        assertFalse(config.getTools().getBash().isEnabled());
+        assertFalse(config.getTools().getBash().isRequireConfirmation());
+        
+        assertEquals("5MB", config.getTools().getFile().getMaxFileSize());
+        
+        assertFalse(config.getSession().isAutoSave());
+        assertEquals(100, config.getSession().getMaxHistory());
+        
+        assertEquals("light", config.getUi().getTheme());
+        assertEquals("ai>", config.getUi().getPrompt());
+        assertFalse(config.getUi().isSyntaxHighlight());
     }
 
     @Test
     void testJsonDeserializationWithMissingFields() throws IOException {
         String json = """
             {
-                "apiKey" : "partial-key"
+                "llm": {
+                    "api_key": "partial-key"
+                }
             }
             """;
         
-        Config config = mapper.readValue(json, Config.class);
+        Config config = jsonMapper.readValue(json, Config.class);
         
         assertEquals("partial-key", config.getApiKey());
         assertEquals("qwen3.5-plus", config.getModel());
@@ -195,12 +323,26 @@ class ConfigTest {
     void testJsonDeserializationIgnoresUnknownFields() throws IOException {
         String json = """
             {
-                "apiKey" : "test-key",
-                "unknownField" : "should be ignored",
-                "anotherUnknown" : 12345
+                "llm": {
+                    "api_key": "test-key",
+                    "unknownField": "should be ignored"
+                },
+                "anotherUnknown": 12345
             }
             """;
         
-        assertDoesNotThrow(() -> mapper.readValue(json, Config.class));
+        assertDoesNotThrow(() -> jsonMapper.readValue(json, Config.class));
+    }
+
+    @Test
+    void testBackwardCompatibility() throws Exception {
+        Config config = createConfigInstance();
+        
+        config.setApiKey("test-key");
+        assertEquals("test-key", config.getApiKey());
+        assertEquals("test-key", config.getLlm().getApiKey());
+        
+        config.getLlm().setApiKey("new-key");
+        assertEquals("new-key", config.getApiKey());
     }
 }
