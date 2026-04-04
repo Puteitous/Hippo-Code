@@ -1,7 +1,7 @@
 llm:
   provider: dashscope
   api_key: ${DASHSCOPE_API_KEY:-your-api-key-here}
-  model: qwen3.5-plus
+  model: your-model
   base_url: https://dashscope.aliyuncs.com
   max_tokens: 2048
   temperature: 0.7
@@ -44,3 +44,11 @@ ui:
   show_token_usage: true
   show_timestamp: false
   color_output: true
+
+context:
+  max_tokens: 30000
+  max_messages: 20
+  keep_recent_turns: 6
+  tool_result:
+    max_tokens: 2000
+    truncate_strategy: tail

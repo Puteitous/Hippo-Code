@@ -102,7 +102,7 @@ public class SimpleJavaAgent {
             toolRegistry = createToolRegistry();
             concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
             tokenEstimator = new TokenEstimator();
-            conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator);
+            conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
             
             LogDirectoryManager.ensureDirectoriesExist();
             tokenMetricsCollector = new TokenMetricsCollector(LocalDate.now());

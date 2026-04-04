@@ -1,0 +1,101 @@
+package com.example.agent.context.config;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class ContextConfig {
+
+    public static final int DEFAULT_MAX_TOKENS = 30000;
+    public static final int DEFAULT_MAX_MESSAGES = 20;
+    public static final int DEFAULT_KEEP_RECENT_TURNS = 6;
+    public static final int DEFAULT_TOOL_RESULT_MAX_TOKENS = 2000;
+
+    @JsonProperty("max_tokens")
+    private int maxTokens = DEFAULT_MAX_TOKENS;
+
+    @JsonProperty("max_messages")
+    private int maxMessages = DEFAULT_MAX_MESSAGES;
+
+    @JsonProperty("keep_recent_turns")
+    private int keepRecentTurns = DEFAULT_KEEP_RECENT_TURNS;
+
+    @JsonProperty("tool_result")
+    private ToolResultConfig toolResult = new ToolResultConfig();
+
+    public ContextConfig() {
+    }
+
+    public int getMaxTokens() {
+        return maxTokens;
+    }
+
+    public void setMaxTokens(int maxTokens) {
+        this.maxTokens = maxTokens;
+    }
+
+    public int getMaxMessages() {
+        return maxMessages;
+    }
+
+    public void setMaxMessages(int maxMessages) {
+        this.maxMessages = maxMessages;
+    }
+
+    public int getKeepRecentTurns() {
+        return keepRecentTurns;
+    }
+
+    public void setKeepRecentTurns(int keepRecentTurns) {
+        this.keepRecentTurns = keepRecentTurns;
+    }
+
+    public ToolResultConfig getToolResult() {
+        return toolResult;
+    }
+
+    public void setToolResult(ToolResultConfig toolResult) {
+        this.toolResult = toolResult;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ToolResultConfig {
+        
+        public static final String DEFAULT_TRUNCATE_STRATEGY = "tail";
+
+        @JsonProperty("max_tokens")
+        private int maxTokens = DEFAULT_TOOL_RESULT_MAX_TOKENS;
+
+        @JsonProperty("truncate_strategy")
+        private String truncateStrategy = DEFAULT_TRUNCATE_STRATEGY;
+
+        public ToolResultConfig() {
+        }
+
+        public int getMaxTokens() {
+            return maxTokens;
+        }
+
+        public void setMaxTokens(int maxTokens) {
+            this.maxTokens = maxTokens;
+        }
+
+        public String getTruncateStrategy() {
+            return truncateStrategy;
+        }
+
+        public void setTruncateStrategy(String truncateStrategy) {
+            this.truncateStrategy = truncateStrategy;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "ContextConfig{" +
+                "maxTokens=" + maxTokens +
+                ", maxMessages=" + maxMessages +
+                ", keepRecentTurns=" + keepRecentTurns +
+                ", toolResult=" + toolResult +
+                '}';
+    }
+}

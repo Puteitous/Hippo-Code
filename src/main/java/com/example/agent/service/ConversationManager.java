@@ -1,23 +1,50 @@
 package com.example.agent.service;
 
+import com.example.agent.context.Compressor;
+import com.example.agent.context.TrimPolicy;
+import com.example.agent.context.config.ContextConfig;
+import com.example.agent.context.compressor.TruncateCompressor;
+import com.example.agent.context.policy.SlidingWindowPolicy;
+import com.example.agent.llm.model.Message;
+
 import java.util.ArrayList;
 import java.util.List;
 
-import com.example.agent.llm.model.Message;
-
 public class ConversationManager {
-
-    private static final int MAX_HISTORY_MESSAGES = 20;
-    private static final int MAX_CONTEXT_TOKENS = 30000;
 
     private final List<Message> conversationHistory;
     private final TokenEstimator tokenEstimator;
     private final String systemPrompt;
+    
+    private final TrimPolicy trimPolicy;
+    private final Compressor toolResultCompressor;
+    private final ContextConfig config;
 
     public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator) {
+        this(systemPrompt, tokenEstimator, new ContextConfig());
+    }
+
+    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, ContextConfig config) {
         this.systemPrompt = systemPrompt;
         this.tokenEstimator = tokenEstimator;
+        this.config = config;
         this.conversationHistory = new ArrayList<>();
+        
+        this.trimPolicy = new SlidingWindowPolicy(tokenEstimator, config);
+        this.toolResultCompressor = new TruncateCompressor(tokenEstimator, config.getToolResult());
+        
+        reset();
+    }
+
+    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, 
+                               TrimPolicy trimPolicy, Compressor toolResultCompressor, ContextConfig config) {
+        this.systemPrompt = systemPrompt;
+        this.tokenEstimator = tokenEstimator;
+        this.config = config;
+        this.conversationHistory = new ArrayList<>();
+        this.trimPolicy = trimPolicy;
+        this.toolResultCompressor = toolResultCompressor;
+        
         reset();
     }
 
@@ -35,7 +62,14 @@ public class ConversationManager {
     }
 
     public void addToolResult(String toolCallId, String toolName, String result) {
-        conversationHistory.add(Message.toolResult(toolCallId, toolName, result));
+        Message toolMessage = Message.toolResult(toolCallId, toolName, result);
+        
+        if (toolResultCompressor != null && toolResultCompressor.supports(toolMessage)) {
+            int maxTokens = config.getToolResult().getMaxTokens();
+            toolMessage = toolResultCompressor.compress(toolMessage, maxTokens);
+        }
+        
+        conversationHistory.add(toolMessage);
     }
 
     public List<Message> getHistory() {
@@ -51,23 +85,34 @@ public class ConversationManager {
     }
 
     public void trimHistory(TrimCallback callback) {
-        boolean trimmed = false;
+        int beforeCount = conversationHistory.size();
+        int beforeTokens = tokenEstimator.estimateConversationTokens(conversationHistory);
         
-        while (conversationHistory.size() > 2) {
-            int totalTokens = tokenEstimator.estimateConversationTokens(conversationHistory);
-            
-            if (totalTokens <= MAX_CONTEXT_TOKENS && conversationHistory.size() <= MAX_HISTORY_MESSAGES + 1) {
-                break;
-            }
-            
-            conversationHistory.remove(1);
-            trimmed = true;
-        }
+        List<Message> trimmed = trimPolicy.apply(
+            conversationHistory, 
+            config.getMaxTokens(), 
+            config.getMaxMessages()
+        );
         
-        if (trimmed && callback != null) {
+        conversationHistory.clear();
+        conversationHistory.addAll(trimmed);
+        
+        if (callback != null && conversationHistory.size() < beforeCount) {
             int currentTokens = tokenEstimator.estimateConversationTokens(conversationHistory);
             callback.onTrimmed(conversationHistory.size(), currentTokens);
         }
+    }
+
+    public ContextConfig getConfig() {
+        return config;
+    }
+
+    public TrimPolicy getTrimPolicy() {
+        return trimPolicy;
+    }
+
+    public Compressor getToolResultCompressor() {
+        return toolResultCompressor;
     }
 
     @FunctionalInterface
