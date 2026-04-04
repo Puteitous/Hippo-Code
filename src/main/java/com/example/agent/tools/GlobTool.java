@@ -31,7 +31,8 @@ public class GlobTool implements ToolExecutor {
     @Override
     public String getDescription() {
         return "使用 glob 模式查找文件。支持通配符：* 匹配任意字符（不包括目录分隔符），** 匹配任意层级的目录。" +
-               "例如：'**/*.java' 查找所有 Java 文件，'src/**/*.txt' 查找 src 目录下的所有 txt 文件。" +
+               "例如：'*.java' 查找所有 Java 文件（包括根目录和子目录），'**/*.txt' 查找子目录中的所有 txt 文件。" +
+               "查找隐藏文件（如 .gitignore）请使用简单文件名模式，如 '.gitignore' 会同时匹配根目录和子目录中的文件。" +
                "返回匹配的文件列表，按修改时间排序（最新的在前）。只能搜索项目目录内的文件。";
     }
 
@@ -127,7 +128,7 @@ public class GlobTool implements ToolExecutor {
 
     private String normalizePattern(String pattern) {
         if (!pattern.startsWith("**") && !pattern.startsWith("/") && !pattern.contains("/")) {
-            return "**/" + pattern;
+            return "{" + pattern + ",**/" + pattern + "}";
         }
         return pattern;
     }

@@ -1,5 +1,7 @@
 package com.example.agent.llm.stream;
 
+import com.example.agent.llm.model.Usage;
+
 import java.util.List;
 
 /* 
@@ -12,6 +14,7 @@ public class StreamChunk {
     private List<ToolCallDelta> toolCallDeltas;
     private String finishReason;
     private boolean isToolCall;
+    private Usage usage;
 
     public StreamChunk() {
     }
@@ -57,6 +60,14 @@ public class StreamChunk {
     public void setToolCall(boolean toolCall) {
         isToolCall = toolCall;
     }
+    
+    public Usage getUsage() {
+        return usage;
+    }
+    
+    public void setUsage(Usage usage) {
+        this.usage = usage;
+    }
 
     public boolean hasContent() {
         return content != null && !content.isEmpty();
@@ -64,6 +75,10 @@ public class StreamChunk {
 
     public boolean hasToolCalls() {
         return toolCallDeltas != null && !toolCallDeltas.isEmpty();
+    }
+    
+    public boolean hasUsage() {
+        return usage != null;
     }
 
     @Override
@@ -73,6 +88,7 @@ public class StreamChunk {
                 ", toolCallDeltas=" + toolCallDeltas +
                 ", finishReason='" + finishReason + '\'' +
                 ", isToolCall=" + isToolCall +
+                ", usage=" + usage +
                 '}';
     }
 }

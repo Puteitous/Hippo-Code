@@ -12,6 +12,7 @@ import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Tool;
 import com.example.agent.llm.model.ToolCall;
+import com.example.agent.llm.model.Usage;
 import com.example.agent.llm.retry.RetryPolicy;
 import com.example.agent.llm.stream.SseParser;
 import com.example.agent.llm.stream.StreamChunk;
@@ -161,6 +162,7 @@ public class DefaultLlmClient implements LlmClient {
         StringBuilder fullContent = new StringBuilder();
         List<ToolCall> toolCalls = new ArrayList<>();
         String finishReason = null;
+        Usage usage = null;
         
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
@@ -198,6 +200,10 @@ public class DefaultLlmClient implements LlmClient {
                 if (chunk.getFinishReason() != null) {
                     finishReason = chunk.getFinishReason();
                 }
+                
+                if (chunk.hasUsage()) {
+                    usage = chunk.getUsage();
+                }
             }
             
         } catch (RuntimeException e) {
@@ -209,7 +215,7 @@ public class DefaultLlmClient implements LlmClient {
             throw new LlmException("读取流式响应失败: " + e.getMessage(), e);
         }
         
-        return buildChatResponse(fullContent.toString(), toolCalls, finishReason);
+        return buildChatResponse(fullContent.toString(), toolCalls, finishReason, usage);
     }
 
     private void mergeToolCallDeltas(List<ToolCall> toolCalls, List<ToolCallDelta> deltas) {
@@ -251,7 +257,7 @@ public class DefaultLlmClient implements LlmClient {
         }
     }
 
-    private ChatResponse buildChatResponse(String content, List<ToolCall> toolCalls, String finishReason) {
+    private ChatResponse buildChatResponse(String content, List<ToolCall> toolCalls, String finishReason, Usage usage) {
         ChatResponse response = new ChatResponse();
         response.setId("stream-" + System.currentTimeMillis());
         response.setObject("chat.completion");
@@ -275,6 +281,10 @@ public class DefaultLlmClient implements LlmClient {
         choice.setFinishReason(finishReason);
         
         response.setChoices(List.of(choice));
+        
+        if (usage != null) {
+            response.setUsage(usage);
+        }
         
         return response;
     }

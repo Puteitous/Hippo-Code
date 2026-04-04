@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
+import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ChatRequest {
@@ -21,6 +22,9 @@ public class ChatRequest {
     private Double temperature;
     private Double topP;
     private Boolean stream;
+    
+    @JsonProperty("stream_options")
+    private Map<String, Object> streamOptions;
 
     public ChatRequest() {
     }
@@ -76,6 +80,11 @@ public class ChatRequest {
 
     public ChatRequest stream(Boolean stream) {
         this.stream = stream;
+        if (Boolean.TRUE.equals(stream)) {
+            this.streamOptions = Map.of("include_usage", true);
+        } else {
+            this.streamOptions = null;
+        }
         return this;
     }
 
@@ -141,5 +150,13 @@ public class ChatRequest {
 
     public void setStream(Boolean stream) {
         this.stream = stream;
+    }
+    
+    public Map<String, Object> getStreamOptions() {
+        return streamOptions;
+    }
+    
+    public void setStreamOptions(Map<String, Object> streamOptions) {
+        this.streamOptions = streamOptions;
     }
 }

@@ -20,6 +20,7 @@ Thumbs.db
 
 # 日志文件
 *.log
+logs/
 
 # Maven
 dependency-reduced-pom.xml
