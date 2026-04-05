@@ -22,6 +22,7 @@ public class Config {
     private SessionConfig session = new SessionConfig();
     private UiConfig ui = new UiConfig();
     private ContextConfig context = new ContextConfig();
+    private IntentConfig intent = new IntentConfig();
 
     private transient ConfigLoader configLoader;
 
@@ -108,6 +109,7 @@ public class Config {
                 this.session = reloaded.session;
                 this.ui = reloaded.ui;
                 this.context = reloaded.context;
+                this.intent = reloaded.intent;
                 this.loadFromEnvironment();
                 System.out.println("Configuration reloaded from: " + configFile.getAbsolutePath());
             } catch (IOException e) {
@@ -215,6 +217,14 @@ public class Config {
         this.context = context;
     }
 
+    public IntentConfig getIntent() {
+        return intent;
+    }
+
+    public void setIntent(IntentConfig intent) {
+        this.intent = intent;
+    }
+
     @Deprecated
     public String getApiKey() {
         return llm != null ? llm.getApiKey() : null;
@@ -275,6 +285,7 @@ public class Config {
                 ", session=" + session +
                 ", ui=" + ui +
                 ", context=" + context +
+                ", intent=" + intent +
                 '}';
     }
 }

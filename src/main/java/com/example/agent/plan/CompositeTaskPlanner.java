@@ -1,5 +1,6 @@
 package com.example.agent.plan;
 
+import com.example.agent.config.IntentConfig;
 import com.example.agent.intent.IntentResult;
 import com.example.agent.intent.IntentType;
 import org.slf4j.Logger;
@@ -13,18 +14,20 @@ public class CompositeTaskPlanner implements TaskPlanner {
 
     private static final Logger logger = LoggerFactory.getLogger(CompositeTaskPlanner.class);
 
-    private static final double HIGH_CONFIDENCE_THRESHOLD = 0.85;
-    private static final double LOW_CONFIDENCE_THRESHOLD = 0.50;
-
     private final List<TaskPlanner> planners;
     private final SimpleTaskPlanner simplePlanner;
     private final LlmTaskPlanner llmPlanner;
-    private boolean preferLlm = false;
+    private final IntentConfig.PlanningStrategy config;
     private boolean enabled = true;
 
     public CompositeTaskPlanner(SimpleTaskPlanner simplePlanner, LlmTaskPlanner llmPlanner) {
+        this(simplePlanner, llmPlanner, new IntentConfig().getPlanning());
+    }
+
+    public CompositeTaskPlanner(SimpleTaskPlanner simplePlanner, LlmTaskPlanner llmPlanner, IntentConfig.PlanningStrategy config) {
         this.simplePlanner = simplePlanner;
         this.llmPlanner = llmPlanner;
+        this.config = config;
         this.planners = Arrays.asList(llmPlanner, simplePlanner);
     }
 
@@ -50,15 +53,15 @@ public class CompositeTaskPlanner implements TaskPlanner {
     }
 
     private boolean shouldUseLlmPlanner(IntentResult intent) {
-        if (preferLlm) {
+        if (config.isPreferLlm()) {
             return true;
         }
 
-        if (intent.getConfidence() < LOW_CONFIDENCE_THRESHOLD) {
+        if (intent.getConfidence() < config.getLowConfidenceThreshold()) {
             return true;
         }
 
-        if (isComplexIntent(intent)) {
+        if (config.isEnableComplexIntentDetection() && isComplexIntent(intent)) {
             return true;
         }
 
@@ -110,11 +113,11 @@ public class CompositeTaskPlanner implements TaskPlanner {
     }
 
     public void setPreferLlm(boolean preferLlm) {
-        this.preferLlm = preferLlm;
+        this.config.setPreferLlm(preferLlm);
     }
 
     public boolean isPreferLlm() {
-        return preferLlm;
+        return config.isPreferLlm();
     }
 
     public SimpleTaskPlanner getSimplePlanner() {

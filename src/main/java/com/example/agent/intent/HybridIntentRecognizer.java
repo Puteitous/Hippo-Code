@@ -1,5 +1,6 @@
 package com.example.agent.intent;
 
+import com.example.agent.config.IntentConfig;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import org.slf4j.Logger;
@@ -11,16 +12,24 @@ public class HybridIntentRecognizer implements IntentRecognizer {
 
     private static final Logger logger = LoggerFactory.getLogger(HybridIntentRecognizer.class);
 
-    private static final double HIGH_CONFIDENCE_THRESHOLD = 0.85;
-    private static final double LOW_CONFIDENCE_THRESHOLD = 0.50;
-
     private final RuleBasedIntentRecognizer ruleRecognizer;
     private final LlmIntentRecognizer llmRecognizer;
-    private boolean preferLlm = false;
+    private final IntentConfig.RecognitionStrategy config;
 
     public HybridIntentRecognizer(LlmClient llmClient) {
+        this(llmClient, new IntentConfig().getRecognition());
+    }
+
+    public HybridIntentRecognizer(LlmClient llmClient, IntentConfig.RecognitionStrategy config) {
         this.ruleRecognizer = new RuleBasedIntentRecognizer();
         this.llmRecognizer = new LlmIntentRecognizer(llmClient);
+        this.config = config;
+        
+        applyConfig();
+    }
+
+    private void applyConfig() {
+        this.llmRecognizer.setEnabled(config.isLlmEnabled());
     }
 
     @Override
@@ -36,12 +45,12 @@ public class HybridIntentRecognizer implements IntentRecognizer {
 
         IntentResult ruleResult = ruleRecognizer.recognize(userInput, context);
 
-        if (ruleResult.getConfidence() >= HIGH_CONFIDENCE_THRESHOLD) {
+        if (ruleResult.getConfidence() >= config.getHighConfidenceThreshold()) {
             logger.debug("规则识别器高置信度结果: {}", ruleResult);
             return ruleResult;
         }
 
-        if (preferLlm || ruleResult.getConfidence() < LOW_CONFIDENCE_THRESHOLD) {
+        if (config.isPreferLlm() || ruleResult.getConfidence() < config.getLowConfidenceThreshold()) {
             IntentResult llmResult = llmRecognizer.recognize(userInput, context);
             if (llmResult.getConfidence() > ruleResult.getConfidence()) {
                 logger.debug("使用 LLM 识别结果: {}", llmResult);
@@ -54,11 +63,12 @@ public class HybridIntentRecognizer implements IntentRecognizer {
     }
 
     public void setPreferLlm(boolean preferLlm) {
-        this.preferLlm = preferLlm;
+        this.config.setPreferLlm(preferLlm);
     }
 
     public void setLlmEnabled(boolean enabled) {
         this.llmRecognizer.setEnabled(enabled);
+        this.config.setLlmEnabled(enabled);
     }
 
     @Override

@@ -52,3 +52,20 @@ context:
   tool_result:
     max_tokens: 2000
     truncate_strategy: tail
+
+intent:
+  enabled: true
+  recognition:
+    mode: hybrid                    # hybrid | rule | llm
+    llm_enabled: true               # 是否启用 LLM 意图识别
+    prefer_llm: false               # 是否优先使用 LLM
+    high_confidence_threshold: 0.85 # 高置信度阈值
+    low_confidence_threshold: 0.50  # 低置信度阈值
+    fallback_to_rules: true         # 失败时回退到规则
+  
+  planning:
+    mode: composite                 # composite | simple | llm
+    prefer_llm: false               # 是否优先使用 LLM 规划
+    high_confidence_threshold: 0.85 # 高置信度阈值
+    low_confidence_threshold: 0.50  # 低置信度阈值
+    enable_complex_intent_detection: true  # 启用复杂意图检测
