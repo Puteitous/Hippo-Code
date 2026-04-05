@@ -4,6 +4,9 @@ import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.console.InputHandler;
 import com.example.agent.core.AgentContext;
+import com.example.agent.intent.IntentRecognizer;
+import com.example.agent.intent.IntentResult;
+import com.example.agent.intent.IntentType;
 import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
@@ -30,19 +33,28 @@ public class ConversationLoop {
     private final TokenEstimator tokenEstimator;
     private final InputHandler inputHandler;
     private final AgentUi ui;
+    private final IntentRecognizer intentRecognizer;
 
     private int conversationRound = 0;
     private String currentConversationId;
     private ConversationLogger conversationLogger;
+    private IntentResult lastIntentResult;
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui) {
+        this(context, turnExecutor, inputHandler, ui, null);
+    }
+
+    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
+                            InputHandler inputHandler, AgentUi ui, 
+                            IntentRecognizer intentRecognizer) {
         this.context = context;
         this.turnExecutor = turnExecutor;
         this.conversationManager = context.getConversationManager();
         this.tokenEstimator = context.getTokenEstimator();
         this.inputHandler = inputHandler;
         this.ui = ui;
+        this.intentRecognizer = intentRecognizer;
     }
 
     public void processUserInput(String userInput) {
@@ -64,6 +76,11 @@ public class ConversationLoop {
 
         conversationLogger.logUserInput(userInput, inputTokens);
 
+        if (intentRecognizer != null && intentRecognizer.isEnabled()) {
+            lastIntentResult = recognizeIntent(userInput);
+            displayIntentInfo(lastIntentResult);
+        }
+
         conversationManager.addUserMessage(userInput);
         conversationManager.trimHistory((messageCount, tokenCount) -> {
             ui.println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]"));
@@ -77,6 +94,27 @@ public class ConversationLoop {
         ui.println();
 
         processAgentLoop();
+    }
+
+    private IntentResult recognizeIntent(String userInput) {
+        try {
+            IntentResult result = intentRecognizer.recognize(userInput, conversationManager.getHistory());
+            logger.info("意图识别结果: {}", result);
+            return result;
+        } catch (Exception e) {
+            logger.warn("意图识别失败: {}", e.getMessage());
+            return IntentResult.unknown();
+        }
+    }
+
+    private void displayIntentInfo(IntentResult intent) {
+        if (intent == null || intent.getType() == IntentType.UNKNOWN) {
+            return;
+        }
+
+        ui.println(ConsoleStyle.dim("  [意图: " + intent.getType().getDisplayName() + 
+                " | 置信度: " + String.format("%.0f%%", intent.getConfidence() * 100) + "]"));
+        ui.println();
     }
 
     private void processAgentLoop() {
@@ -179,5 +217,9 @@ public class ConversationLoop {
 
     public String getCurrentConversationId() {
         return currentConversationId;
+    }
+
+    public IntentResult getLastIntentResult() {
+        return lastIntentResult;
     }
 }

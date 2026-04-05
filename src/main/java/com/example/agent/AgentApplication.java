@@ -8,6 +8,8 @@ import com.example.agent.core.AgentContext;
 import com.example.agent.execute.AgentTurnExecutor;
 import com.example.agent.execute.ConversationLoop;
 import com.example.agent.execute.ToolCallProcessor;
+import com.example.agent.intent.HybridIntentRecognizer;
+import com.example.agent.intent.IntentRecognizer;
 import com.example.agent.service.TokenEstimator;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -16,6 +18,8 @@ import org.jline.reader.UserInterruptException;
 import java.io.IOException;
 
 public class AgentApplication {
+
+    private boolean intentRecognitionEnabled = true;
 
     public static void main(String[] args) {
         AgentApplication app = new AgentApplication();
@@ -46,8 +50,10 @@ public class AgentApplication {
 
             AgentTurnExecutor turnExecutor = new AgentTurnExecutor(context, toolCallProcessor, ui);
 
+            IntentRecognizer intentRecognizer = createIntentRecognizer(context);
+
             ConversationLoop conversationLoop = new ConversationLoop(
-                    context, turnExecutor, inputHandler, ui
+                    context, turnExecutor, inputHandler, ui, intentRecognizer
             );
 
             context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
@@ -98,5 +104,19 @@ public class AgentApplication {
                 context.close();
             }
         }
+    }
+
+    private IntentRecognizer createIntentRecognizer(AgentContext context) {
+        if (!intentRecognitionEnabled) {
+            return null;
+        }
+
+        HybridIntentRecognizer recognizer = new HybridIntentRecognizer(context.getLlmClient());
+        recognizer.setPreferLlm(false);
+        return recognizer;
+    }
+
+    public void setIntentRecognitionEnabled(boolean enabled) {
+        this.intentRecognitionEnabled = enabled;
     }
 }
