@@ -1,0 +1,102 @@
+package com.example.agent;
+
+import com.example.agent.console.AgentUi;
+import com.example.agent.console.CommandDispatcher;
+import com.example.agent.console.InputHandler;
+import com.example.agent.console.ConsoleStyle;
+import com.example.agent.core.AgentContext;
+import com.example.agent.execute.AgentTurnExecutor;
+import com.example.agent.execute.ConversationLoop;
+import com.example.agent.execute.ToolCallProcessor;
+import com.example.agent.service.TokenEstimator;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.UserInterruptException;
+
+import java.io.IOException;
+
+public class AgentApplication {
+
+    public static void main(String[] args) {
+        AgentApplication app = new AgentApplication();
+        app.run();
+    }
+
+    public void run() {
+        AgentContext context = null;
+        try {
+            context = new AgentContext();
+            context.initialize();
+
+            AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
+            TokenEstimator tokenEstimator = context.getTokenEstimator();
+            InputHandler inputHandler = new InputHandler(context.getReader(), tokenEstimator);
+
+            CommandDispatcher dispatcher = new CommandDispatcher(context, ui, inputHandler);
+
+            if (!dispatcher.validateConfig()) {
+                return;
+            }
+
+            ToolCallProcessor toolCallProcessor = new ToolCallProcessor(
+                    context.getConcurrentToolExecutor(),
+                    context.getConversationManager(),
+                    ui
+            );
+
+            AgentTurnExecutor turnExecutor = new AgentTurnExecutor(context, toolCallProcessor, ui);
+
+            ConversationLoop conversationLoop = new ConversationLoop(
+                    context, turnExecutor, inputHandler, ui
+            );
+
+            context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
+                conversationLoop.interrupt();
+            });
+
+            ui.printWelcome();
+
+            LineReader reader = context.getReader();
+            while (true) {
+                try {
+                    String line = reader.readLine(ConsoleStyle.prompt());
+
+                    CommandDispatcher.CommandResult result = dispatcher.dispatch(line);
+
+                    if (result == CommandDispatcher.CommandResult.EXIT) {
+                        break;
+                    }
+
+                    if (result == CommandDispatcher.CommandResult.CONTINUE) {
+                        continue;
+                    }
+
+                    if (result == CommandDispatcher.CommandResult.PROCESS_INPUT) {
+                        conversationLoop.processUserInput(line);
+                        dispatcher.setCurrentConversationId(conversationLoop.getCurrentConversationId());
+                    }
+
+                } catch (UserInterruptException e) {
+                    if (turnExecutor.isInterrupted()) {
+                        ui.printInterrupted();
+                        turnExecutor.setInterrupted(false);
+                    } else {
+                        ui.printCtrlC();
+                        ui.printGoodbye();
+                        break;
+                    }
+                } catch (EndOfFileException e) {
+                    ui.printGoodbye();
+                    break;
+                }
+            }
+
+        } catch (IOException e) {
+            System.err.println(ConsoleStyle.error("终端错误: " + e.getMessage()));
+        } finally {
+            if (context != null) {
+                context.close();
+            }
+        }
+    }
+}
