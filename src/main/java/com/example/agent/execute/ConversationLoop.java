@@ -13,6 +13,12 @@ import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.exception.LlmTimeoutException;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.logging.LogDirectoryManager;
+import com.example.agent.plan.ExecutionContext;
+import com.example.agent.plan.ExecutionPlan;
+import com.example.agent.plan.PlanningContext;
+import com.example.agent.plan.TaskPlanner;
+import com.example.agent.plan.PlanExecutor;
+import com.example.agent.plan.PlanResult;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
 import org.jline.reader.UserInterruptException;
@@ -34,20 +40,39 @@ public class ConversationLoop {
     private final InputHandler inputHandler;
     private final AgentUi ui;
     private final IntentRecognizer intentRecognizer;
+    private final TaskPlanner taskPlanner;
+    private final PlanExecutor planExecutor;
 
     private int conversationRound = 0;
     private String currentConversationId;
     private ConversationLogger conversationLogger;
     private IntentResult lastIntentResult;
+    private ExecutionPlan lastExecutionPlan;
+    private PlanResult lastPlanResult;
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui) {
-        this(context, turnExecutor, inputHandler, ui, null);
+        this(context, turnExecutor, inputHandler, ui, null, null, null);
     }
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui, 
                             IntentRecognizer intentRecognizer) {
+        this(context, turnExecutor, inputHandler, ui, intentRecognizer, null, null);
+    }
+
+    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
+                            InputHandler inputHandler, AgentUi ui, 
+                            IntentRecognizer intentRecognizer,
+                            TaskPlanner taskPlanner) {
+        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, null);
+    }
+
+    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
+                            InputHandler inputHandler, AgentUi ui, 
+                            IntentRecognizer intentRecognizer,
+                            TaskPlanner taskPlanner,
+                            PlanExecutor planExecutor) {
         this.context = context;
         this.turnExecutor = turnExecutor;
         this.conversationManager = context.getConversationManager();
@@ -55,6 +80,8 @@ public class ConversationLoop {
         this.inputHandler = inputHandler;
         this.ui = ui;
         this.intentRecognizer = intentRecognizer;
+        this.taskPlanner = taskPlanner;
+        this.planExecutor = planExecutor;
     }
 
     public void processUserInput(String userInput) {
@@ -79,6 +106,11 @@ public class ConversationLoop {
         if (intentRecognizer != null && intentRecognizer.isEnabled()) {
             lastIntentResult = recognizeIntent(userInput);
             displayIntentInfo(lastIntentResult);
+        }
+
+        if (taskPlanner != null && taskPlanner.isEnabled() && lastIntentResult != null) {
+            lastExecutionPlan = createExecutionPlan(userInput, lastIntentResult);
+            displayPlanInfo(lastExecutionPlan);
         }
 
         conversationManager.addUserMessage(userInput);
@@ -107,6 +139,24 @@ public class ConversationLoop {
         }
     }
 
+    private ExecutionPlan createExecutionPlan(String userInput, IntentResult intent) {
+        try {
+            PlanningContext planningContext = PlanningContext.builder()
+                    .userInput(userInput)
+                    .conversationHistory(conversationManager.getHistory())
+                    .conversationManager(conversationManager)
+                    .currentRound(conversationRound)
+                    .build();
+
+            ExecutionPlan plan = taskPlanner.plan(intent, planningContext);
+            logger.info("执行计划: {}", plan);
+            return plan;
+        } catch (Exception e) {
+            logger.warn("规划失败: {}", e.getMessage());
+            return ExecutionPlan.empty(intent);
+        }
+    }
+
     private void displayIntentInfo(IntentResult intent) {
         if (intent == null || intent.getType() == IntentType.UNKNOWN) {
             return;
@@ -114,6 +164,16 @@ public class ConversationLoop {
 
         ui.println(ConsoleStyle.dim("  [意图: " + intent.getType().getDisplayName() + 
                 " | 置信度: " + String.format("%.0f%%", intent.getConfidence() * 100) + "]"));
+        ui.println();
+    }
+
+    private void displayPlanInfo(ExecutionPlan plan) {
+        if (plan == null || plan.isEmpty()) {
+            return;
+        }
+
+        ui.println(ConsoleStyle.dim("  [计划: " + plan.getStepCount() + " 个步骤 | 策略: " + 
+                plan.getStrategy().getDisplayName() + "]"));
         ui.println();
     }
 
@@ -221,5 +281,13 @@ public class ConversationLoop {
 
     public IntentResult getLastIntentResult() {
         return lastIntentResult;
+    }
+
+    public ExecutionPlan getLastExecutionPlan() {
+        return lastExecutionPlan;
+    }
+
+    public PlanResult getLastPlanResult() {
+        return lastPlanResult;
     }
 }

@@ -10,6 +10,12 @@ import com.example.agent.execute.ConversationLoop;
 import com.example.agent.execute.ToolCallProcessor;
 import com.example.agent.intent.HybridIntentRecognizer;
 import com.example.agent.intent.IntentRecognizer;
+import com.example.agent.plan.CompositeTaskPlanner;
+import com.example.agent.plan.LlmTaskPlanner;
+import com.example.agent.plan.PlanExecutor;
+import com.example.agent.plan.SequentialPlanExecutor;
+import com.example.agent.plan.SimpleTaskPlanner;
+import com.example.agent.plan.TaskPlanner;
 import com.example.agent.service.TokenEstimator;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
@@ -20,6 +26,7 @@ import java.io.IOException;
 public class AgentApplication {
 
     private boolean intentRecognitionEnabled = true;
+    private boolean planningEnabled = true;
 
     public static void main(String[] args) {
         AgentApplication app = new AgentApplication();
@@ -52,8 +59,12 @@ public class AgentApplication {
 
             IntentRecognizer intentRecognizer = createIntentRecognizer(context);
 
+            TaskPlanner taskPlanner = createTaskPlanner(context);
+
+            PlanExecutor planExecutor = createPlanExecutor();
+
             ConversationLoop conversationLoop = new ConversationLoop(
-                    context, turnExecutor, inputHandler, ui, intentRecognizer
+                    context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor
             );
 
             context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
@@ -116,7 +127,33 @@ public class AgentApplication {
         return recognizer;
     }
 
+    private TaskPlanner createTaskPlanner(AgentContext context) {
+        if (!planningEnabled) {
+            return null;
+        }
+
+        SimpleTaskPlanner simplePlanner = new SimpleTaskPlanner();
+        LlmTaskPlanner llmPlanner = new LlmTaskPlanner(context.getLlmClient());
+
+        CompositeTaskPlanner compositePlanner = new CompositeTaskPlanner(simplePlanner, llmPlanner);
+        compositePlanner.setPreferLlm(false);
+
+        return compositePlanner;
+    }
+
+    private PlanExecutor createPlanExecutor() {
+        if (!planningEnabled) {
+            return null;
+        }
+
+        return new SequentialPlanExecutor();
+    }
+
     public void setIntentRecognitionEnabled(boolean enabled) {
         this.intentRecognitionEnabled = enabled;
+    }
+
+    public void setPlanningEnabled(boolean enabled) {
+        this.planningEnabled = enabled;
     }
 }
