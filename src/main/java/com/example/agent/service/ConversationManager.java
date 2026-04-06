@@ -25,22 +25,31 @@ public class ConversationManager {
     }
 
     public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, ContextConfig config) {
-        this.systemPrompt = systemPrompt;
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
+        this.systemPrompt = systemPrompt != null ? systemPrompt : "";
         this.tokenEstimator = tokenEstimator;
-        this.config = config;
+        this.config = config != null ? config : new ContextConfig();
         this.conversationHistory = new ArrayList<>();
         
-        this.trimPolicy = new SlidingWindowPolicy(tokenEstimator, config);
-        this.toolResultCompressor = new TruncateCompressor(tokenEstimator, config.getToolResult());
+        this.trimPolicy = new SlidingWindowPolicy(tokenEstimator, this.config);
+        this.toolResultCompressor = new TruncateCompressor(tokenEstimator, this.config.getToolResult());
         
         reset();
     }
 
     public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, 
                                TrimPolicy trimPolicy, Compressor toolResultCompressor, ContextConfig config) {
-        this.systemPrompt = systemPrompt;
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
+        if (trimPolicy == null) {
+            throw new IllegalArgumentException("trimPolicy不能为null");
+        }
+        this.systemPrompt = systemPrompt != null ? systemPrompt : "";
         this.tokenEstimator = tokenEstimator;
-        this.config = config;
+        this.config = config != null ? config : new ContextConfig();
         this.conversationHistory = new ArrayList<>();
         this.trimPolicy = trimPolicy;
         this.toolResultCompressor = toolResultCompressor;
@@ -58,6 +67,9 @@ public class ConversationManager {
     }
 
     public void addAssistantMessage(Message message) {
+        if (message == null) {
+            return;
+        }
         conversationHistory.add(message);
     }
 
@@ -93,6 +105,10 @@ public class ConversationManager {
             config.getMaxTokens(), 
             config.getMaxMessages()
         );
+        
+        if (trimmed == null) {
+            return;
+        }
         
         conversationHistory.clear();
         conversationHistory.addAll(trimmed);
