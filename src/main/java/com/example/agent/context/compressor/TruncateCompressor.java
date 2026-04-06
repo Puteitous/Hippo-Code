@@ -12,44 +12,70 @@ public class TruncateCompressor implements Compressor {
     private final String strategy;
 
     public TruncateCompressor(TokenEstimator tokenEstimator, ContextConfig.ToolResultConfig config) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
         this.tokenEstimator = tokenEstimator;
-        this.maxTokens = config.getMaxTokens();
-        this.strategy = config.getTruncateStrategy();
+        if (config != null) {
+            this.maxTokens = config.getMaxTokens();
+            this.strategy = config.getTruncateStrategy();
+        } else {
+            this.maxTokens = ContextConfig.DEFAULT_TOOL_RESULT_MAX_TOKENS;
+            this.strategy = ContextConfig.ToolResultConfig.DEFAULT_TRUNCATE_STRATEGY;
+        }
     }
 
     public TruncateCompressor(TokenEstimator tokenEstimator, int maxTokens, String strategy) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
         this.tokenEstimator = tokenEstimator;
         this.maxTokens = maxTokens;
-        this.strategy = strategy;
+        this.strategy = strategy != null ? strategy : ContextConfig.ToolResultConfig.DEFAULT_TRUNCATE_STRATEGY;
     }
 
     @Override
     public Message compress(Message message, int maxTokens) {
-        if (message.getContent() == null || message.getContent().isEmpty()) {
-            return message;
+        if (message == null) {
+            return null;
+        }
+        
+        String content = message.getContent();
+        if (content == null || content.isEmpty()) {
+            return createCopy(message, content);
         }
 
-        String content = message.getContent();
+        if (maxTokens <= 0) {
+            return createCopy(message, content);
+        }
+
         int currentTokens = tokenEstimator.estimateTextTokens(content);
         
+        String finalContent;
         if (currentTokens <= maxTokens) {
-            return message;
+            finalContent = content;
+        } else {
+            finalContent = truncateContent(content, maxTokens);
         }
-
-        String truncated = truncateContent(content, maxTokens);
         
-        Message compressed = new Message();
-        compressed.setRole(message.getRole());
-        compressed.setContent(truncated);
-        compressed.setToolCallId(message.getToolCallId());
-        compressed.setName(message.getName());
-        compressed.setToolCalls(message.getToolCalls());
-        
-        return compressed;
+        return createCopy(message, finalContent);
+    }
+    
+    private Message createCopy(Message original, String content) {
+        Message copy = new Message();
+        copy.setRole(original.getRole());
+        copy.setContent(content);
+        copy.setToolCallId(original.getToolCallId());
+        copy.setName(original.getName());
+        copy.setToolCalls(original.getToolCalls());
+        return copy;
     }
 
     @Override
     public boolean supports(Message message) {
+        if (message == null) {
+            return false;
+        }
         return message.getRole() != null && "tool".equals(message.getRole());
     }
 

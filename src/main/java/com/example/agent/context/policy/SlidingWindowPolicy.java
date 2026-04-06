@@ -14,17 +14,30 @@ public class SlidingWindowPolicy implements TrimPolicy {
     private final int keepRecentTurns;
 
     public SlidingWindowPolicy(TokenEstimator tokenEstimator, ContextConfig config) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
         this.tokenEstimator = tokenEstimator;
-        this.keepRecentTurns = config.getKeepRecentTurns();
+        if (config != null) {
+            this.keepRecentTurns = config.getKeepRecentTurns();
+        } else {
+            this.keepRecentTurns = ContextConfig.DEFAULT_KEEP_RECENT_TURNS;
+        }
     }
 
     public SlidingWindowPolicy(TokenEstimator tokenEstimator, int keepRecentTurns) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
         this.tokenEstimator = tokenEstimator;
-        this.keepRecentTurns = keepRecentTurns;
+        this.keepRecentTurns = keepRecentTurns > 0 ? keepRecentTurns : ContextConfig.DEFAULT_KEEP_RECENT_TURNS;
     }
 
     @Override
     public List<Message> apply(List<Message> messages, int maxTokens, int maxMessages) {
+        if (messages == null) {
+            return null;
+        }
         if (messages.size() <= 2) {
             return new ArrayList<>(messages);
         }
