@@ -74,6 +74,13 @@ public class ConversationManager {
     }
 
     public void addToolResult(String toolCallId, String toolName, String result) {
+        if (toolCallId == null || toolCallId.trim().isEmpty()) {
+            return;
+        }
+        if (toolName == null || toolName.trim().isEmpty()) {
+            return;
+        }
+        
         Message toolMessage = Message.toolResult(toolCallId, toolName, result);
         
         if (toolResultCompressor != null && toolResultCompressor.supports(toolMessage)) {
