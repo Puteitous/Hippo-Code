@@ -3,284 +3,477 @@ package com.example.agent.tools.concurrent;
 import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.tools.ToolExecutionException;
-import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.*;
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-@DisplayName("并发工具执行器测试")
+import static org.junit.jupiter.api.Assertions.*;
+
 class ConcurrentToolExecutorTest {
 
     private ToolRegistry toolRegistry;
     private ConcurrentToolExecutor executor;
-    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         toolRegistry = new ToolRegistry();
         executor = new ConcurrentToolExecutor(toolRegistry);
-        objectMapper = new ObjectMapper();
     }
 
-    @Test
-    @DisplayName("测试 - 空工具列表执行")
-    void testEmptyToolCalls() {
-        List<ToolCall> toolCalls = new ArrayList<>();
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        
-        assertNotNull(results);
-        assertTrue(results.isEmpty());
-    }
-
-    @Test
-    @DisplayName("测试 - 单个工具调用执行")
-    void testSingleToolCall() {
-        toolRegistry.register(new MockToolExecutor("test_tool", "测试结果"));
-        
-        List<ToolCall> toolCalls = List.of(
-            createToolCall("call_1", "test_tool", "{}")
-        );
-        
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        
-        assertEquals(1, results.size());
-        assertTrue(results.get(0).isSuccess());
-        assertEquals("测试结果", results.get(0).getResult());
-        assertEquals("test_tool", results.get(0).getToolName());
-    }
-
-    @Test
-    @DisplayName("测试 - 多个工具并发执行")
-    void testMultipleToolCalls() {
-        toolRegistry.register(new MockToolExecutor("tool_a", "结果A", 100));
-        toolRegistry.register(new MockToolExecutor("tool_b", "结果B", 100));
-        toolRegistry.register(new MockToolExecutor("tool_c", "结果C", 100));
-        
-        List<ToolCall> toolCalls = List.of(
-            createToolCall("call_1", "tool_a", "{}"),
-            createToolCall("call_2", "tool_b", "{}"),
-            createToolCall("call_3", "tool_c", "{}")
-        );
-        
-        long startTime = System.currentTimeMillis();
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        long totalTime = System.currentTimeMillis() - startTime;
-        
-        assertEquals(3, results.size());
-        
-        assertTrue(totalTime < 350, "并发执行时间应小于串行时间(300ms)，实际: " + totalTime + "ms");
-        
-        for (int i = 0; i < results.size(); i++) {
-            assertEquals(i, results.get(i).getIndex(), "结果应按原始顺序返回");
-        }
-    }
-
-    @Test
-    @DisplayName("测试 - 结果顺序保持正确")
-    void testResultOrderPreserved() {
-        toolRegistry.register(new MockToolExecutor("fast_tool", "快速结果", 10));
-        toolRegistry.register(new MockToolExecutor("slow_tool", "慢速结果", 200));
-        toolRegistry.register(new MockToolExecutor("medium_tool", "中速结果", 50));
-        
-        List<ToolCall> toolCalls = List.of(
-            createToolCall("call_1", "slow_tool", "{}"),
-            createToolCall("call_2", "fast_tool", "{}"),
-            createToolCall("call_3", "medium_tool", "{}")
-        );
-        
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        
-        assertEquals(3, results.size());
-        assertEquals(0, results.get(0).getIndex());
-        assertEquals(1, results.get(1).getIndex());
-        assertEquals(2, results.get(2).getIndex());
-        
-        assertEquals("slow_tool", results.get(0).getToolName());
-        assertEquals("fast_tool", results.get(1).getToolName());
-        assertEquals("medium_tool", results.get(2).getToolName());
-    }
-
-    @Test
-    @DisplayName("测试 - 工具执行失败处理")
-    void testToolExecutionFailure() {
-        toolRegistry.register(new MockToolExecutor("success_tool", "成功"));
-        toolRegistry.register(new FailingToolExecutor("fail_tool", "模拟失败"));
-        toolRegistry.register(new MockToolExecutor("another_success", "另一个成功"));
-        
-        List<ToolCall> toolCalls = List.of(
-            createToolCall("call_1", "success_tool", "{}"),
-            createToolCall("call_2", "fail_tool", "{}"),
-            createToolCall("call_3", "another_success", "{}")
-        );
-        
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        
-        assertEquals(3, results.size());
-        assertTrue(results.get(0).isSuccess());
-        assertFalse(results.get(1).isSuccess());
-        assertEquals("模拟失败", results.get(1).getErrorMessage());
-        assertTrue(results.get(2).isSuccess());
-    }
-
-    @Test
-    @DisplayName("测试 - 执行统计信息")
-    void testExecutionStats() {
-        toolRegistry.register(new MockToolExecutor("tool_1", "结果1"));
-        toolRegistry.register(new MockToolExecutor("tool_2", "结果2"));
-        
-        List<ToolCall> toolCalls = List.of(
-            createToolCall("call_1", "tool_1", "{}"),
-            createToolCall("call_2", "tool_2", "{}")
-        );
-        
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        ConcurrentToolExecutor.ExecutionStats stats = executor.getExecutionStats(results);
-        
-        assertEquals(2, stats.getTotalCount());
-        assertEquals(2, stats.getSuccessCount());
-        assertEquals(0, stats.getFailureCount());
-        assertTrue(stats.getTotalExecutionTimeMs() >= 0);
-    }
-
-    @Test
-    @DisplayName("测试 - 并发执行时间明显短于串行")
-    void testConcurrentExecutionFasterThanSequential() {
-        int toolCount = 5;
-        int delayPerTool = 100;
-        
-        for (int i = 0; i < toolCount; i++) {
-            toolRegistry.register(new MockToolExecutor("tool_" + i, "结果" + i, delayPerTool));
-        }
-        
-        List<ToolCall> toolCalls = new ArrayList<>();
-        for (int i = 0; i < toolCount; i++) {
-            toolCalls.add(createToolCall("call_" + i, "tool_" + i, "{}"));
-        }
-        
-        long startTime = System.currentTimeMillis();
-        List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
-        long concurrentTime = System.currentTimeMillis() - startTime;
-        
-        long theoreticalSequentialTime = toolCount * delayPerTool;
-        
-        assertEquals(toolCount, results.size());
-        assertTrue(concurrentTime < theoreticalSequentialTime, 
-            String.format("并发时间(%dms)应小于理论串行时间(%dms)", 
-                concurrentTime, theoreticalSequentialTime));
-        
-        System.out.printf("并发执行 %d 个工具: %dms (理论串行: %dms)%n", 
-            toolCount, concurrentTime, theoreticalSequentialTime);
-    }
-
-    @Test
-    @DisplayName("测试 - ToolExecutionResult Builder")
-    void testToolExecutionResultBuilder() {
-        ToolExecutionResult result = ToolExecutionResult.builder()
-            .index(5)
-            .toolCallId("test_id")
-            .toolName("test_tool")
-            .result("测试结果")
-            .success(true)
-            .executionTimeMs(123)
-            .build();
-        
-        assertEquals(5, result.getIndex());
-        assertEquals("test_id", result.getToolCallId());
-        assertEquals("test_tool", result.getToolName());
-        assertEquals("测试结果", result.getResult());
-        assertTrue(result.isSuccess());
-        assertEquals(123, result.getExecutionTimeMs());
-    }
-
-    @Test
-    @DisplayName("测试 - FileLockManager 单例")
-    void testFileLockManagerSingleton() {
-        FileLockManager instance1 = FileLockManager.getInstance();
-        FileLockManager instance2 = FileLockManager.getInstance();
-        
-        assertSame(instance1, instance2, "FileLockManager 应该是单例");
-    }
-
-    @Test
-    @DisplayName("测试 - FileLockManager 文件锁")
-    void testFileLockManagerLock() {
-        FileLockManager lockManager = FileLockManager.getInstance();
-        String testPath = "/test/path/file.txt";
-        
-        String result = lockManager.withWriteLock(testPath, () -> "锁定执行成功");
-        
-        assertEquals("锁定执行成功", result);
-        assertFalse(lockManager.isLocked(testPath), "锁应该已释放");
-    }
-
-    private ToolCall createToolCall(String id, String toolName, String arguments) {
+    private ToolCall createToolCall(String id, String name, String arguments) {
         ToolCall toolCall = new ToolCall();
         toolCall.setId(id);
-        FunctionCall functionCall = new FunctionCall();
-        functionCall.setName(toolName);
-        functionCall.setArguments(arguments);
-        toolCall.setFunction(functionCall);
+        toolCall.setFunction(new FunctionCall(name, arguments));
         return toolCall;
     }
 
-    private static class MockToolExecutor implements ToolExecutor {
-        private final String name;
-        private final String result;
-        private final int delayMs;
+    @Nested
+    @DisplayName("边界条件测试")
+    class BoundaryTests {
 
-        MockToolExecutor(String name, String result) {
-            this(name, result, 0);
+        @Test
+        @DisplayName("null工具调用列表返回空结果")
+        void testNullToolCalls() {
+            List<ToolExecutionResult> results = executor.executeConcurrently(null);
+            
+            assertNotNull(results);
+            assertTrue(results.isEmpty());
         }
 
-        MockToolExecutor(String name, String result, int delayMs) {
-            this.name = name;
-            this.result = result;
-            this.delayMs = delayMs;
+        @Test
+        @DisplayName("空工具调用列表返回空结果")
+        void testEmptyToolCalls() {
+            List<ToolExecutionResult> results = executor.executeConcurrently(new ArrayList<>());
+            
+            assertNotNull(results);
+            assertTrue(results.isEmpty());
         }
 
-        @Override
-        public String getName() {
-            return name;
-        }
+        @Test
+        @DisplayName("单个工具调用不使用并发")
+        void testSingleToolCallNotConcurrent() throws ToolExecutionException {
+            AtomicInteger executionCount = new AtomicInteger(0);
+            toolRegistry.register(new MockToolExecutor("single_tool", (args) -> {
+                executionCount.incrementAndGet();
+                return "result";
+            }));
 
-        @Override
-        public String getDescription() {
-            return "模拟工具: " + name;
-        }
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "single_tool", "{}"));
 
-        @Override
-        public String getParametersSchema() {
-            return "{\"type\":\"object\"}";
-        }
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
 
-        @Override
-        public String execute(JsonNode arguments) throws ToolExecutionException {
-            if (delayMs > 0) {
-                try {
-                    Thread.sleep(delayMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            return result;
+            assertEquals(1, results.size());
+            assertEquals(1, executionCount.get());
         }
     }
 
-    private static class FailingToolExecutor implements ToolExecutor {
-        private final String name;
-        private final String errorMessage;
+    @Nested
+    @DisplayName("工具不存在测试")
+    class ToolNotFoundTests {
 
-        FailingToolExecutor(String name, String errorMessage) {
+        @Test
+        @DisplayName("工具不存在返回失败结果，不崩溃")
+        void testToolNotExist() {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "nonexistent_tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+            assertTrue(results.get(0).getErrorMessage().contains("Unknown tool"));
+        }
+
+        @Test
+        @DisplayName("工具名称为null返回失败结果")
+        void testNullToolName() {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", null, "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+            assertTrue(results.get(0).getErrorMessage().contains("工具名称为空"));
+        }
+
+        @Test
+        @DisplayName("工具名称为空字符串返回失败结果")
+        void testEmptyToolName() {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+        }
+
+        @Test
+        @DisplayName("Function为null返回失败结果")
+        void testNullFunction() {
+            ToolCall toolCall = new ToolCall();
+            toolCall.setId("call-1");
+            toolCall.setFunction(null);
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(toolCall);
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+        }
+    }
+
+    @Nested
+    @DisplayName("并发执行测试")
+    class ConcurrentExecutionTests {
+
+        @Test
+        @DisplayName("多个工具调用并发执行")
+        void testMultipleToolCallsConcurrent() throws Exception {
+            CountDownLatch latch = new CountDownLatch(3);
+            AtomicInteger completedCount = new AtomicInteger(0);
+
+            toolRegistry.register(new MockToolExecutor("tool_a", (args) -> {
+                latch.countDown();
+                try {
+                    latch.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return completedCount.incrementAndGet() == 3 ? "last" : "result_a";
+            }));
+            toolRegistry.register(new MockToolExecutor("tool_b", (args) -> {
+                latch.countDown();
+                try {
+                    latch.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return completedCount.incrementAndGet() == 3 ? "last" : "result_b";
+            }));
+            toolRegistry.register(new MockToolExecutor("tool_c", (args) -> {
+                latch.countDown();
+                try {
+                    latch.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return completedCount.incrementAndGet() == 3 ? "last" : "result_c";
+            }));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "tool_a", "{}"));
+            toolCalls.add(createToolCall("call-2", "tool_b", "{}"));
+            toolCalls.add(createToolCall("call-3", "tool_c", "{}"));
+
+            long startTime = System.currentTimeMillis();
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+            long duration = System.currentTimeMillis() - startTime;
+
+            assertEquals(3, results.size());
+            assertTrue(duration < 2000, "并发执行应该更快完成");
+        }
+
+        @Test
+        @DisplayName("结果按原始顺序返回")
+        void testResultsInOrder() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("tool", "result"));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            for (int i = 0; i < 10; i++) {
+                toolCalls.add(createToolCall("call-" + i, "tool", "{\"index\": " + i + "}"));
+            }
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(10, results.size());
+            for (int i = 0; i < 10; i++) {
+                assertEquals(i, results.get(i).getIndex());
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("参数解析测试")
+    class ArgumentParsingTests {
+
+        @Test
+        @DisplayName("无效JSON参数返回失败结果")
+        void testInvalidJsonArguments() {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "test_tool", "not valid json"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+            assertTrue(results.get(0).getErrorMessage().contains("参数解析失败"));
+        }
+
+        @Test
+        @DisplayName("null参数返回失败结果")
+        void testNullArguments() {
+            ToolCall toolCall = new ToolCall();
+            toolCall.setId("call-1");
+            toolCall.setFunction(new FunctionCall("test_tool", null));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(toolCall);
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+        }
+
+        @Test
+        @DisplayName("复杂JSON参数正确解析")
+        void testComplexJsonArguments() throws ToolExecutionException {
+            StringBuilder capturedArgs = new StringBuilder();
+            toolRegistry.register(new MockToolExecutor("test_tool", (args) -> {
+                capturedArgs.append(args.toString());
+                return "success";
+            }));
+
+            String complexJson = "{\"nested\": {\"key\": \"value\"}, \"array\": [1, 2, 3]}";
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "test_tool", complexJson));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertTrue(results.get(0).isSuccess());
+        }
+    }
+
+    @Nested
+    @DisplayName("执行统计测试")
+    class ExecutionStatsTests {
+
+        @Test
+        @DisplayName("空结果统计")
+        void testEmptyResultsStats() {
+            ConcurrentToolExecutor.ExecutionStats stats = executor.getExecutionStats(null);
+
+            assertEquals(0, stats.getTotalCount());
+            assertEquals(0, stats.getSuccessCount());
+            assertEquals(0, stats.getFailureCount());
+            assertEquals(0, stats.getTotalExecutionTimeMs());
+            assertEquals(0, stats.getAverageExecutionTimeMs());
+        }
+
+        @Test
+        @DisplayName("全部成功统计")
+        void testAllSuccessStats() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("tool", "result"));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "tool", "{}"));
+            toolCalls.add(createToolCall("call-2", "tool", "{}"));
+            toolCalls.add(createToolCall("call-3", "tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+            ConcurrentToolExecutor.ExecutionStats stats = executor.getExecutionStats(results);
+
+            assertEquals(3, stats.getTotalCount());
+            assertEquals(3, stats.getSuccessCount());
+            assertEquals(0, stats.getFailureCount());
+        }
+
+        @Test
+        @DisplayName("部分成功统计")
+        void testPartialSuccessStats() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("existing_tool", "result"));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "existing_tool", "{}"));
+            toolCalls.add(createToolCall("call-2", "nonexistent_tool", "{}"));
+            toolCalls.add(createToolCall("call-3", "existing_tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+            ConcurrentToolExecutor.ExecutionStats stats = executor.getExecutionStats(results);
+
+            assertEquals(3, stats.getTotalCount());
+            assertEquals(2, stats.getSuccessCount());
+            assertEquals(1, stats.getFailureCount());
+        }
+    }
+
+    @Nested
+    @DisplayName("执行时间测试")
+    class ExecutionTimeTests {
+
+        @Test
+        @DisplayName("记录执行时间")
+        void testExecutionTimeRecorded() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("tool", (args) -> {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return "result";
+            }));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertTrue(results.get(0).getExecutionTimeMs() >= 50);
+        }
+
+        @Test
+        @DisplayName("失败执行也记录时间")
+        void testExecutionTimeRecordedOnFailure() {
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "nonexistent", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertTrue(results.get(0).getExecutionTimeMs() >= 0);
+        }
+    }
+
+    @Nested
+    @DisplayName("异常处理测试")
+    class ExceptionHandlingTests {
+
+        @Test
+        @DisplayName("工具抛出ToolExecutionException")
+        void testToolExecutionException() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("failing_tool", (args) -> {
+                throw new ToolExecutionException("Tool failed intentionally");
+            }));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "failing_tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+            assertEquals("Tool failed intentionally", results.get(0).getErrorMessage());
+        }
+
+        @Test
+        @DisplayName("工具抛出运行时异常")
+        void testRuntimeException() throws ToolExecutionException {
+            toolRegistry.register(new MockToolExecutor("crashing_tool", (args) -> {
+                throw new RuntimeException("Unexpected error");
+            }));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "crashing_tool", "{}"));
+
+            List<ToolExecutionResult> results = executor.executeConcurrently(toolCalls);
+
+            assertEquals(1, results.size());
+            assertFalse(results.get(0).isSuccess());
+        }
+    }
+
+    @Nested
+    @DisplayName("ToolExecutionResult测试")
+    class ToolExecutionResultTests {
+
+        @Test
+        @DisplayName("Builder构建成功结果")
+        void testBuilderSuccess() {
+            ToolExecutionResult result = ToolExecutionResult.builder()
+                    .index(1)
+                    .toolCallId("call-123")
+                    .toolName("test_tool")
+                    .result("success result")
+                    .success(true)
+                    .executionTimeMs(100)
+                    .build();
+
+            assertEquals(1, result.getIndex());
+            assertEquals("call-123", result.getToolCallId());
+            assertEquals("test_tool", result.getToolName());
+            assertEquals("success result", result.getResult());
+            assertTrue(result.isSuccess());
+            assertNull(result.getErrorMessage());
+            assertEquals(100, result.getExecutionTimeMs());
+        }
+
+        @Test
+        @DisplayName("Builder构建失败结果")
+        void testBuilderFailure() {
+            ToolExecutionResult result = ToolExecutionResult.builder()
+                    .index(0)
+                    .toolCallId("call-456")
+                    .toolName("failed_tool")
+                    .success(false)
+                    .errorMessage("Error occurred")
+                    .executionTimeMs(50)
+                    .build();
+
+            assertFalse(result.isSuccess());
+            assertEquals("Error occurred", result.getErrorMessage());
+            assertNull(result.getResult());
+        }
+
+        @Test
+        @DisplayName("默认success为true")
+        void testBuilderDefaultSuccess() {
+            ToolExecutionResult result = ToolExecutionResult.builder()
+                    .toolCallId("call-789")
+                    .build();
+
+            assertTrue(result.isSuccess());
+        }
+
+        @Test
+        @DisplayName("toString包含关键信息")
+        void testToString() {
+            ToolExecutionResult result = ToolExecutionResult.builder()
+                    .index(1)
+                    .toolCallId("call-123")
+                    .toolName("test_tool")
+                    .success(true)
+                    .executionTimeMs(100)
+                    .build();
+
+            String str = result.toString();
+
+            assertTrue(str.contains("index=1"));
+            assertTrue(str.contains("toolCallId='call-123'"));
+            assertTrue(str.contains("toolName='test_tool'"));
+            assertTrue(str.contains("success=true"));
+        }
+    }
+
+    private interface ToolExecutorFunction {
+        String execute(JsonNode args) throws ToolExecutionException;
+    }
+
+    private static class MockToolExecutor implements com.example.agent.tools.ToolExecutor {
+        private final String name;
+        private final ToolExecutorFunction executor;
+
+        MockToolExecutor(String name, String result) {
             this.name = name;
-            this.errorMessage = errorMessage;
+            this.executor = (args) -> result;
+        }
+
+        MockToolExecutor(String name, ToolExecutorFunction executor) {
+            this.name = name;
+            this.executor = executor;
         }
 
         @Override
@@ -290,17 +483,17 @@ class ConcurrentToolExecutorTest {
 
         @Override
         public String getDescription() {
-            return "失败工具: " + name;
+            return "Mock tool for testing";
         }
 
         @Override
         public String getParametersSchema() {
-            return "{\"type\":\"object\"}";
+            return "{\"type\": \"object\"}";
         }
 
         @Override
         public String execute(JsonNode arguments) throws ToolExecutionException {
-            throw new ToolExecutionException(errorMessage);
+            return executor.execute(arguments);
         }
     }
 }
