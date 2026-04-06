@@ -43,6 +43,18 @@ public class RetryPolicy {
         return maxRetries;
     }
 
+    public long getInitialDelayMs() {
+        return initialDelayMs;
+    }
+
+    public double getBackoffMultiplier() {
+        return backoffMultiplier;
+    }
+
+    public long getMaxDelayMs() {
+        return maxDelayMs;
+    }
+
     public long getDelayMs(int attempt) {
         if (attempt < 0) {
             return initialDelayMs;

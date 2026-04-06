@@ -366,6 +366,10 @@ public class DefaultLlmClient implements LlmClient {
 
     @Override
     public ChatResponse executeRequest(ChatRequest request) throws LlmException {
+        if (request == null) {
+            throw new NullPointerException("ChatRequest不能为null");
+        }
+        
         LlmException lastException = null;
         int attempt = 0;
         
