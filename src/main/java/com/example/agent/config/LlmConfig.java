@@ -13,7 +13,10 @@ public class LlmConfig {
     private static final int DEFAULT_TIMEOUT = 60000;
 
     private String provider = "dashscope";
+    
+    @JsonProperty("api_key")
     private String apiKey;
+    
     private String model = DEFAULT_MODEL;
     
     @JsonProperty("base_url")

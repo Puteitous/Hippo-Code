@@ -1,0 +1,118 @@
+package com.example.agent.testutil;
+
+import com.example.agent.config.Config;
+import com.example.agent.config.IntentConfig;
+import com.example.agent.context.config.ContextConfig;
+import com.example.agent.context.config.ContextConfig.ToolResultConfig;
+
+import java.util.List;
+
+public final class TestConfigFactory {
+
+    private TestConfigFactory() {
+    }
+
+    public static class Llm {
+        public static final String TEST_API_KEY = "test-api-key-12345";
+        public static final String TEST_MODEL = "test-model";
+        public static final String TEST_BASE_URL = "https://test.api.example.com";
+        public static final int TEST_MAX_TOKENS = 2048;
+        public static final double TEST_TEMPERATURE = 0.7;
+        public static final int TEST_TIMEOUT = 60000;
+
+        public static Config createTestConfig() {
+            Config config = Config.getInstance();
+            config.setApiKey(TEST_API_KEY);
+            config.setModel(TEST_MODEL);
+            config.setBaseUrl(TEST_BASE_URL);
+            config.setMaxTokens(TEST_MAX_TOKENS);
+            config.getLlm().setTemperature(TEST_TEMPERATURE);
+            return config;
+        }
+    }
+
+    public static class Intent {
+        public static IntentConfig createDefaultIntentConfig() {
+            IntentConfig config = new IntentConfig();
+            config.getRecognition().setLlmEnabled(false);
+            config.getRecognition().setPreferLlm(false);
+            config.getRecognition().setHighConfidenceThreshold(0.85);
+            config.getRecognition().setLowConfidenceThreshold(0.5);
+            return config;
+        }
+
+        public static IntentConfig createLlmEnabledIntentConfig() {
+            IntentConfig config = new IntentConfig();
+            config.getRecognition().setLlmEnabled(true);
+            config.getRecognition().setPreferLlm(true);
+            config.getRecognition().setHighConfidenceThreshold(0.9);
+            config.getRecognition().setLowConfidenceThreshold(0.3);
+            return config;
+        }
+
+        public static IntentConfig createRuleOnlyIntentConfig() {
+            IntentConfig config = new IntentConfig();
+            config.getRecognition().setLlmEnabled(false);
+            config.getRecognition().setPreferLlm(false);
+            config.getRecognition().setHighConfidenceThreshold(0.7);
+            config.getRecognition().setLowConfidenceThreshold(0.3);
+            return config;
+        }
+    }
+
+    public static class Context {
+        public static ContextConfig createDefaultContextConfig() {
+            ContextConfig config = new ContextConfig();
+            config.setMaxTokens(30000);
+            config.setMaxMessages(20);
+            config.setKeepRecentTurns(6);
+            return config;
+        }
+
+        public static ContextConfig createSmallContextConfig() {
+            ContextConfig config = new ContextConfig();
+            config.setMaxTokens(5000);
+            config.setMaxMessages(10);
+            config.setKeepRecentTurns(3);
+            
+            ToolResultConfig toolResultConfig = new ToolResultConfig();
+            toolResultConfig.setMaxTokens(1000);
+            toolResultConfig.setTruncateStrategy("tail");
+            config.setToolResult(toolResultConfig);
+            
+            return config;
+        }
+
+        public static ContextConfig createLargeContextConfig() {
+            ContextConfig config = new ContextConfig();
+            config.setMaxTokens(100000);
+            config.setMaxMessages(100);
+            config.setKeepRecentTurns(20);
+            
+            ToolResultConfig toolResultConfig = new ToolResultConfig();
+            toolResultConfig.setMaxTokens(5000);
+            toolResultConfig.setTruncateStrategy("tail");
+            config.setToolResult(toolResultConfig);
+            
+            return config;
+        }
+    }
+
+    public static class Tools {
+        public static final List<String> DEFAULT_WHITELIST = List.of(
+                "git", "mvn", "npm", "docker", "ls", "cat", "grep", "find"
+        );
+
+        public static final List<String> DEFAULT_BLOCKED_EXTENSIONS = List.of(
+                ".env", ".pem", ".key", ".p12", ".jks"
+        );
+
+        public static final List<String> DEFAULT_ALLOWED_PATHS = List.of(".");
+    }
+
+    public static class Session {
+        public static final int DEFAULT_MAX_HISTORY = 50;
+        public static final String DEFAULT_HISTORY_FILE = ".agent_history_test";
+        public static final boolean DEFAULT_AUTO_SAVE = true;
+    }
+}

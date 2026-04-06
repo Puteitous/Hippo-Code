@@ -77,6 +77,10 @@ public class EditFileTool implements ToolExecutor {
         String oldText = arguments.get("old_text").asText();
         String newText = arguments.get("new_text").asText();
 
+        if (oldText == null || oldText.isEmpty()) {
+            throw new ToolExecutionException("old_text 不能为空");
+        }
+
         Path path = PathSecurityUtils.validateAndResolve(filePath);
 
         if (!Files.exists(path)) {
@@ -135,6 +139,9 @@ public class EditFileTool implements ToolExecutor {
     }
 
     private int countOccurrences(String text, String substring) {
+        if (substring == null || substring.isEmpty()) {
+            return 0;
+        }
         int count = 0;
         int index = 0;
         while ((index = text.indexOf(substring, index)) != -1) {

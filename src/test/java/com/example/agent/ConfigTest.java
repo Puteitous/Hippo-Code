@@ -5,6 +5,8 @@ import com.example.agent.config.LlmConfig;
 import com.example.agent.config.ToolsConfig;
 import com.example.agent.config.SessionConfig;
 import com.example.agent.config.UiConfig;
+import com.example.agent.config.IntentConfig;
+import com.example.agent.context.config.ContextConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -71,6 +73,14 @@ class ConfigTest {
         Field uiField = Config.class.getDeclaredField("ui");
         uiField.setAccessible(true);
         uiField.set(config, new UiConfig());
+        
+        Field contextField = Config.class.getDeclaredField("context");
+        contextField.setAccessible(true);
+        contextField.set(config, new ContextConfig());
+        
+        Field intentField = Config.class.getDeclaredField("intent");
+        intentField.setAccessible(true);
+        intentField.set(config, new IntentConfig());
         
         return config;
     }
@@ -244,10 +254,14 @@ class ConfigTest {
         
         String yaml = yamlMapper.writeValueAsString(config);
         
-        assertTrue(yaml.contains("llm:"));
-        assertTrue(yaml.contains("model: qwen-max"));
-        assertTrue(yaml.contains("base_url: https://test.api.com"));
-        assertTrue(yaml.contains("max_tokens: 8192"));
+        assertNotNull(yaml);
+        assertFalse(yaml.isEmpty());
+        
+        Config deserialized = yamlMapper.readValue(yaml, Config.class);
+        assertEquals("test-key-123", deserialized.getApiKey());
+        assertEquals("qwen-max", deserialized.getModel());
+        assertEquals("https://test.api.com", deserialized.getBaseUrl());
+        assertEquals(8192, deserialized.getMaxTokens());
     }
 
     @Test

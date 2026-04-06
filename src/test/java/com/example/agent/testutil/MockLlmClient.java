@@ -1,0 +1,178 @@
+package com.example.agent.testutil;
+
+import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.exception.LlmException;
+import com.example.agent.llm.model.ChatRequest;
+import com.example.agent.llm.model.ChatResponse;
+import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.Tool;
+import com.example.agent.llm.stream.StreamChunk;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
+import java.util.function.Consumer;
+
+public class MockLlmClient implements LlmClient {
+
+    private final Queue<ChatResponse> responseQueue = new LinkedList<>();
+    private final List<ChatRequest> recordedRequests = new ArrayList<>();
+    private final List<List<Message>> recordedMessages = new ArrayList<>();
+    
+    private LlmException exceptionToThrow;
+    private long delayMs = 0;
+    private boolean streamMode = false;
+
+    public void enqueueResponse(ChatResponse response) {
+        responseQueue.offer(response);
+    }
+
+    public void enqueueResponses(List<ChatResponse> responses) {
+        responseQueue.addAll(responses);
+    }
+
+    public void setExceptionToThrow(LlmException exception) {
+        this.exceptionToThrow = exception;
+    }
+
+    public void setDelayMs(long delayMs) {
+        this.delayMs = delayMs;
+    }
+
+    public void setStreamMode(boolean streamMode) {
+        this.streamMode = streamMode;
+    }
+
+    public List<ChatRequest> getRecordedRequests() {
+        return new ArrayList<>(recordedRequests);
+    }
+
+    public List<List<Message>> getRecordedMessages() {
+        return new ArrayList<>(recordedMessages);
+    }
+
+    public void clearRecordings() {
+        recordedRequests.clear();
+        recordedMessages.clear();
+    }
+
+    public void reset() {
+        responseQueue.clear();
+        recordedRequests.clear();
+        recordedMessages.clear();
+        exceptionToThrow = null;
+        delayMs = 0;
+    }
+
+    @Override
+    public ChatResponse chat(List<Message> messages) throws LlmException {
+        return chat(messages, null);
+    }
+
+    @Override
+    public ChatResponse chat(List<Message> messages, List<Tool> tools) throws LlmException {
+        recordRequest(null, messages);
+        
+        maybeThrowException();
+        maybeDelay();
+        
+        ChatResponse response = responseQueue.poll();
+        if (response == null) {
+            response = LlmResponseBuilder.create().build();
+        }
+        return response;
+    }
+
+    @Override
+    public ChatResponse chatWithTools(List<Message> messages, List<Tool> tools) throws LlmException {
+        return chat(messages, tools);
+    }
+
+    @Override
+    public ChatResponse chatStream(List<Message> messages, Consumer<StreamChunk> onChunk) throws LlmException {
+        return chatStream(messages, null, onChunk);
+    }
+
+    @Override
+    public ChatResponse chatStream(List<Message> messages, List<Tool> tools, Consumer<StreamChunk> onChunk) throws LlmException {
+        recordRequest(null, messages);
+        
+        maybeThrowException();
+        maybeDelay();
+        
+        ChatResponse response = responseQueue.poll();
+        if (response == null) {
+            response = LlmResponseBuilder.create().build();
+        }
+        
+        if (onChunk != null && response.hasContent()) {
+            String content = response.getContent();
+            int chunkSize = Math.max(1, content.length() / 5);
+            for (int i = 0; i < content.length(); i += chunkSize) {
+                int end = Math.min(i + chunkSize, content.length());
+                String chunkContent = content.substring(i, end);
+                onChunk.accept(createStreamChunk(chunkContent));
+            }
+        }
+        
+        return response;
+    }
+
+    @Override
+    public ChatResponse executeRequest(ChatRequest request) throws LlmException {
+        recordRequest(request, request.getMessages());
+        
+        maybeThrowException();
+        maybeDelay();
+        
+        ChatResponse response = responseQueue.poll();
+        if (response == null) {
+            response = LlmResponseBuilder.create().build();
+        }
+        return response;
+    }
+
+    @Override
+    public ChatResponse continueWithToolResult(ChatResponse previousResponse, List<Message> messages, 
+                                               String toolCallId, String toolName, String toolResult) throws LlmException {
+        return chat(messages);
+    }
+
+    @Override
+    public ChatResponse continueWithToolResults(ChatResponse previousResponse, List<Message> messages, 
+                                                List<ToolResult> toolResults) throws LlmException {
+        return chat(messages);
+    }
+
+    private void recordRequest(ChatRequest request, List<Message> messages) {
+        if (request != null) {
+            recordedRequests.add(request);
+        }
+        if (messages != null) {
+            recordedMessages.add(new ArrayList<>(messages));
+        }
+    }
+
+    private void maybeThrowException() throws LlmException {
+        if (exceptionToThrow != null) {
+            throw exceptionToThrow;
+        }
+    }
+
+    private void maybeDelay() {
+        if (delayMs > 0) {
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private StreamChunk createStreamChunk(String content) {
+        StreamChunk chunk = new StreamChunk();
+        chunk.setContent(content);
+        return chunk;
+    }
+}
