@@ -46,8 +46,9 @@ class EmptyResponseRetryTest {
         choice.setMessage(new Message("assistant", null));
         response.setChoices(List.of(choice));
         
+        // 防御性编程：null content应转换为空字符串
         assertFalse(response.hasContent());
-        assertNull(response.getContent());
+        assertEquals("", response.getContent());  // 期望空字符串，不是null
     }
 
     @Test
