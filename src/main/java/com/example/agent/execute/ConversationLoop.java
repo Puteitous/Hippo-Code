@@ -85,6 +85,10 @@ public class ConversationLoop {
     }
 
     public void processUserInput(String userInput) {
+        if (userInput == null || userInput.isBlank()) {
+            return;
+        }
+
         turnExecutor.setInterrupted(false);
         conversationRound++;
 
@@ -201,7 +205,7 @@ public class ConversationLoop {
 
                 emptyResponseRetries = 0;
 
-                if (result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
+                if (result == null || result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
                     break;
                 }
 

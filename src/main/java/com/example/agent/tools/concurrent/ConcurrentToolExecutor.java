@@ -80,6 +80,10 @@ public class ConcurrentToolExecutor {
         String arguments = toolCall.getFunction().getArguments();
         String toolCallId = toolCall.getId();
 
+        if (arguments == null || arguments.isEmpty()) {
+            arguments = "{}";
+        }
+
         long startTime = System.currentTimeMillis();
         
         try {

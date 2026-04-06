@@ -59,7 +59,11 @@ public class ConversationLogger {
         entry.append("│ 时间: ").append(LocalDateTime.now().format(TIMESTAMP_FORMAT)).append("\n");
         entry.append("│ 估算 Token: ").append(estimatedTokens).append("\n");
         entry.append("├────────────────────────────────────────────\n");
-        entry.append("│ ").append(input.replace("\n", "\n│ ")).append("\n");
+        if (input != null && !input.isEmpty()) {
+            entry.append("│ ").append(input.replace("\n", "\n│ ")).append("\n");
+        } else {
+            entry.append("│ (空输入)\n");
+        }
         entry.append("└────────────────────────────────────────────\n");
         
         writeToFile(entry.toString());

@@ -28,6 +28,10 @@ public class ToolCallProcessor {
     }
 
     public void processToolCallsConcurrently(List<ToolCall> toolCalls, ConversationLogger conversationLogger) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return;
+        }
+
         long startTime = System.currentTimeMillis();
 
         List<ToolCall> validToolCalls = new ArrayList<>();
@@ -56,35 +60,36 @@ public class ToolCallProcessor {
 
             if (result.isSuccess()) {
                 ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "成功"));
-                String displayResult = ui.truncate(result.getResult(), 100);
+                String displayResult = ui.truncate(result.getResult() != null ? result.getResult() : "", 100);
                 ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.dim(displayResult));
 
                 if (conversationLogger != null) {
                     conversationLogger.logToolCall(
                             result.getToolName(),
                             arguments != null ? arguments : "{}",
-                            result.getResult(),
+                            result.getResult() != null ? result.getResult() : "",
                             result.getExecutionTimeMs(),
                             true
                     );
                 }
 
-                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), result.getResult());
+                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), result.getResult() != null ? result.getResult() : "");
             } else {
                 ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "失败"));
-                ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.red(result.getErrorMessage()));
+                String errorMsg = result.getErrorMessage() != null ? result.getErrorMessage() : "未知错误";
+                ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.red(errorMsg));
 
                 if (conversationLogger != null) {
                     conversationLogger.logToolCall(
                             result.getToolName(),
                             arguments != null ? arguments : "{}",
-                            result.getErrorMessage(),
+                            errorMsg,
                             result.getExecutionTimeMs(),
                             false
                     );
                 }
 
-                String errorResult = "Error: " + result.getErrorMessage() + "\nPlease try a different approach or check if the path is correct.";
+                String errorResult = "Error: " + errorMsg + "\nPlease try a different approach or check if the path is correct.";
                 conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), errorResult);
             }
         }
