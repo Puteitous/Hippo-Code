@@ -17,6 +17,22 @@ public class RetryPolicy {
     }
 
     public RetryPolicy(int maxRetries, long initialDelayMs, double backoffMultiplier, long maxDelayMs) {
+        if (maxRetries < 0) {
+            throw new IllegalArgumentException("maxRetries不能为负数: " + maxRetries);
+        }
+        if (initialDelayMs < 0) {
+            throw new IllegalArgumentException("initialDelayMs不能为负数: " + initialDelayMs);
+        }
+        if (backoffMultiplier <= 0) {
+            throw new IllegalArgumentException("backoffMultiplier必须为正数: " + backoffMultiplier);
+        }
+        if (maxDelayMs < 0) {
+            throw new IllegalArgumentException("maxDelayMs不能为负数: " + maxDelayMs);
+        }
+        if (initialDelayMs > maxDelayMs) {
+            throw new IllegalArgumentException("initialDelayMs不能大于maxDelayMs");
+        }
+        
         this.maxRetries = maxRetries;
         this.initialDelayMs = initialDelayMs;
         this.backoffMultiplier = backoffMultiplier;
@@ -28,8 +44,25 @@ public class RetryPolicy {
     }
 
     public long getDelayMs(int attempt) {
-        long delay = (long) (initialDelayMs * Math.pow(backoffMultiplier, attempt));
-        return Math.min(delay, maxDelayMs);
+        if (attempt < 0) {
+            return initialDelayMs;
+        }
+        
+        // 防止指数爆炸和溢出
+        if (attempt > 30) {  // 限制最大attempt，防止Math.pow溢出
+            return maxDelayMs;
+        }
+        
+        try {
+            double delay = initialDelayMs * Math.pow(backoffMultiplier, attempt);
+            // 检查是否溢出
+            if (delay > maxDelayMs || delay < 0 || Double.isInfinite(delay) || Double.isNaN(delay)) {
+                return maxDelayMs;
+            }
+            return Math.min((long) delay, maxDelayMs);
+        } catch (Exception e) {
+            return maxDelayMs;
+        }
     }
 
     public boolean shouldRetry(LlmException exception, int attempt) {
@@ -72,21 +105,33 @@ public class RetryPolicy {
         private long maxDelayMs = 10000;
 
         public Builder maxRetries(int maxRetries) {
+            if (maxRetries < 0) {
+                throw new IllegalArgumentException("maxRetries不能为负数: " + maxRetries);
+            }
             this.maxRetries = maxRetries;
             return this;
         }
 
         public Builder initialDelayMs(long initialDelayMs) {
+            if (initialDelayMs < 0) {
+                throw new IllegalArgumentException("initialDelayMs不能为负数: " + initialDelayMs);
+            }
             this.initialDelayMs = initialDelayMs;
             return this;
         }
 
         public Builder backoffMultiplier(double backoffMultiplier) {
+            if (backoffMultiplier <= 0) {
+                throw new IllegalArgumentException("backoffMultiplier必须为正数: " + backoffMultiplier);
+            }
             this.backoffMultiplier = backoffMultiplier;
             return this;
         }
 
         public Builder maxDelayMs(long maxDelayMs) {
+            if (maxDelayMs < 0) {
+                throw new IllegalArgumentException("maxDelayMs不能为负数: " + maxDelayMs);
+            }
             this.maxDelayMs = maxDelayMs;
             return this;
         }

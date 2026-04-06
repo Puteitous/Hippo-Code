@@ -4,6 +4,8 @@ import com.example.agent.llm.model.Usage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,8 +17,11 @@ import java.util.List;
 
 public class SseParser {
 
+    private static final Logger logger = LoggerFactory.getLogger(SseParser.class);
     private static final String DATA_PREFIX = "data: ";
     private static final String DONE_MARKER = "[DONE]";
+    private static final int MAX_TOOL_CALL_INDEX = 1000;
+    private static final int MAX_ARGUMENTS_LENGTH = 100000;
 
     private final ObjectMapper objectMapper;
 
@@ -43,6 +48,7 @@ public class SseParser {
             JsonNode root = objectMapper.readTree(data);
             return parseChunk(root);
         } catch (Exception e) {
+            logger.warn("解析SSE行失败: {}, 错误: {}", truncate(data, 100), e.getMessage());
             return null;
         }
     }
@@ -56,6 +62,10 @@ public class SseParser {
     }
 
     private StreamChunk parseChunk(JsonNode root) {
+        if (root == null) {
+            return new StreamChunk();
+        }
+        
         StreamChunk chunk = new StreamChunk();
         
         Usage usage = parseUsage(root);
@@ -69,6 +79,9 @@ public class SseParser {
         }
 
         JsonNode firstChoice = choices.get(0);
+        if (firstChoice == null) {
+            return chunk;
+        }
         
         String finishReason = getTextValue(firstChoice, "finish_reason");
         if (finishReason != null) {
@@ -123,11 +136,24 @@ public class SseParser {
     private List<ToolCallDelta> parseToolCalls(ArrayNode toolCallsArray) {
         List<ToolCallDelta> deltas = new ArrayList<>();
 
+        if (toolCallsArray == null) {
+            return deltas;
+        }
+
         for (JsonNode node : toolCallsArray) {
+            if (node == null) {
+                continue;
+            }
+            
             ToolCallDelta delta = new ToolCallDelta();
 
             if (node.has("index")) {
-                delta.setIndex(node.get("index").asInt());
+                int index = node.get("index").asInt();
+                if (index >= 0 && index < MAX_TOOL_CALL_INDEX) {
+                    delta.setIndex(index);
+                } else {
+                    logger.warn("ToolCall index超出合理范围: {}", index);
+                }
             }
 
             if (node.has("id")) {
@@ -153,7 +179,13 @@ public class SseParser {
                 }
 
                 if (function.has("arguments")) {
-                    funcDelta.setArguments(function.get("arguments").asText());
+                    String args = function.get("arguments").asText();
+                    if (args != null && args.length() < MAX_ARGUMENTS_LENGTH) {
+                        funcDelta.setArguments(args);
+                    } else if (args != null) {
+                        logger.warn("ToolCall arguments过长: {} 字符，将被截断", args.length());
+                        funcDelta.setArguments(args.substring(0, MAX_ARGUMENTS_LENGTH));
+                    }
                 }
 
                 delta.setFunction(funcDelta);
@@ -171,5 +203,11 @@ public class SseParser {
         }
         JsonNode fieldNode = node.get(field);
         return fieldNode.isNull() ? null : fieldNode.asText();
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null) return "";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...";
     }
 }

@@ -26,8 +26,9 @@ public class Message {
     }
 
     public Message(String role, String content) {
-        this.role = role;
-        this.content = content;
+        // 放宽验证：允许null和空字符串，但确保role不为null
+        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "unknown";
+        this.content = content != null ? content : "";
     }
 
     public static Message system(String content) {
@@ -44,14 +45,22 @@ public class Message {
 
     public static Message assistantWithToolCalls(List<ToolCall> toolCalls) {
         Message message = new Message("assistant", null);
-        message.setToolCalls(toolCalls);
+        if (toolCalls != null && !toolCalls.isEmpty()) {
+            message.setToolCalls(toolCalls);
+        }
         return message;
     }
 
     public static Message toolResult(String toolCallId, String name, String content) {
-        Message message = new Message("tool", content);
-        message.setToolCallId(toolCallId);
-        message.setName(name);
+        if (toolCallId == null || toolCallId.trim().isEmpty()) {
+            throw new IllegalArgumentException("toolCallId不能为null或空");
+        }
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("name不能为null或空");
+        }
+        Message message = new Message("tool", content != null ? content : "");
+        message.setToolCallId(toolCallId.trim());
+        message.setName(name.trim());
         return message;
     }
 
@@ -60,7 +69,8 @@ public class Message {
     }
 
     public void setRole(String role) {
-        this.role = role;
+        // 放宽验证：允许null和空字符串，但设置默认值
+        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "unknown";
     }
 
     public String getContent() {
@@ -68,7 +78,7 @@ public class Message {
     }
 
     public void setContent(String content) {
-        this.content = content;
+        this.content = content != null ? content : "";
     }
 
     public List<ToolCall> getToolCalls() {
@@ -76,7 +86,14 @@ public class Message {
     }
 
     public void setToolCalls(List<ToolCall> toolCalls) {
-        this.toolCalls = toolCalls;
+        if (toolCalls == null) {
+            this.toolCalls = null;
+        } else {
+            // 过滤掉null元素
+            this.toolCalls = toolCalls.stream()
+                .filter(tc -> tc != null)
+                .collect(java.util.stream.Collectors.toList());
+        }
     }
 
     public void addToolCall(ToolCall toolCall) {

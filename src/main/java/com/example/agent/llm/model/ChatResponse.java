@@ -66,15 +66,31 @@ public class ChatResponse {
     }
 
     public Message getFirstMessage() {
-        if (choices != null && !choices.isEmpty()) {
-            return choices.get(0).getMessage();
+        if (choices == null || choices.isEmpty()) {
+            return null;
         }
-        return null;
+        Choice firstChoice = choices.get(0);
+        if (firstChoice == null) {
+            return null;
+        }
+        return firstChoice.getMessage();
     }
 
     public boolean hasToolCalls() {
         Message message = getFirstMessage();
-        return message != null && message.getToolCalls() != null && !message.getToolCalls().isEmpty();
+        if (message == null) {
+            return false;
+        }
+        List<ToolCall> toolCalls = message.getToolCalls();
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return false;
+        }
+        // 验证至少有一个有效的工具调用
+        return toolCalls.stream().anyMatch(tc -> 
+            tc != null && tc.getFunction() != null && 
+            tc.getFunction().getName() != null && 
+            !tc.getFunction().getName().isEmpty()
+        );
     }
 
     public boolean hasContent() {

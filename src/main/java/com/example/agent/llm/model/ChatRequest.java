@@ -30,7 +30,13 @@ public class ChatRequest {
     }
 
     public ChatRequest(String model, List<Message> messages) {
-        this.model = model;
+        if (model == null || model.trim().isEmpty()) {
+            throw new IllegalArgumentException("model不能为null或空");
+        }
+        if (messages == null || messages.isEmpty()) {
+            throw new IllegalArgumentException("messages不能为null或空");
+        }
+        this.model = model.trim();
         this.messages = messages;
     }
 
@@ -93,7 +99,10 @@ public class ChatRequest {
     }
 
     public void setModel(String model) {
-        this.model = model;
+        if (model == null || model.trim().isEmpty()) {
+            throw new IllegalArgumentException("model不能为null或空");
+        }
+        this.model = model.trim();
     }
 
     public List<Message> getMessages() {
@@ -101,6 +110,9 @@ public class ChatRequest {
     }
 
     public void setMessages(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            throw new IllegalArgumentException("messages不能为null或空");
+        }
         this.messages = messages;
     }
 
@@ -125,6 +137,9 @@ public class ChatRequest {
     }
 
     public void setMaxTokens(Integer maxTokens) {
+        if (maxTokens != null && maxTokens <= 0) {
+            throw new IllegalArgumentException("maxTokens必须为正数: " + maxTokens);
+        }
         this.maxTokens = maxTokens;
     }
 
@@ -133,6 +148,9 @@ public class ChatRequest {
     }
 
     public void setTemperature(Double temperature) {
+        if (temperature != null && (temperature < 0 || temperature > 2)) {
+            throw new IllegalArgumentException("temperature必须在0-2之间: " + temperature);
+        }
         this.temperature = temperature;
     }
 
@@ -141,6 +159,9 @@ public class ChatRequest {
     }
 
     public void setTopP(Double topP) {
+        if (topP != null && (topP < 0 || topP > 1)) {
+            throw new IllegalArgumentException("topP必须在0-1之间: " + topP);
+        }
         this.topP = topP;
     }
 

@@ -19,6 +19,8 @@ import com.example.agent.llm.stream.StreamChunk;
 import com.example.agent.llm.stream.ToolCallDelta;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -35,10 +37,13 @@ import java.util.function.Consumer;
 
 public class DefaultLlmClient implements LlmClient {
 
+    private static final Logger logger = LoggerFactory.getLogger(DefaultLlmClient.class);
     private static final String CHAT_COMPLETIONS_PATH = "/compatible-mode/v1/chat/completions";
     private static final int API_TIMEOUT_SECONDS = 60;
     private static final int STREAM_TIMEOUT_SECONDS = 120;
     private static final int CONNECT_TIMEOUT_SECONDS = 30;
+    private static final int MAX_TOOL_CALL_INDEX = 1000;
+    private static final int MAX_ARGUMENTS_LENGTH = 100000;
     
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -55,6 +60,12 @@ public class DefaultLlmClient implements LlmClient {
     }
 
     public DefaultLlmClient(Config config, RetryPolicy retryPolicy) {
+        if (config == null) {
+            throw new IllegalArgumentException("Config不能为null");
+        }
+        if (retryPolicy == null) {
+            throw new IllegalArgumentException("RetryPolicy不能为null");
+        }
         this.config = config;
         this.retryPolicy = retryPolicy;
         this.objectMapper = new ObjectMapper();
@@ -71,6 +82,10 @@ public class DefaultLlmClient implements LlmClient {
 
     @Override
     public ChatResponse chat(List<Message> messages, List<Tool> tools) throws LlmException {
+        if (messages == null || messages.isEmpty()) {
+            throw new IllegalArgumentException("消息列表不能为null或空");
+        }
+        
         ChatRequest request = ChatRequest.of(config.getModel(), messages)
                 .maxTokens(config.getMaxTokens());
         
@@ -93,6 +108,10 @@ public class DefaultLlmClient implements LlmClient {
 
     @Override
     public ChatResponse chatStream(List<Message> messages, List<Tool> tools, Consumer<StreamChunk> onChunk) throws LlmException {
+        if (messages == null || messages.isEmpty()) {
+            throw new IllegalArgumentException("消息列表不能为null或空");
+        }
+        
         ChatRequest request = ChatRequest.of(config.getModel(), messages)
                 .stream(true)
                 .maxTokens(config.getMaxTokens());
@@ -223,12 +242,13 @@ public class DefaultLlmClient implements LlmClient {
         
         // 记录解析统计（仅在出现问题时输出详细信息）
         if (contentChunkCount == 0 && toolCallChunkCount > 0) {
-            System.err.println("[DEBUG] 流式响应: chunks=" + chunkCount + ", contentChunks=" + contentChunkCount + ", toolCallChunks=" + toolCallChunkCount + ", finishReason=" + finishReason);
-            System.err.println("[DEBUG] 工具调用列表: size=" + toolCalls.size());
+            logger.debug("流式响应: chunks={}, contentChunks={}, toolCallChunks={}, finishReason={}", 
+                chunkCount, contentChunkCount, toolCallChunkCount, finishReason);
+            logger.debug("工具调用列表: size={}", toolCalls.size());
             for (int i = 0; i < toolCalls.size(); i++) {
                 ToolCall tc = toolCalls.get(i);
                 String name = tc.getFunction() != null ? tc.getFunction().getName() : "null";
-                System.err.println("[DEBUG]   ToolCall[" + i + "]: id=" + tc.getId() + ", name=" + name);
+                logger.debug("  ToolCall[{}]: id={}, name={}", i, tc.getId(), name);
             }
         }
         
@@ -240,7 +260,7 @@ public class DefaultLlmClient implements LlmClient {
                     && !tc.getFunction().getName().isEmpty())
                 .count();
             if (validCount == 0) {
-                System.err.println("[WARN] finishReason=tool_calls 但没有有效的工具调用");
+                logger.warn("finishReason=tool_calls 但没有有效的工具调用");
             }
         }
         
@@ -248,8 +268,19 @@ public class DefaultLlmClient implements LlmClient {
     }
 
     private void mergeToolCallDeltas(List<ToolCall> toolCalls, List<ToolCallDelta> deltas) {
+        if (toolCalls == null || deltas == null || deltas.isEmpty()) {
+            return;
+        }
+        
         for (ToolCallDelta delta : deltas) {
-            int index = delta.getIndex() != null ? delta.getIndex() : toolCalls.size();
+            Integer deltaIndex = delta.getIndex();
+            int index = (deltaIndex != null && deltaIndex >= 0) ? deltaIndex : toolCalls.size();
+            
+            // 防止index过大导致内存问题
+            if (index > MAX_TOOL_CALL_INDEX) {
+                logger.warn("ToolCall index过大: {}, 跳过该delta", index);
+                continue;
+            }
             
             while (toolCalls.size() <= index) {
                 toolCalls.add(new ToolCall());
@@ -257,7 +288,6 @@ public class DefaultLlmClient implements LlmClient {
             
             ToolCall toolCall = toolCalls.get(index);
             
-            // 只有当新 id 不为空时才覆盖
             if (delta.getId() != null && !delta.getId().isEmpty()) {
                 toolCall.setId(delta.getId());
             }
@@ -275,15 +305,18 @@ public class DefaultLlmClient implements LlmClient {
                 
                 FunctionCall func = toolCall.getFunction();
                 
-                // 只有当新 name 不为空时才覆盖
                 if (funcDelta.getName() != null && !funcDelta.getName().isEmpty()) {
                     func.setName(funcDelta.getName());
                 }
                 
-                // arguments 是追加的，不是覆盖
                 if (funcDelta.getArguments() != null) {
                     String currentArgs = func.getArguments() != null ? func.getArguments() : "";
-                    func.setArguments(currentArgs + funcDelta.getArguments());
+                    // 防止arguments过长
+                    String newArgs = currentArgs + funcDelta.getArguments();
+                    if (newArgs.length() > MAX_ARGUMENTS_LENGTH) {
+                        logger.warn("ToolCall arguments过长: {} 字符", newArgs.length());
+                    }
+                    func.setArguments(newArgs);
                 }
             }
         }
@@ -479,21 +512,60 @@ public class DefaultLlmClient implements LlmClient {
 
     @Override
     public ChatResponse continueWithToolResult(ChatResponse previousResponse, List<Message> messages, String toolCallId, String toolName, String toolResult) throws LlmException {
+        if (previousResponse == null) {
+            throw new IllegalArgumentException("previousResponse不能为null");
+        }
+        if (messages == null) {
+            messages = new ArrayList<>();  // 允许null，创建空列表
+        }
+        if (toolCallId == null || toolCallId.isEmpty()) {
+            throw new IllegalArgumentException("toolCallId不能为null或空");
+        }
+        if (toolName == null || toolName.isEmpty()) {
+            throw new IllegalArgumentException("toolName不能为null或空");
+        }
+        
         Message assistantMessage = previousResponse.getFirstMessage();
+        if (assistantMessage == null) {
+            throw new LlmException("previousResponse中没有有效的消息");
+        }
         
         messages.add(assistantMessage);
-        messages.add(Message.toolResult(toolCallId, toolName, toolResult));
+        messages.add(Message.toolResult(toolCallId, toolName, toolResult != null ? toolResult : ""));
         
         return chat(messages);
     }
 
     @Override
     public ChatResponse continueWithToolResults(ChatResponse previousResponse, List<Message> messages, List<ToolResult> toolResults) throws LlmException {
+        if (previousResponse == null) {
+            throw new IllegalArgumentException("previousResponse不能为null");
+        }
+        if (messages == null) {
+            messages = new ArrayList<>();  // 允许null，创建空列表
+        }
+        if (toolResults == null || toolResults.isEmpty()) {
+            throw new IllegalArgumentException("toolResults不能为null或空");
+        }
+        
         Message assistantMessage = previousResponse.getFirstMessage();
+        if (assistantMessage == null) {
+            throw new LlmException("previousResponse中没有有效的消息");
+        }
+        
         messages.add(assistantMessage);
         
         for (ToolResult result : toolResults) {
-            messages.add(Message.toolResult(result.getToolCallId(), result.getToolName(), result.getResult()));
+            if (result == null) {
+                continue;
+            }
+            String toolCallId = result.getToolCallId();
+            String toolName = result.getToolName();
+            String toolResult = result.getResult();
+            
+            if (toolCallId != null && !toolCallId.isEmpty() && toolName != null && !toolName.isEmpty()) {
+                messages.add(Message.toolResult(toolCallId, toolName, toolResult != null ? toolResult : ""));
+            }
         }
         
         return chat(messages);

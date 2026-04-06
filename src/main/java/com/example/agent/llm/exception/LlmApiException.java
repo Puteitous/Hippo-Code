@@ -7,12 +7,18 @@ public class LlmApiException extends LlmException {
 
     public LlmApiException(String message, int statusCode) {
         super(message);
+        if (statusCode < 0) {
+            statusCode = 0;
+        }
         this.statusCode = statusCode;
         this.errorBody = null;
     }
 
     public LlmApiException(String message, int statusCode, String errorBody) {
         super(message);
+        if (statusCode < 0) {
+            statusCode = 0;
+        }
         this.statusCode = statusCode;
         this.errorBody = errorBody;
     }
@@ -39,5 +45,9 @@ public class LlmApiException extends LlmException {
 
     public boolean isAuthenticationError() {
         return statusCode == 401 || statusCode == 403;
+    }
+    
+    public boolean isValidStatusCode() {
+        return statusCode >= 100 && statusCode < 600;
     }
 }
