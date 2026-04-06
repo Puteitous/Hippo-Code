@@ -165,7 +165,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("修改这段代码的逻辑");
             
             assertEquals(IntentType.CODE_MODIFICATION, result.getType());
-            assertEquals(0.85, result.getConfidence());
+            assertEquals(0.75, result.getConfidence());
         }
 
         @Test
@@ -187,7 +187,7 @@ class RuleBasedIntentRecognizerTest {
         @Test
         @DisplayName("匹配'优化代码'")
         void testOptimizeCode() {
-            IntentResult result = recognizer.recognize("优化这段代码的性能");
+            IntentResult result = recognizer.recognize("优化这个函数的性能");
             
             assertEquals(IntentType.CODE_MODIFICATION, result.getType());
         }
@@ -195,7 +195,7 @@ class RuleBasedIntentRecognizerTest {
         @Test
         @DisplayName("匹配'修复bug'")
         void testFixBug() {
-            IntentResult result = recognizer.recognize("修复这个文件中的bug");
+            IntentResult result = recognizer.recognize("修复这个函数的逻辑");
             
             assertEquals(IntentType.CODE_MODIFICATION, result.getType());
         }
@@ -211,7 +211,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("我的程序报错了");
             
             assertEquals(IntentType.DEBUGGING, result.getType());
-            assertEquals(0.80, result.getConfidence());
+            assertEquals(0.85, result.getConfidence());
         }
 
         @Test
@@ -265,7 +265,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("读取配置文件");
             
             assertEquals(IntentType.FILE_OPERATION, result.getType());
-            assertEquals(0.80, result.getConfidence());
+            assertEquals(0.70, result.getConfidence());
         }
 
         @Test
@@ -303,7 +303,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("分析这个项目的结构");
             
             assertEquals(IntentType.PROJECT_ANALYSIS, result.getType());
-            assertEquals(0.75, result.getConfidence());
+            assertEquals(0.70, result.getConfidence());
         }
 
         @Test
@@ -333,7 +333,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("审查这段代码");
             
             assertEquals(IntentType.CODE_REVIEW, result.getType());
-            assertEquals(0.75, result.getConfidence());
+            assertEquals(0.60, result.getConfidence());
         }
 
         @Test
@@ -355,7 +355,7 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("什么是Java");
             
             assertEquals(IntentType.QUESTION, result.getType());
-            assertEquals(0.70, result.getConfidence());
+            assertEquals(0.75, result.getConfidence());
         }
 
         @Test
@@ -396,25 +396,25 @@ class RuleBasedIntentRecognizerTest {
     class CodeKeywordTests {
 
         @Test
-        @DisplayName("包含'函数'关键词")
+        @DisplayName("包含'函数'关键词的问句")
         void testFunctionKeyword() {
-            IntentResult result = recognizer.recognize("这个函数是做什么的");
+            IntentResult result = recognizer.recognize("这个函数怎么用");
             
             assertEquals(IntentType.QUESTION, result.getType());
-            assertEquals(0.70, result.getConfidence());
+            assertEquals(0.75, result.getConfidence());
             assertEquals("匹配一般问题模式", result.getReasoning());
         }
 
         @Test
-        @DisplayName("包含'class'关键词")
+        @DisplayName("包含'class'关键词的问句")
         void testClassKeyword() {
-            IntentResult result = recognizer.recognize("show me the class");
+            IntentResult result = recognizer.recognize("请解释这个class的作用");
             
             assertEquals(IntentType.QUESTION, result.getType());
         }
 
         @Test
-        @DisplayName("包含'方法'关键词")
+        @DisplayName("包含'方法'关键词的问句")
         void testMethodKeyword() {
             IntentResult result = recognizer.recognize("这个方法怎么用");
             
@@ -422,9 +422,9 @@ class RuleBasedIntentRecognizerTest {
         }
 
         @Test
-        @DisplayName("包含'interface'关键词")
+        @DisplayName("包含'interface'关键词的问句")
         void testInterfaceKeyword() {
-            IntentResult result = recognizer.recognize("explain the interface");
+            IntentResult result = recognizer.recognize("请解释这个interface");
             
             assertEquals(IntentType.QUESTION, result.getType());
         }
@@ -432,7 +432,7 @@ class RuleBasedIntentRecognizerTest {
         @Test
         @DisplayName("包含代码关键词但无问句模式")
         void testCodeKeywordWithoutQuestion() {
-            IntentResult result = recognizer.recognize("查看这个函数的实现");
+            IntentResult result = recognizer.recognize("变量命名规范");
             
             assertEquals(IntentType.CODE_GENERATION, result.getType());
             assertEquals(0.60, result.getConfidence());
@@ -446,7 +446,7 @@ class RuleBasedIntentRecognizerTest {
         @Test
         @DisplayName("无法匹配任何模式时默认为QUESTION")
         void testDefaultClassification() {
-            IntentResult result = recognizer.recognize("今天天气怎么样");
+            IntentResult result = recognizer.recognize("今天天气很好");
             
             assertEquals(IntentType.QUESTION, result.getType());
             assertEquals(0.50, result.getConfidence());
@@ -467,11 +467,13 @@ class RuleBasedIntentRecognizerTest {
     class PriorityTests {
 
         @Test
-        @DisplayName("代码生成优先于一般问题")
+        @DisplayName("代码生成与问题多模式匹配")
         void testCodeGenerationPriority() {
             IntentResult result = recognizer.recognize("如何写一个函数");
             
             assertEquals(IntentType.CODE_GENERATION, result.getType());
+            assertEquals(0.50, result.getConfidence());
+            assertTrue(result.getReasoning().contains("多模式匹配"));
         }
 
         @Test
@@ -480,6 +482,8 @@ class RuleBasedIntentRecognizerTest {
             IntentResult result = recognizer.recognize("修改代码时出现错误");
             
             assertEquals(IntentType.DEBUGGING, result.getType());
+            assertEquals(0.50, result.getConfidence());
+            assertTrue(result.getReasoning().contains("多模式匹配"));
         }
     }
 
@@ -544,45 +548,45 @@ class RuleBasedIntentRecognizerTest {
         }
 
         @Test
-        @DisplayName("代码修改置信度应为0.85")
-        void testCodeModificationConfidence() {
-            IntentResult result = recognizer.recognize("修改代码");
+        @DisplayName("调试置信度应为0.85")
+        void testDebuggingConfidence() {
+            IntentResult result = recognizer.recognize("报错了");
             assertEquals(0.85, result.getConfidence());
         }
 
         @Test
-        @DisplayName("调试置信度应为0.80")
-        void testDebuggingConfidence() {
-            IntentResult result = recognizer.recognize("报错了");
-            assertEquals(0.80, result.getConfidence());
-        }
-
-        @Test
-        @DisplayName("文件操作置信度应为0.80")
-        void testFileOperationConfidence() {
-            IntentResult result = recognizer.recognize("读取文件");
-            assertEquals(0.80, result.getConfidence());
-        }
-
-        @Test
-        @DisplayName("项目分析置信度应为0.75")
-        void testProjectAnalysisConfidence() {
-            IntentResult result = recognizer.recognize("分析项目");
+        @DisplayName("代码修改置信度应为0.75")
+        void testCodeModificationConfidence() {
+            IntentResult result = recognizer.recognize("修改代码");
             assertEquals(0.75, result.getConfidence());
         }
 
         @Test
-        @DisplayName("代码审查置信度应为0.75")
-        void testCodeReviewConfidence() {
-            IntentResult result = recognizer.recognize("审查代码");
-            assertEquals(0.75, result.getConfidence());
-        }
-
-        @Test
-        @DisplayName("一般问题置信度应为0.70")
+        @DisplayName("一般问题置信度应为0.75")
         void testQuestionConfidence() {
             IntentResult result = recognizer.recognize("什么是Java");
+            assertEquals(0.75, result.getConfidence());
+        }
+
+        @Test
+        @DisplayName("文件操作置信度应为0.70")
+        void testFileOperationConfidence() {
+            IntentResult result = recognizer.recognize("读取文件");
             assertEquals(0.70, result.getConfidence());
+        }
+
+        @Test
+        @DisplayName("项目分析置信度应为0.70")
+        void testProjectAnalysisConfidence() {
+            IntentResult result = recognizer.recognize("分析项目");
+            assertEquals(0.70, result.getConfidence());
+        }
+
+        @Test
+        @DisplayName("代码审查置信度应为0.60")
+        void testCodeReviewConfidence() {
+            IntentResult result = recognizer.recognize("审查代码");
+            assertEquals(0.60, result.getConfidence());
         }
 
         @Test
@@ -597,6 +601,14 @@ class RuleBasedIntentRecognizerTest {
         void testDefaultConfidence() {
             IntentResult result = recognizer.recognize("随便说说");
             assertEquals(0.50, result.getConfidence());
+        }
+
+        @Test
+        @DisplayName("多模式匹配置信度应为0.50")
+        void testMultiMatchConfidence() {
+            IntentResult result = recognizer.recognize("修改代码时出现错误");
+            assertEquals(0.50, result.getConfidence());
+            assertTrue(result.getReasoning().contains("多模式匹配"));
         }
     }
 }

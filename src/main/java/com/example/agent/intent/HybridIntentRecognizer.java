@@ -45,7 +45,7 @@ public class HybridIntentRecognizer implements IntentRecognizer {
 
         IntentResult ruleResult = ruleRecognizer.recognize(userInput, context);
 
-        if (ruleResult.getConfidence() >= config.getHighConfidenceThreshold()) {
+        if (!config.isPreferLlm() && ruleResult.getConfidence() >= config.getHighConfidenceThreshold()) {
             logger.debug("规则识别器高置信度结果: {}", ruleResult);
             return ruleResult;
         }
@@ -60,6 +60,10 @@ public class HybridIntentRecognizer implements IntentRecognizer {
 
         logger.debug("使用规则识别结果: {}", ruleResult);
         return ruleResult;
+    }
+
+    public boolean isPreferLlm() {
+        return config.isPreferLlm();
     }
 
     public void setPreferLlm(boolean preferLlm) {

@@ -2,6 +2,8 @@ package com.example.agent.intent;
 
 import com.example.agent.llm.model.Message;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -42,6 +44,18 @@ public class RuleBasedIntentRecognizer implements IntentRecognizer {
             Pattern.CASE_INSENSITIVE
     );
 
+    private static class IntentMatch {
+        final IntentType type;
+        final String reasoning;
+        final int priority;
+
+        IntentMatch(IntentType type, String reasoning, int priority) {
+            this.type = type;
+            this.reasoning = reasoning;
+            this.priority = priority;
+        }
+    }
+
     @Override
     public IntentResult recognize(String userInput) {
         return recognize(userInput, null);
@@ -54,76 +68,70 @@ public class RuleBasedIntentRecognizer implements IntentRecognizer {
         }
 
         String input = userInput.trim();
+        List<IntentMatch> matches = new ArrayList<>();
 
-        if (CODE_GENERATION_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.CODE_GENERATION)
-                    .confidence(0.85)
-                    .reasoning("匹配代码生成模式")
-                    .build();
-        }
+        collectMatches(input, matches);
 
-        if (CODE_MODIFICATION_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.CODE_MODIFICATION)
-                    .confidence(0.85)
-                    .reasoning("匹配代码修改模式")
-                    .build();
-        }
-
-        if (DEBUGGING_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.DEBUGGING)
-                    .confidence(0.80)
-                    .reasoning("匹配调试问题模式")
-                    .build();
-        }
-
-        if (FILE_OPERATION_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.FILE_OPERATION)
-                    .confidence(0.80)
-                    .reasoning("匹配文件操作模式")
-                    .build();
-        }
-
-        if (PROJECT_ANALYSIS_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.PROJECT_ANALYSIS)
-                    .confidence(0.75)
-                    .reasoning("匹配项目分析模式")
-                    .build();
-        }
-
-        if (CODE_REVIEW_PATTERN.matcher(input).find()) {
-            return IntentResult.builder()
-                    .type(IntentType.CODE_REVIEW)
-                    .confidence(0.75)
-                    .reasoning("匹配代码审查模式")
-                    .build();
-        }
-
-        if (QUESTION_PATTERN.matcher(input).find()) {
+        if (matches.isEmpty()) {
             return IntentResult.builder()
                     .type(IntentType.QUESTION)
-                    .confidence(0.70)
-                    .reasoning("匹配一般问题模式")
+                    .confidence(0.50)
+                    .reasoning("默认归类为一般问题")
                     .build();
         }
 
-        if (containsCodeKeywords(input)) {
+        if (matches.size() == 1) {
+            IntentMatch match = matches.get(0);
             return IntentResult.builder()
-                    .type(IntentType.CODE_GENERATION)
-                    .confidence(0.60)
-                    .reasoning("包含代码相关关键词")
+                    .type(match.type)
+                    .confidence(getConfidenceForPriority(match.priority))
+                    .reasoning(match.reasoning)
                     .build();
         }
+
+        IntentMatch best = matches.stream()
+                .max(Comparator.comparingInt(m -> m.priority))
+                .orElse(matches.get(0));
 
         return IntentResult.builder()
-                .type(IntentType.QUESTION)
+                .type(best.type)
                 .confidence(0.50)
-                .reasoning("默认归类为一般问题")
+                .reasoning(best.reasoning + "（多模式匹配，仅供参考）")
                 .build();
+    }
+
+    private void collectMatches(String input, List<IntentMatch> matches) {
+        if (DEBUGGING_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.DEBUGGING, "匹配调试问题模式", 11));
+        }
+        if (CODE_GENERATION_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.CODE_GENERATION, "匹配代码生成模式", 10));
+        }
+        if (CODE_MODIFICATION_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.CODE_MODIFICATION, "匹配代码修改模式", 9));
+        }
+        if (QUESTION_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.QUESTION, "匹配一般问题模式", 8));
+        }
+        if (FILE_OPERATION_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.FILE_OPERATION, "匹配文件操作模式", 7));
+        }
+        if (PROJECT_ANALYSIS_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.PROJECT_ANALYSIS, "匹配项目分析模式", 6));
+        }
+        if (CODE_REVIEW_PATTERN.matcher(input).find()) {
+            matches.add(new IntentMatch(IntentType.CODE_REVIEW, "匹配代码审查模式", 5));
+        }
+        if (matches.isEmpty() && containsCodeKeywords(input)) {
+            matches.add(new IntentMatch(IntentType.CODE_GENERATION, "包含代码相关关键词", 4));
+        }
+    }
+
+    private double getConfidenceForPriority(int priority) {
+        if (priority >= 10) return 0.85;
+        if (priority >= 8) return 0.75;
+        if (priority >= 6) return 0.70;
+        return 0.60;
     }
 
     private boolean containsCodeKeywords(String input) {
