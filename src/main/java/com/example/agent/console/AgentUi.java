@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 
 public class AgentUi {
 
@@ -16,8 +17,8 @@ public class AgentUi {
     private final Config config;
 
     public AgentUi(Terminal terminal, Config config) {
-        this.terminal = terminal;
-        this.config = config;
+        this.terminal = Objects.requireNonNull(terminal, "terminal cannot be null");
+        this.config = Objects.requireNonNull(config, "config cannot be null");
     }
 
     public void printWelcome() {
@@ -170,27 +171,50 @@ public class AgentUi {
     }
 
     public void println() {
+        if (!isTerminalAvailable()) {
+            return;
+        }
         terminal.writer().println();
         terminal.writer().flush();
     }
 
     public void println(String text) {
+        if (!isTerminalAvailable()) {
+            return;
+        }
         terminal.writer().println(text);
         terminal.writer().flush();
     }
 
     public void print(String text) {
+        if (!isTerminalAvailable()) {
+            return;
+        }
         terminal.writer().print(text);
         terminal.writer().flush();
     }
 
     public void clearScreen() {
+        if (!isTerminalAvailable()) {
+            return;
+        }
         terminal.puts(org.jline.utils.InfoCmp.Capability.clear_screen);
         terminal.flush();
     }
 
+    private boolean isTerminalAvailable() {
+        try {
+            return terminal != null && terminal.writer() != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public String maskApiKey(String apiKey) {
-        if (apiKey == null || apiKey.length() < 8) {
+        if (apiKey == null || apiKey.isEmpty()) {
+            return "****";
+        }
+        if (apiKey.length() < 8) {
             return "****";
         }
         return apiKey.substring(0, 4) + "****" + apiKey.substring(apiKey.length() - 4);
@@ -200,7 +224,10 @@ public class AgentUi {
         if (text == null) {
             return "";
         }
-        String singleLine = text.replace("\n", " ").replace("\r", "");
+        if (maxLength <= 0) {
+            return "";
+        }
+        String singleLine = text.replace("\n", " ").replace("\r", " ");
         if (singleLine.length() <= maxLength) {
             return singleLine;
         }

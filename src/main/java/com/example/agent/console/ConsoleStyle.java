@@ -10,6 +10,9 @@ public final class ConsoleStyle {
     }
 
     public static String green(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN))
                 .append(text)
@@ -17,6 +20,9 @@ public final class ConsoleStyle {
     }
 
     public static String yellow(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW))
                 .append(text)
@@ -24,6 +30,9 @@ public final class ConsoleStyle {
     }
 
     public static String red(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
                 .append(text)
@@ -31,6 +40,9 @@ public final class ConsoleStyle {
     }
 
     public static String gray(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BRIGHT | AttributedStyle.BLACK))
                 .append(text)
@@ -38,6 +50,9 @@ public final class ConsoleStyle {
     }
 
     public static String white(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.WHITE))
                 .append(text)
@@ -45,6 +60,9 @@ public final class ConsoleStyle {
     }
 
     public static String cyan(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN))
                 .append(text)
@@ -52,6 +70,9 @@ public final class ConsoleStyle {
     }
 
     public static String bold(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD)
                 .append(text)
@@ -59,6 +80,9 @@ public final class ConsoleStyle {
     }
 
     public static String boldGreen(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD.foreground(AttributedStyle.GREEN))
                 .append(text)
@@ -66,6 +90,9 @@ public final class ConsoleStyle {
     }
 
     public static String boldYellow(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW))
                 .append(text)
@@ -73,6 +100,9 @@ public final class ConsoleStyle {
     }
 
     public static String boldRed(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD.foreground(AttributedStyle.RED))
                 .append(text)
@@ -80,6 +110,9 @@ public final class ConsoleStyle {
     }
 
     public static String boldCyan(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD.foreground(AttributedStyle.CYAN))
                 .append(text)
@@ -87,6 +120,9 @@ public final class ConsoleStyle {
     }
 
     public static String dim(String text) {
+        if (text == null) {
+            return "";
+        }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.DEFAULT.faint())
                 .append(text)
@@ -130,8 +166,9 @@ public final class ConsoleStyle {
     }
 
     public static String conversationDivider(int round) {
+        int safeRound = Math.max(0, round);
         return gray("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄") + "\n" +
-               gray("│ 第 ") + yellow(String.valueOf(round)) + gray(" 轮对话 ") + gray("│") + "\n" +
+               gray("│ 第 ") + yellow(String.valueOf(safeRound)) + gray(" 轮对话 ") + gray("│") + "\n" +
                gray("┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄");
     }
 

@@ -34,6 +34,10 @@ public class CommandDispatcher {
     }
 
     public CommandResult dispatch(String line) throws UserInterruptException, EndOfFileException {
+        if (line == null) {
+            return CommandResult.CONTINUE;
+        }
+        
         line = line.trim();
 
         if (line.isEmpty()) {
@@ -73,7 +77,13 @@ public class CommandDispatcher {
         }
 
         if ("showlog".equalsIgnoreCase(line)) {
-            ui.showLastConversationLog(currentConversationId);
+            if (currentConversationId == null) {
+                ui.println(ConsoleStyle.yellow("还没有对话记录"));
+                ui.println(ConsoleStyle.gray("提示：开始一次对话后，可以使用 showlog 查看日志"));
+                ui.println();
+            } else {
+                ui.showLastConversationLog(currentConversationId);
+            }
             return CommandResult.CONTINUE;
         }
 
@@ -98,7 +108,7 @@ public class CommandDispatcher {
             return false;
         }
 
-        if (config.getApiKey().equals("your-api-key-here")) {
+        if ("your-api-key-here".equals(config.getApiKey())) {
             ui.printDefaultApiKeyWarning();
 
             try {
@@ -106,7 +116,7 @@ public class CommandDispatcher {
                         ? new String(System.console().readPassword())
                         : new Scanner(System.in).nextLine();
 
-                if (!"y".equalsIgnoreCase(input.trim())) {
+                if (input == null || !"y".equalsIgnoreCase(input.trim())) {
                     return false;
                 }
             } catch (Exception e) {

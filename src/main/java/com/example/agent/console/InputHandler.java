@@ -6,16 +6,20 @@ import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
 
+import java.util.Objects;
+
 public class InputHandler {
 
     private static final int MAX_SINGLE_INPUT_TOKENS = 10000;
+    private static final int MAX_MULTILINE_LINES = 1000;
+    private static final int MAX_MULTILINE_CHARS = 100000;
 
     private final LineReader reader;
     private final TokenEstimator tokenEstimator;
 
     public InputHandler(LineReader reader, TokenEstimator tokenEstimator) {
-        this.reader = reader;
-        this.tokenEstimator = tokenEstimator;
+        this.reader = Objects.requireNonNull(reader, "reader cannot be null");
+        this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "tokenEstimator cannot be null");
     }
 
     public String readMultilineInput() {
@@ -25,6 +29,7 @@ public class InputHandler {
         System.out.println();
         System.out.println(ConsoleStyle.gray("输入或粘贴多行内容，单独输入 \"\"\" 结束"));
         System.out.println(ConsoleStyle.gray("或按 Ctrl+C 取消"));
+        System.out.println(ConsoleStyle.gray("最大限制: " + MAX_MULTILINE_LINES + " 行, " + MAX_MULTILINE_CHARS + " 字符"));
         System.out.println();
 
         StringBuilder buffer = new StringBuilder();
@@ -34,7 +39,7 @@ public class InputHandler {
             try {
                 String line = reader.readLine(ConsoleStyle.yellow("... "));
                 
-                if ("\"\"\"".equals(line.trim())) {
+                if (line == null || "\"\"\"".equals(line.trim())) {
                     break;
                 }
                 
@@ -43,6 +48,17 @@ public class InputHandler {
                 }
                 buffer.append(line);
                 lineCount++;
+                
+                // 检查是否超过限制
+                if (lineCount >= MAX_MULTILINE_LINES) {
+                    System.out.println(ConsoleStyle.yellow("已达到最大行数限制 (" + MAX_MULTILINE_LINES + " 行)"));
+                    break;
+                }
+                
+                if (buffer.length() >= MAX_MULTILINE_CHARS) {
+                    System.out.println(ConsoleStyle.yellow("已达到最大字符数限制 (" + MAX_MULTILINE_CHARS + " 字符)"));
+                    break;
+                }
                 
             } catch (UserInterruptException e) {
                 System.out.println(ConsoleStyle.info("已取消多行输入"));
@@ -65,6 +81,13 @@ public class InputHandler {
     }
 
     public String handleLongInput(String input, int tokens) {
+        if (input == null || input.isEmpty()) {
+            return null;
+        }
+        if (tokens <= 0) {
+            return input;
+        }
+        
         System.out.println();
         System.out.println(ConsoleStyle.boldYellow("╔══════════════════════════════════════════════════╗"));
         System.out.println(ConsoleStyle.boldYellow("║              ⚠ 输入内容过长                        ║"));
@@ -121,6 +144,12 @@ public class InputHandler {
                     System.out.println(ConsoleStyle.yellow("无效选择，已取消"));
                     return null;
             }
+        } catch (UserInterruptException e) {
+            System.out.println(ConsoleStyle.info("已取消"));
+            return null;
+        } catch (EndOfFileException e) {
+            System.out.println(ConsoleStyle.info("已取消"));
+            return null;
         } catch (Exception e) {
             System.out.println(ConsoleStyle.info("已取消"));
             return null;
@@ -129,6 +158,7 @@ public class InputHandler {
 
     public String truncate(String text, int maxLength) {
         if (text == null) return "";
+        if (maxLength <= 0) return "";
         if (text.length() <= maxLength) return text;
         return text.substring(0, maxLength) + "...";
     }
