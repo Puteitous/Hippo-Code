@@ -22,7 +22,7 @@ class TokenEstimatorTest {
 
     @BeforeEach
     void setUp() {
-        estimator = new TokenEstimator();
+        estimator = new SimpleTokenEstimator();
     }
 
     @Nested

@@ -4,6 +4,8 @@ import com.example.agent.context.Compressor;
 import com.example.agent.context.TrimPolicy;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.llm.model.Message;
+import com.example.agent.service.SimpleTokenEstimator;
+import com.example.agent.service.TokenEstimator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,7 +28,7 @@ class ConversationManagerTest {
 
     @BeforeEach
     void setUp() {
-        tokenEstimator = new TokenEstimator();
+        tokenEstimator = new SimpleTokenEstimator();
         trimPolicy = mock(TrimPolicy.class);
         compressor = mock(Compressor.class);
         config = new ContextConfig();

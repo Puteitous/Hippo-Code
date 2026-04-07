@@ -5,6 +5,7 @@ import com.example.agent.llm.model.Choice;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Usage;
 import com.example.agent.service.ConversationManager;
+import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
 import org.junit.jupiter.api.*;
 
@@ -22,7 +23,7 @@ class EmptyResponseRetryTest {
 
     @BeforeEach
     void setUp() {
-        tokenEstimator = new TokenEstimator();
+        tokenEstimator = new SimpleTokenEstimator();
         conversationManager = new ConversationManager("You are a helpful assistant.", tokenEstimator);
     }
 

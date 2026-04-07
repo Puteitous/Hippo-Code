@@ -2,6 +2,7 @@ package com.example.agent.context.compressor;
 
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.llm.model.Message;
+import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +20,7 @@ class TruncateCompressorTest {
 
     @BeforeEach
     void setUp() {
-        tokenEstimator = new TokenEstimator();
+        tokenEstimator = new SimpleTokenEstimator();
         ContextConfig.ToolResultConfig config = new ContextConfig.ToolResultConfig();
         config.setMaxTokens(100);
         config.setTruncateStrategy("tail");

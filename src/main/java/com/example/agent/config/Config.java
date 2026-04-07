@@ -23,6 +23,7 @@ public class Config {
     private UiConfig ui = new UiConfig();
     private ContextConfig context = new ContextConfig();
     private IntentConfig intent = new IntentConfig();
+    private TokenEstimatorConfig tokenizer = new TokenEstimatorConfig();
 
     private transient ConfigLoader configLoader;
 
@@ -223,6 +224,14 @@ public class Config {
 
     public void setIntent(IntentConfig intent) {
         this.intent = intent;
+    }
+
+    public TokenEstimatorConfig getTokenizer() {
+        return tokenizer;
+    }
+
+    public void setTokenizer(TokenEstimatorConfig tokenizer) {
+        this.tokenizer = tokenizer;
     }
 
     @Deprecated

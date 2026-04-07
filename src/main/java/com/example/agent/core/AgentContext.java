@@ -8,6 +8,7 @@ import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.*;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import org.jline.reader.LineReader;
@@ -82,7 +83,7 @@ public class AgentContext {
         this.llmClient = new DefaultLlmClient(config);
         this.toolRegistry = createToolRegistry();
         this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
-        this.tokenEstimator = new TokenEstimator();
+        this.tokenEstimator = TokenEstimatorFactory.create(config);
         this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
     }
 

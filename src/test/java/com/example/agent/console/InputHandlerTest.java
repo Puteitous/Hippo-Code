@@ -1,5 +1,6 @@
 package com.example.agent.console;
 
+import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
 import org.jline.reader.LineReader;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,7 @@ class InputHandlerTest {
     @BeforeEach
     void setUp() {
         reader = mock(LineReader.class);
-        tokenEstimator = new TokenEstimator();
+        tokenEstimator = new SimpleTokenEstimator();
         inputHandler = new InputHandler(reader, tokenEstimator);
     }
 
