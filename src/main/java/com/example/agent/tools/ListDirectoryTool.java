@@ -80,10 +80,26 @@ public class ListDirectoryTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        String directoryPath = arguments.has("path") ? arguments.get("path").asText() : ".";
-        boolean recursive = arguments.has("recursive") && arguments.get("recursive").asBoolean();
-        int maxDepth = arguments.has("max_depth") ? arguments.get("max_depth").asInt() : DEFAULT_MAX_DEPTH;
-        boolean showHidden = arguments.has("show_hidden") && arguments.get("show_hidden").asBoolean();
+        String directoryPath = ".";
+        if (arguments.has("path") && !arguments.get("path").isNull()) {
+            String pathValue = arguments.get("path").asText();
+            if (pathValue != null && !pathValue.trim().isEmpty()) {
+                directoryPath = pathValue;
+            }
+        }
+        
+        boolean recursive = arguments.has("recursive") && 
+                           !arguments.get("recursive").isNull() && 
+                           arguments.get("recursive").asBoolean();
+        
+        int maxDepth = DEFAULT_MAX_DEPTH;
+        if (arguments.has("max_depth") && !arguments.get("max_depth").isNull()) {
+            maxDepth = arguments.get("max_depth").asInt();
+        }
+        
+        boolean showHidden = arguments.has("show_hidden") && 
+                            !arguments.get("show_hidden").isNull() && 
+                            arguments.get("show_hidden").asBoolean();
 
         maxDepth = Math.max(1, Math.min(5, maxDepth));
 

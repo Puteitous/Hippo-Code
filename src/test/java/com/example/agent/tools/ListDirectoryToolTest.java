@@ -104,4 +104,106 @@ class ListDirectoryToolTest {
         assertEquals(1, paths.size());
         assertEquals("src", paths.get(0));
     }
+
+    @Test
+    void testNullPathParameter() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.putNull("path");
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录内容"));
+    }
+
+    @Test
+    void testEmptyPath() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", "");
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录内容"));
+    }
+
+    @Test
+    void testNullRecursiveParameter() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.putNull("recursive");
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录内容"));
+    }
+
+    @Test
+    void testNullMaxDepthParameter() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.put("recursive", true);
+        args.putNull("max_depth");
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录树"));
+    }
+
+    @Test
+    void testNullShowHiddenParameter() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.putNull("show_hidden");
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录内容"));
+    }
+
+    @Test
+    void testNegativeMaxDepth() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.put("recursive", true);
+        args.put("max_depth", -1);
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录树"));
+    }
+
+    @Test
+    void testExcessiveMaxDepth() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.put("recursive", true);
+        args.put("max_depth", 100);
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录树"));
+    }
+
+    @Test
+    void testShowHiddenFiles() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.put("show_hidden", true);
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录内容"));
+    }
+
+    @Test
+    void testRecursiveWithShowHidden() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", ".");
+        args.put("recursive", true);
+        args.put("show_hidden", true);
+        args.put("max_depth", 1);
+        
+        String result = tool.execute(args);
+        assertNotNull(result);
+        assertTrue(result.contains("目录树"));
+    }
 }

@@ -12,6 +12,8 @@ import java.util.List;
 
 public class WriteFileTool implements ToolExecutor {
 
+    private static final long MAX_CONTENT_SIZE = 10 * 1024 * 1024;
+
     @Override
     public String getName() {
         return "write_file";
@@ -57,15 +59,28 @@ public class WriteFileTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("path")) {
+        if (!arguments.has("path") || arguments.get("path").isNull()) {
             throw new ToolExecutionException("缺少必需参数: path");
         }
-        if (!arguments.has("content")) {
+        if (!arguments.has("content") || arguments.get("content").isNull()) {
             throw new ToolExecutionException("缺少必需参数: content");
         }
 
         String filePath = arguments.get("path").asText();
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new ToolExecutionException("path 参数不能为空");
+        }
+        
         String content = arguments.get("content").asText();
+        if (content == null) {
+            content = "";
+        }
+        
+        if (content.length() > MAX_CONTENT_SIZE) {
+            throw new ToolExecutionException(
+                String.format("内容过大（%d 字符），最大支持 %d 字符（10MB）", 
+                    content.length(), MAX_CONTENT_SIZE));
+        }
 
         Path path = PathSecurityUtils.validateAndResolve(filePath);
 

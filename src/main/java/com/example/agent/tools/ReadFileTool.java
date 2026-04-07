@@ -11,6 +11,8 @@ import java.util.List;
 
 public class ReadFileTool implements ToolExecutor {
 
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+
     @Override
     public String getName() {
         return "read_file";
@@ -52,11 +54,14 @@ public class ReadFileTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("path")) {
+        if (!arguments.has("path") || arguments.get("path").isNull()) {
             throw new ToolExecutionException("缺少必需参数: path");
         }
 
         String filePath = arguments.get("path").asText();
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new ToolExecutionException("path 参数不能为空");
+        }
         
         Path path = PathSecurityUtils.validateAndResolve(filePath);
 
@@ -73,6 +78,12 @@ public class ReadFileTool implements ToolExecutor {
         }
 
         try {
+            long fileSize = Files.size(path);
+            if (fileSize > MAX_FILE_SIZE) {
+                throw new ToolExecutionException(
+                    String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
+            }
+            
             String content = Files.readString(path, StandardCharsets.UTF_8);
             String relativePath = PathSecurityUtils.getRelativePath(path);
             
