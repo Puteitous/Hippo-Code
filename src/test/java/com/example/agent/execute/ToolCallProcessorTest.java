@@ -268,7 +268,7 @@ class ToolCallProcessorTest {
             verify(logger).logToolCall(
                 eq("nonexistent"),
                 eq("{}"),
-                contains("Unknown tool"),
+                contains("未知的工具"),
                 anyLong(),
                 eq(false)
             );

@@ -91,7 +91,7 @@ class ConcurrentToolExecutorTest {
 
             assertEquals(1, results.size());
             assertFalse(results.get(0).isSuccess());
-            assertTrue(results.get(0).getErrorMessage().contains("Unknown tool"));
+            assertTrue(results.get(0).getErrorMessage().contains("未知的工具"));
         }
 
         @Test
