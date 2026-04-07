@@ -76,4 +76,34 @@ class AskUserToolTest {
         assertTrue(schema.contains("\"type\": \"array\""));
         assertTrue(schema.contains("\"type\": \"boolean\""));
     }
+
+    @Test
+    void testNullQuestionParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.putNull("question");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
+
+    @Test
+    void testEmptyQuestion() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("question", "");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
+
+    @Test
+    void testWhitespaceQuestion() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("question", "   ");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
 }

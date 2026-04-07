@@ -12,6 +12,8 @@ import java.util.List;
 
 public class EditFileTool implements ToolExecutor {
 
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+
     @Override
     public String getName() {
         return "edit_file";
@@ -63,17 +65,21 @@ public class EditFileTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("path")) {
+        if (!arguments.has("path") || arguments.get("path").isNull()) {
             throw new ToolExecutionException("缺少必需参数: path");
         }
-        if (!arguments.has("old_text")) {
+        if (!arguments.has("old_text") || arguments.get("old_text").isNull()) {
             throw new ToolExecutionException("缺少必需参数: old_text");
         }
-        if (!arguments.has("new_text")) {
+        if (!arguments.has("new_text") || arguments.get("new_text").isNull()) {
             throw new ToolExecutionException("缺少必需参数: new_text");
         }
 
         String filePath = arguments.get("path").asText();
+        if (filePath == null || filePath.trim().isEmpty()) {
+            throw new ToolExecutionException("path 参数不能为空");
+        }
+        
         String oldText = arguments.get("old_text").asText();
         String newText = arguments.get("new_text").asText();
 
@@ -100,6 +106,12 @@ public class EditFileTool implements ToolExecutor {
         }
 
         try {
+            long fileSize = Files.size(path);
+            if (fileSize > MAX_FILE_SIZE) {
+                throw new ToolExecutionException(
+                    String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
+            }
+            
             String content = Files.readString(path, StandardCharsets.UTF_8);
             
             int firstIndex = content.indexOf(oldText);

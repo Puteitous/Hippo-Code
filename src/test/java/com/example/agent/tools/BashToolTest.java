@@ -135,4 +135,168 @@ class BashToolTest {
             tool.execute(args);
         });
     }
+
+    @Test
+    void testNullCommandParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.putNull("command");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
+
+    @Test
+    void testEmptyCommand() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
+
+    @Test
+    void testWhitespaceCommand() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "   ");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
+
+    @Test
+    void testNullTimeoutParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.putNull("timeout");
+        
+        try {
+            String result = tool.execute(args);
+            assertNotNull(result);
+            assertTrue(result.contains("命令执行结果"));
+        } catch (ToolExecutionException e) {
+            assertTrue(e.getMessage().contains("安全限制") || e.getMessage().contains("git"));
+        }
+    }
+
+    @Test
+    void testNullWorkingDirParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.putNull("working_dir");
+        
+        try {
+            String result = tool.execute(args);
+            assertNotNull(result);
+            assertTrue(result.contains("命令执行结果"));
+        } catch (ToolExecutionException e) {
+            assertTrue(e.getMessage().contains("安全限制") || e.getMessage().contains("git"));
+        }
+    }
+
+    @Test
+    void testEmptyWorkingDir() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.put("working_dir", "");
+        
+        try {
+            String result = tool.execute(args);
+            assertNotNull(result);
+            assertTrue(result.contains("命令执行结果"));
+        } catch (ToolExecutionException e) {
+            assertTrue(e.getMessage().contains("安全限制") || e.getMessage().contains("git"));
+        }
+    }
+
+    @Test
+    void testNegativeTimeout() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.put("timeout", -1);
+        
+        try {
+            String result = tool.execute(args);
+            assertNotNull(result);
+            assertTrue(result.contains("命令执行结果"));
+        } catch (ToolExecutionException e) {
+            assertTrue(e.getMessage().contains("安全限制") || e.getMessage().contains("git"));
+        }
+    }
+
+    @Test
+    void testExcessiveTimeout() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.put("timeout", 10000);
+        
+        try {
+            String result = tool.execute(args);
+            assertNotNull(result);
+            assertTrue(result.contains("命令执行结果"));
+        } catch (ToolExecutionException e) {
+            assertTrue(e.getMessage().contains("安全限制") || e.getMessage().contains("git"));
+        }
+    }
+
+    @Test
+    void testDangerousPatternRmRf() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git rm -rf .");
+        
+        ToolExecutionException exception = assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+        
+        assertTrue(exception.getMessage().contains("危险命令模式"));
+    }
+
+    @Test
+    void testBlockedPipeOperator() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git log | head");
+        
+        ToolExecutionException exception = assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+        
+        assertTrue(exception.getMessage().contains("安全限制"));
+    }
+
+    @Test
+    void testBlockedRedirectOperator() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "echo test > file.txt");
+        
+        ToolExecutionException exception = assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+        
+        assertTrue(exception.getMessage().contains("安全限制"));
+    }
+
+    @Test
+    void testBlockedSemicolonOperator() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status; ls");
+        
+        ToolExecutionException exception = assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+        
+        assertTrue(exception.getMessage().contains("安全限制"));
+    }
+
+    @Test
+    void testWorkingDirIsFile() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("command", "git status");
+        args.put("working_dir", "pom.xml");
+        
+        assertThrows(ToolExecutionException.class, () -> {
+            tool.execute(args);
+        });
+    }
 }

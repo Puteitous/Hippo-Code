@@ -64,22 +64,32 @@ public class AskUserTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("question")) {
+        if (!arguments.has("question") || arguments.get("question").isNull()) {
             throw new ToolExecutionException("缺少必需参数: question");
         }
 
         String question = arguments.get("question").asText();
+        if (question == null || question.trim().isEmpty()) {
+            throw new ToolExecutionException("question 参数不能为空");
+        }
+        
         List<String> options = new ArrayList<>();
         
         if (arguments.has("options") && arguments.get("options").isArray()) {
-            ArrayNode optionsArray = (ArrayNode) arguments.get("options");
-            for (JsonNode option : optionsArray) {
-                options.add(option.asText());
+            for (JsonNode option : arguments.get("options")) {
+                if (!option.isNull()) {
+                    String optionText = option.asText();
+                    if (optionText != null && !optionText.trim().isEmpty()) {
+                        options.add(optionText);
+                    }
+                }
             }
         }
 
-        boolean allowCustomInput = !arguments.has("allow_custom_input") || 
-                                    arguments.get("allow_custom_input").asBoolean();
+        boolean allowCustomInput = true;
+        if (arguments.has("allow_custom_input") && !arguments.get("allow_custom_input").isNull()) {
+            allowCustomInput = arguments.get("allow_custom_input").asBoolean();
+        }
 
         try {
             String answer = promptUser(question, options, allowCustomInput);

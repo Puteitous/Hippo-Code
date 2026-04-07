@@ -93,15 +93,28 @@ public class BashTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("command")) {
+        if (!arguments.has("command") || arguments.get("command").isNull()) {
             throw new ToolExecutionException("缺少必需参数: command");
         }
 
-        String command = arguments.get("command").asText().trim();
-        int timeout = arguments.has("timeout") ? 
-            arguments.get("timeout").asInt() : DEFAULT_TIMEOUT;
-        String workingDir = arguments.has("working_dir") ? 
-            arguments.get("working_dir").asText() : ".";
+        String command = arguments.get("command").asText();
+        if (command == null || command.trim().isEmpty()) {
+            throw new ToolExecutionException("command 参数不能为空");
+        }
+        command = command.trim();
+        
+        int timeout = DEFAULT_TIMEOUT;
+        if (arguments.has("timeout") && !arguments.get("timeout").isNull()) {
+            timeout = arguments.get("timeout").asInt();
+        }
+        
+        String workingDir = ".";
+        if (arguments.has("working_dir") && !arguments.get("working_dir").isNull()) {
+            String dirValue = arguments.get("working_dir").asText();
+            if (dirValue != null && !dirValue.trim().isEmpty()) {
+                workingDir = dirValue;
+            }
+        }
         
         timeout = Math.max(1, Math.min(MAX_TIMEOUT, timeout));
 

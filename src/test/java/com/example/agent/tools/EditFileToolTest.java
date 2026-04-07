@@ -421,4 +421,170 @@ class EditFileToolTest {
         assertNotNull(paths);
         assertTrue(paths.isEmpty());
     }
+
+    @Test
+    void testNullPathParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.putNull("path");
+        args.put("old_text", "test");
+        args.put("new_text", "replacement");
+        
+        assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+    }
+
+    @Test
+    void testEmptyPathParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", "");
+        args.put("old_text", "test");
+        args.put("new_text", "replacement");
+        
+        assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+    }
+
+    @Test
+    void testWhitespacePathParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", "   ");
+        args.put("old_text", "test");
+        args.put("new_text", "replacement");
+        
+        assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+    }
+
+    @Test
+    void testNullOldTextParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", "test.txt");
+        args.putNull("old_text");
+        args.put("new_text", "replacement");
+        
+        assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+    }
+
+    @Test
+    void testNullNewTextParameter() {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("path", "test.txt");
+        args.put("old_text", "test");
+        args.putNull("new_text");
+        
+        assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+    }
+
+    @Test
+    void testEditLargeFile() throws Exception {
+        try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
+             MockedStatic<Files> filesMock = mockStatic(Files.class)) {
+            
+            securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
+            
+            filesMock.when(() -> Files.exists(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isWritable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.size(mockPath)).thenReturn(20 * 1024 * 1024L);
+            
+            ObjectNode args = objectMapper.createObjectNode();
+            args.put("path", "test.txt");
+            args.put("old_text", "test");
+            args.put("new_text", "replacement");
+            
+            ToolExecutionException exception = assertThrows(ToolExecutionException.class, () -> tool.execute(args));
+            assertTrue(exception.getMessage().contains("文件过大"));
+        }
+    }
+
+    @Test
+    void testEditWithUnicodeContent() throws Exception {
+        String fileContent = "你好世界\nHello World\n🎉 Emoji";
+        
+        try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
+             MockedStatic<Files> filesMock = mockStatic(Files.class)) {
+            
+            securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
+            securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
+            
+            filesMock.when(() -> Files.exists(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isWritable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.size(mockPath)).thenReturn((long) fileContent.length());
+            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
+            filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
+                any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            
+            ObjectNode args = objectMapper.createObjectNode();
+            args.put("path", "test.txt");
+            args.put("old_text", "你好世界");
+            args.put("new_text", "Hello World CN");
+            
+            String result = tool.execute(args);
+            
+            assertNotNull(result);
+            assertTrue(result.contains("文件编辑成功"));
+        }
+    }
+
+    @Test
+    void testEditWithSpecialCharacters() throws Exception {
+        String fileContent = "Line with $var and \"quotes\" and 'apostrophes'";
+        
+        try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
+             MockedStatic<Files> filesMock = mockStatic(Files.class)) {
+            
+            securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
+            securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
+            
+            filesMock.when(() -> Files.exists(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isWritable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.size(mockPath)).thenReturn((long) fileContent.length());
+            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
+            filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
+                any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            
+            ObjectNode args = objectMapper.createObjectNode();
+            args.put("path", "test.txt");
+            args.put("old_text", "$var");
+            args.put("new_text", "${variable}");
+            
+            String result = tool.execute(args);
+            
+            assertNotNull(result);
+            assertTrue(result.contains("文件编辑成功"));
+        }
+    }
+
+    @Test
+    void testEditWithNewlines() throws Exception {
+        String fileContent = "Line 1\r\nLine 2\r\nLine 3";
+        
+        try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
+             MockedStatic<Files> filesMock = mockStatic(Files.class)) {
+            
+            securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
+            securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
+            
+            filesMock.when(() -> Files.exists(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.isWritable(mockPath)).thenReturn(true);
+            filesMock.when(() -> Files.size(mockPath)).thenReturn((long) fileContent.length());
+            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
+            filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
+                any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            
+            ObjectNode args = objectMapper.createObjectNode();
+            args.put("path", "test.txt");
+            args.put("old_text", "Line 2");
+            args.put("new_text", "Modified Line 2");
+            
+            String result = tool.execute(args);
+            
+            assertNotNull(result);
+            assertTrue(result.contains("文件编辑成功"));
+        }
+    }
 }
