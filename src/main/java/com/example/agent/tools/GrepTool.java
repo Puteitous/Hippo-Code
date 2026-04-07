@@ -90,8 +90,15 @@ public class GrepTool implements ToolExecutor {
         }
 
         String patternStr = arguments.get("pattern").asText();
-        String searchPath = arguments.has("path") ? arguments.get("path").asText() : ".";
-        String filePattern = arguments.has("file_pattern") ? arguments.get("file_pattern").asText() : null;
+        String searchPath = ".";
+        if (arguments.has("path") && !arguments.get("path").isNull()) {
+            String pathValue = arguments.get("path").asText();
+            if (pathValue != null && !pathValue.trim().isEmpty()) {
+                searchPath = pathValue;
+            }
+        }
+        String filePattern = arguments.has("file_pattern") && !arguments.get("file_pattern").isNull() 
+            ? arguments.get("file_pattern").asText() : null;
         boolean caseSensitive = arguments.has("case_sensitive") && arguments.get("case_sensitive").asBoolean();
         int maxResults = arguments.has("max_results") ? arguments.get("max_results").asInt() : 100;
         
@@ -151,12 +158,7 @@ public class GrepTool implements ToolExecutor {
     }
 
     private boolean isWithinProject(Path path) {
-        try {
-            PathSecurityUtils.validateAndResolve(path.toString());
-            return true;
-        } catch (ToolExecutionException e) {
-            return false;
-        }
+        return PathSecurityUtils.isWithinProject(path);
     }
 
     private boolean matchesFilePattern(Path path, String filePattern) {

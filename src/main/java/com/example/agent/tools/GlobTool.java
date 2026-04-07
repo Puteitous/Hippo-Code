@@ -78,13 +78,27 @@ public class GlobTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        if (!arguments.has("pattern")) {
+        if (!arguments.has("pattern") || arguments.get("pattern").isNull()) {
             throw new ToolExecutionException("缺少必需参数: pattern");
         }
 
         String pattern = arguments.get("pattern").asText();
-        String searchPath = arguments.has("path") ? arguments.get("path").asText() : ".";
-        int maxResults = arguments.has("max_results") ? arguments.get("max_results").asInt() : 100;
+        if (pattern == null || pattern.trim().isEmpty()) {
+            throw new ToolExecutionException("pattern 参数不能为空");
+        }
+        
+        String searchPath = ".";
+        if (arguments.has("path") && !arguments.get("path").isNull()) {
+            String pathValue = arguments.get("path").asText();
+            if (pathValue != null && !pathValue.trim().isEmpty()) {
+                searchPath = pathValue;
+            }
+        }
+        
+        int maxResults = 100;
+        if (arguments.has("max_results") && !arguments.get("max_results").isNull()) {
+            maxResults = arguments.get("max_results").asInt();
+        }
         
         maxResults = Math.max(1, Math.min(MAX_RESULTS, maxResults));
 
@@ -104,7 +118,12 @@ public class GlobTool implements ToolExecutor {
 
         try {
             String normalizedPattern = normalizePattern(pattern);
-            PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + normalizedPattern);
+            PathMatcher matcher;
+            try {
+                matcher = FileSystems.getDefault().getPathMatcher("glob:" + normalizedPattern);
+            } catch (Exception e) {
+                throw new ToolExecutionException("无效的 glob 模式: " + pattern + " (" + e.getMessage() + ")");
+            }
             
             List<FileInfo> results;
             try (Stream<Path> stream = Files.walk(basePath, MAX_DEPTH)) {
@@ -127,19 +146,37 @@ public class GlobTool implements ToolExecutor {
     }
 
     private String normalizePattern(String pattern) {
-        if (!pattern.startsWith("**") && !pattern.startsWith("/") && !pattern.contains("/")) {
+        if (pattern == null || pattern.isEmpty()) {
+            return "*";
+        }
+        
+        if (pattern.equals("**")) {
+            return "**";
+        }
+        
+        if (pattern.startsWith("**/")) {
+            String basePattern = pattern.substring(3);
+            if (basePattern.isEmpty()) {
+                return "**";
+            }
+            if (pattern.contains("{") && pattern.contains("}")) {
+                return pattern;
+            }
+            return "{" + basePattern + "," + pattern + "}";
+        }
+        
+        if (!pattern.startsWith("/") && !pattern.contains("/")) {
+            if (pattern.contains("{") && pattern.contains("}")) {
+                return pattern;
+            }
             return "{" + pattern + ",**/" + pattern + "}";
         }
+        
         return pattern;
     }
 
     private boolean isWithinProject(Path path) {
-        try {
-            PathSecurityUtils.validateAndResolve(path.toString());
-            return true;
-        } catch (ToolExecutionException e) {
-            return false;
-        }
+        return PathSecurityUtils.isWithinProject(path);
     }
 
     private FileInfo toFileInfo(Path path) {
@@ -148,9 +185,10 @@ public class GlobTool implements ToolExecutor {
             long size = attrs.size();
             FileTime modifiedTime = attrs.lastModifiedTime();
             String relativePath = PathSecurityUtils.getRelativePath(path);
-            return new FileInfo(relativePath, size, modifiedTime);
+            return new FileInfo(relativePath != null ? relativePath : path.toString(), size, modifiedTime);
         } catch (IOException e) {
-            return new FileInfo(PathSecurityUtils.getRelativePath(path), 0, FileTime.fromMillis(0));
+            String relativePath = PathSecurityUtils.getRelativePath(path);
+            return new FileInfo(relativePath != null ? relativePath : path.toString(), 0, FileTime.fromMillis(0));
         }
     }
 
@@ -167,7 +205,8 @@ public class GlobTool implements ToolExecutor {
             sb.append("未找到匹配的文件\n");
         } else {
             for (FileInfo info : results) {
-                sb.append("📄 ").append(String.format("%-50s", info.relativePath));
+                String displayPath = info.relativePath != null ? info.relativePath : "(unknown)";
+                sb.append("📄 ").append(String.format("%-50s", displayPath));
                 sb.append("  ").append(String.format("%8s", formatSize(info.size)));
                 sb.append("  ").append(formatTime(info.modifiedTime)).append("\n");
             }

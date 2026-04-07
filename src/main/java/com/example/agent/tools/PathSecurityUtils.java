@@ -23,13 +23,17 @@ public class PathSecurityUtils {
     );
 
     public static Path validateAndResolve(String filePath) throws ToolExecutionException {
+        if (filePath == null || filePath.isEmpty()) {
+            return PROJECT_ROOT;
+        }
+        
         Path path = Paths.get(filePath);
         
         if (!path.isAbsolute()) {
             path = PROJECT_ROOT.resolve(path);
         }
         
-        path = path.toAbsolutePath().normalize();
+        path = path.normalize();
         
         if (!isWithinProject(path)) {
             throw new ToolExecutionException(
@@ -49,10 +53,11 @@ public class PathSecurityUtils {
     }
 
     public static boolean isWithinProject(Path path) {
+        if (path == null) {
+            return false;
+        }
         Path normalizedPath = path.toAbsolutePath().normalize();
-        Path normalizedRoot = PROJECT_ROOT.toAbsolutePath().normalize();
-        
-        return normalizedPath.startsWith(normalizedRoot);
+        return normalizedPath.startsWith(PROJECT_ROOT);
     }
 
     public static Path getProjectRoot() {
