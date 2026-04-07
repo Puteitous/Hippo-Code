@@ -61,7 +61,16 @@ public class ToolsConfig {
             if (whitelist == null || whitelist.isEmpty()) {
                 return true;
             }
-            String baseCommand = command.split("\\s+")[0];
+            String trimmedCommand = command.trim();
+            if (trimmedCommand.isEmpty()) {
+                return false;
+            }
+            if (trimmedCommand.contains(";") || trimmedCommand.contains("&&") || 
+                trimmedCommand.contains("||") || trimmedCommand.contains("|") ||
+                trimmedCommand.contains("`") || trimmedCommand.contains("$(")) {
+                return false;
+            }
+            String baseCommand = trimmedCommand.split("\\s+")[0];
             return whitelist.contains(baseCommand);
         }
     }
@@ -128,17 +137,22 @@ public class ToolsConfig {
             if (size == null || size.isEmpty()) {
                 return 10 * 1024 * 1024;
             }
-            size = size.toUpperCase().trim();
-            if (size.endsWith("GB")) {
-                return Long.parseLong(size.replace("GB", "").trim()) * 1024 * 1024 * 1024;
-            } else if (size.endsWith("MB")) {
-                return Long.parseLong(size.replace("MB", "").trim()) * 1024 * 1024;
-            } else if (size.endsWith("KB")) {
-                return Long.parseLong(size.replace("KB", "").trim()) * 1024;
-            } else if (size.endsWith("B")) {
-                return Long.parseLong(size.replace("B", "").trim());
+            try {
+                size = size.toUpperCase().trim();
+                if (size.endsWith("GB")) {
+                    return Long.parseLong(size.replace("GB", "").trim()) * 1024 * 1024 * 1024;
+                } else if (size.endsWith("MB")) {
+                    return Long.parseLong(size.replace("MB", "").trim()) * 1024 * 1024;
+                } else if (size.endsWith("KB")) {
+                    return Long.parseLong(size.replace("KB", "").trim()) * 1024;
+                } else if (size.endsWith("B")) {
+                    return Long.parseLong(size.replace("B", "").trim());
+                }
+                return Long.parseLong(size);
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid file size format: " + size + ", using default 10MB");
+                return 10 * 1024 * 1024;
             }
-            return Long.parseLong(size);
         }
 
         public boolean isExtensionBlocked(String fileName) {

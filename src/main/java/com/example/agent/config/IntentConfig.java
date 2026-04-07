@@ -88,6 +88,9 @@ public class IntentConfig {
         }
 
         public void setHighConfidenceThreshold(double highConfidenceThreshold) {
+            if (highConfidenceThreshold < 0 || highConfidenceThreshold > 1) {
+                throw new IllegalArgumentException("High confidence threshold must be between 0 and 1");
+            }
             this.highConfidenceThreshold = highConfidenceThreshold;
         }
 
@@ -96,6 +99,9 @@ public class IntentConfig {
         }
 
         public void setLowConfidenceThreshold(double lowConfidenceThreshold) {
+            if (lowConfidenceThreshold < 0 || lowConfidenceThreshold > 1) {
+                throw new IllegalArgumentException("Low confidence threshold must be between 0 and 1");
+            }
             this.lowConfidenceThreshold = lowConfidenceThreshold;
         }
 
@@ -160,6 +166,9 @@ public class IntentConfig {
         }
 
         public void setHighConfidenceThreshold(double highConfidenceThreshold) {
+            if (highConfidenceThreshold < 0 || highConfidenceThreshold > 1) {
+                throw new IllegalArgumentException("High confidence threshold must be between 0 and 1");
+            }
             this.highConfidenceThreshold = highConfidenceThreshold;
         }
 
@@ -168,6 +177,9 @@ public class IntentConfig {
         }
 
         public void setLowConfidenceThreshold(double lowConfidenceThreshold) {
+            if (lowConfidenceThreshold < 0 || lowConfidenceThreshold > 1) {
+                throw new IllegalArgumentException("Low confidence threshold must be between 0 and 1");
+            }
             this.lowConfidenceThreshold = lowConfidenceThreshold;
         }
 

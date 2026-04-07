@@ -111,6 +111,7 @@ public class Config {
                 this.ui = reloaded.ui;
                 this.context = reloaded.context;
                 this.intent = reloaded.intent;
+                this.tokenizer = reloaded.tokenizer;
                 this.loadFromEnvironment();
                 System.out.println("Configuration reloaded from: " + configFile.getAbsolutePath());
             } catch (IOException e) {

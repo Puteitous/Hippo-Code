@@ -13,7 +13,7 @@ public class EnvVariableResolver {
             return value;
         }
 
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
         Matcher matcher = ENV_VAR_PATTERN.matcher(value);
 
         while (matcher.find()) {

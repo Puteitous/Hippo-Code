@@ -76,6 +76,9 @@ public class LlmConfig {
     }
 
     public void setTemperature(double temperature) {
+        if (temperature < 0 || temperature > 2) {
+            throw new IllegalArgumentException("Temperature must be between 0 and 2");
+        }
         this.temperature = temperature;
     }
 
@@ -84,6 +87,9 @@ public class LlmConfig {
     }
 
     public void setTimeout(int timeout) {
+        if (timeout <= 0) {
+            throw new IllegalArgumentException("Timeout must be greater than 0");
+        }
         this.timeout = timeout;
     }
 
