@@ -216,4 +216,56 @@ public class PathSecurityUtilsTest {
         assertTrue(path.isAbsolute());
     }
 
+    @Test
+    void testValidateAndResolveWithNullPath() throws ToolExecutionException {
+        Path path = PathSecurityUtils.validateAndResolve(null);
+        assertNotNull(path);
+        assertEquals(PathSecurityUtils.getProjectRoot(), path);
+    }
+
+    @Test
+    void testValidateAndResolveWithWhitespacePath() throws ToolExecutionException {
+        Path path = PathSecurityUtils.validateAndResolve("   ");
+        assertNotNull(path);
+        assertTrue(path.isAbsolute());
+    }
+
+    @Test
+    void testIsWithinProjectWithNullPath() {
+        assertFalse(PathSecurityUtils.isWithinProject(null));
+    }
+
+    @Test
+    void testGetRelativePathWithNullPath() {
+        String relative = PathSecurityUtils.getRelativePath(null);
+        assertEquals("null", relative);
+    }
+
+    @Test
+    void testValidateAndResolveWithVeryLongPath() throws ToolExecutionException {
+        StringBuilder longPath = new StringBuilder("src/");
+        for (int i = 0; i < 10; i++) {
+            longPath.append("subdir").append(i).append("/");
+        }
+        longPath.append("file.txt");
+        
+        Path path = PathSecurityUtils.validateAndResolve(longPath.toString());
+        assertNotNull(path);
+        assertTrue(path.isAbsolute());
+    }
+
+    @Test
+    void testValidateAndResolveWithSpecialCharacters() throws ToolExecutionException {
+        Path path = PathSecurityUtils.validateAndResolve("src/test file.txt");
+        assertNotNull(path);
+        assertTrue(path.isAbsolute());
+    }
+
+    @Test
+    void testValidateAndResolveWithUnicodePath() throws ToolExecutionException {
+        Path path = PathSecurityUtils.validateAndResolve("src/测试文件.txt");
+        assertNotNull(path);
+        assertTrue(path.isAbsolute());
+    }
+
 }

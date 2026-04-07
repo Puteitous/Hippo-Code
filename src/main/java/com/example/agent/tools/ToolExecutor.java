@@ -16,6 +16,11 @@ public interface ToolExecutor {
     String execute(JsonNode arguments) throws ToolExecutionException;
 
     default List<String> getAffectedPaths(JsonNode arguments) {
+        List<String> paths = doGetAffectedPaths(arguments);
+        return paths != null ? paths : Collections.emptyList();
+    }
+    
+    default List<String> doGetAffectedPaths(JsonNode arguments) {
         return Collections.emptyList();
     }
 

@@ -16,9 +16,12 @@ public class ToolExecutionLogger {
     private static final DateTimeFormatter TIMESTAMP_FORMAT = 
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
+    private static final int MAX_LOG_LENGTH = 10000;
+    
     private final ConcurrentHashMap<String, ToolMetrics> metricsMap;
     private final Path logFile;
     private final boolean enableFileLogging;
+    private volatile boolean fileLoggingFailed = false;
     
     public ToolExecutionLogger() {
         this(null, false);
@@ -43,12 +46,16 @@ public class ToolExecutionLogger {
     
     public void log(String toolName, JsonNode arguments, String result, 
                    long duration, boolean success) {
+        if (toolName == null || toolName.trim().isEmpty()) {
+            toolName = "unknown";
+        }
+        
         LocalDateTime now = LocalDateTime.now();
         String timestamp = now.format(TIMESTAMP_FORMAT);
         
         updateMetrics(toolName, duration, success);
         
-        if (enableFileLogging && logFile != null) {
+        if (enableFileLogging && logFile != null && !fileLoggingFailed) {
             writeToFile(timestamp, toolName, arguments, result, duration, success);
         }
         
@@ -68,17 +75,23 @@ public class ToolExecutionLogger {
         logEntry.append("duration: ").append(duration).append("ms | ");
         logEntry.append("status: ").append(success ? "SUCCESS" : "FAILED").append("\n");
         
+        if (logEntry.length() > MAX_LOG_LENGTH) {
+            logEntry.setLength(MAX_LOG_LENGTH);
+            logEntry.append("... (truncated)\n");
+        }
+        
         try {
             Files.writeString(logFile, logEntry.toString(), 
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            System.err.println("写入日志文件失败: " + e.getMessage());
+            fileLoggingFailed = true;
+            System.err.println("写入日志文件失败，已禁用文件日志: " + e.getMessage());
         }
     }
     
     private void printToConsole(String timestamp, String toolName, 
                                long duration, boolean success) {
-        String status = success ? "✅" : "❌";
+        String status = success ? "[OK]" : "[FAIL]";
         String color = success ? "\u001B[32m" : "\u001B[31m";
         String reset = "\u001B[0m";
         

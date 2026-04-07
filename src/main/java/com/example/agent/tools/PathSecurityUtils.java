@@ -1,5 +1,6 @@
 package com.example.agent.tools;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -8,24 +9,31 @@ public class PathSecurityUtils {
 
     private static final Path PROJECT_ROOT = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
     
-    private static final List<String> RESTRICTED_PATHS = List.of(
+    private static final List<String> RESTRICTED_PATHS_UNIX = List.of(
             "/etc",
             "/root",
             "/home",
             "/Users",
             "/System",
-            "/Windows",
-            "/Program Files",
-            "/Program Files (x86)",
-            "/AppData",
             "/.ssh",
             "/.gnupg"
     );
+    
+    private static final List<String> RESTRICTED_PATHS_WINDOWS = List.of(
+            "\\Windows",
+            "\\Program Files",
+            "\\Program Files (x86)",
+            "\\AppData",
+            "\\.ssh",
+            "\\.gnupg"
+    );
 
     public static Path validateAndResolve(String filePath) throws ToolExecutionException {
-        if (filePath == null || filePath.isEmpty()) {
+        if (filePath == null || filePath.trim().isEmpty()) {
             return PROJECT_ROOT;
         }
+        
+        filePath = filePath.trim();
         
         Path path = Paths.get(filePath);
         
@@ -43,13 +51,21 @@ public class PathSecurityUtils {
             );
         }
         
-        for (String restricted : RESTRICTED_PATHS) {
-            if (path.toString().startsWith(restricted)) {
+        String pathString = path.toString();
+        String normalizedPath = pathString.replace("/", File.separator).replace("\\", File.separator);
+        
+        for (String restricted : getRestrictedPathsForOS()) {
+            String normalizedRestricted = restricted.replace("/", File.separator).replace("\\", File.separator);
+            if (normalizedPath.startsWith(normalizedRestricted)) {
                 throw new ToolExecutionException("安全限制: 不允许访问系统敏感目录: " + restricted);
             }
         }
         
         return path;
+    }
+    
+    private static List<String> getRestrictedPathsForOS() {
+        return File.separator.equals("/") ? RESTRICTED_PATHS_UNIX : RESTRICTED_PATHS_WINDOWS;
     }
 
     public static boolean isWithinProject(Path path) {
@@ -65,6 +81,9 @@ public class PathSecurityUtils {
     }
 
     public static String getRelativePath(Path absolutePath) {
+        if (absolutePath == null) {
+            return "null";
+        }
         if (isWithinProject(absolutePath)) {
             return PROJECT_ROOT.relativize(absolutePath).toString();
         }
