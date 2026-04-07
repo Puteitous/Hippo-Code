@@ -186,4 +186,149 @@ class IntentConfigTest {
         assertTrue(str.contains("mode="));
         assertTrue(str.contains("preferLlm="));
     }
+
+    @Test
+    void testRecognitionStrategyHighConfidenceThresholdBoundaryMin() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        strategy.setHighConfidenceThreshold(0.0);
+        assertEquals(0.0, strategy.getHighConfidenceThreshold());
+    }
+
+    @Test
+    void testRecognitionStrategyHighConfidenceThresholdBoundaryMax() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        strategy.setHighConfidenceThreshold(1.0);
+        assertEquals(1.0, strategy.getHighConfidenceThreshold());
+    }
+
+    @Test
+    void testRecognitionStrategyHighConfidenceThresholdNegative() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(-0.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(-1.0));
+    }
+
+    @Test
+    void testRecognitionStrategyHighConfidenceThresholdExceedsMax() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(1.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(2.0));
+    }
+
+    @Test
+    void testRecognitionStrategyLowConfidenceThresholdBoundaryMin() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        strategy.setLowConfidenceThreshold(0.0);
+        assertEquals(0.0, strategy.getLowConfidenceThreshold());
+    }
+
+    @Test
+    void testRecognitionStrategyLowConfidenceThresholdBoundaryMax() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        strategy.setLowConfidenceThreshold(1.0);
+        assertEquals(1.0, strategy.getLowConfidenceThreshold());
+    }
+
+    @Test
+    void testRecognitionStrategyLowConfidenceThresholdNegative() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(-0.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(-1.0));
+    }
+
+    @Test
+    void testRecognitionStrategyLowConfidenceThresholdExceedsMax() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(1.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(2.0));
+    }
+
+    @Test
+    void testPlanningStrategyHighConfidenceThresholdBoundaryMin() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        strategy.setHighConfidenceThreshold(0.0);
+        assertEquals(0.0, strategy.getHighConfidenceThreshold());
+    }
+
+    @Test
+    void testPlanningStrategyHighConfidenceThresholdBoundaryMax() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        strategy.setHighConfidenceThreshold(1.0);
+        assertEquals(1.0, strategy.getHighConfidenceThreshold());
+    }
+
+    @Test
+    void testPlanningStrategyHighConfidenceThresholdNegative() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(-0.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(-1.0));
+    }
+
+    @Test
+    void testPlanningStrategyHighConfidenceThresholdExceedsMax() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(1.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setHighConfidenceThreshold(2.0));
+    }
+
+    @Test
+    void testPlanningStrategyLowConfidenceThresholdBoundaryMin() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        strategy.setLowConfidenceThreshold(0.0);
+        assertEquals(0.0, strategy.getLowConfidenceThreshold());
+    }
+
+    @Test
+    void testPlanningStrategyLowConfidenceThresholdBoundaryMax() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        strategy.setLowConfidenceThreshold(1.0);
+        assertEquals(1.0, strategy.getLowConfidenceThreshold());
+    }
+
+    @Test
+    void testPlanningStrategyLowConfidenceThresholdNegative() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(-0.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(-1.0));
+    }
+
+    @Test
+    void testPlanningStrategyLowConfidenceThresholdExceedsMax() {
+        IntentConfig.PlanningStrategy strategy = new IntentConfig.PlanningStrategy();
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(1.01));
+        assertThrows(IllegalArgumentException.class, () -> 
+            strategy.setLowConfidenceThreshold(2.0));
+    }
+
+    @Test
+    void testThresholdBoundaryPrecision() {
+        IntentConfig.RecognitionStrategy strategy = new IntentConfig.RecognitionStrategy();
+        
+        strategy.setHighConfidenceThreshold(0.001);
+        assertEquals(0.001, strategy.getHighConfidenceThreshold());
+        
+        strategy.setHighConfidenceThreshold(0.999);
+        assertEquals(0.999, strategy.getHighConfidenceThreshold());
+        
+        strategy.setLowConfidenceThreshold(0.001);
+        assertEquals(0.001, strategy.getLowConfidenceThreshold());
+        
+        strategy.setLowConfidenceThreshold(0.999);
+        assertEquals(0.999, strategy.getLowConfidenceThreshold());
+    }
 }
