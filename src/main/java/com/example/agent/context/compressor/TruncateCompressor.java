@@ -86,8 +86,14 @@ public class TruncateCompressor implements Compressor {
             return content;
         }
 
-        String truncated;
+        int minContentChars = 50;
         String suffix = "\n\n... [已截断，原长度: " + content.length() + " 字符]";
+        
+        if (targetChars < suffix.length() + minContentChars) {
+            return content.substring(0, Math.max(0, targetChars));
+        }
+
+        String truncated;
 
         switch (strategy.toLowerCase()) {
             case "head":

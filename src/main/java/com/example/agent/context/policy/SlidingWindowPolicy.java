@@ -51,7 +51,7 @@ public class SlidingWindowPolicy implements TrimPolicy {
         result.add(systemMessage);
         result.addAll(windowMessages);
 
-        while (result.size() > 2) {
+        while (result.size() > 1) {
             int totalTokens = tokenEstimator.estimateConversationTokens(result);
             
             if (totalTokens <= maxTokens && result.size() <= maxMessages) {

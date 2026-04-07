@@ -31,7 +31,7 @@ import java.time.LocalDate;
 public class ConversationLoop {
 
     private static final Logger logger = LoggerFactory.getLogger(ConversationLoop.class);
-    private static final int MAX_EMPTY_RESPONSE_RETRIES = 2;
+    private static final int MAX_EMPTY_RESPONSE_RETRIES = 3;
 
     private final AgentContext context;
     private final AgentTurnExecutor turnExecutor;
@@ -192,7 +192,7 @@ public class ConversationLoop {
 
                     if (result == AgentTurnResult.EMPTY_RESPONSE) {
                         emptyResponseRetries++;
-                        if (emptyResponseRetries <= MAX_EMPTY_RESPONSE_RETRIES) {
+                        if (emptyResponseRetries < MAX_EMPTY_RESPONSE_RETRIES) {
                             ui.println(ConsoleStyle.gray("  │"));
                             ui.println(ConsoleStyle.yellow("  │  检测到空响应，正在重试 (" + emptyResponseRetries + "/" + MAX_EMPTY_RESPONSE_RETRIES + ")..."));
                             ui.println(ConsoleStyle.gray("  │"));
