@@ -12,10 +12,40 @@ import java.util.function.Consumer;
 
 public class CommandDispatcher {
 
-    public enum CommandResult {
-        CONTINUE,
-        EXIT,
-        PROCESS_INPUT
+    public static class CommandResult {
+        public enum Type {
+            CONTINUE,
+            EXIT,
+            PROCESS_INPUT
+        }
+        
+        private final Type type;
+        private final String input; // 用于存储实际要处理的输入内容
+        
+        private CommandResult(Type type, String input) {
+            this.type = type;
+            this.input = input;
+        }
+        
+        public static CommandResult continueExecution() {
+            return new CommandResult(Type.CONTINUE, null);
+        }
+        
+        public static CommandResult exit() {
+            return new CommandResult(Type.EXIT, null);
+        }
+        
+        public static CommandResult processInput(String input) {
+            return new CommandResult(Type.PROCESS_INPUT, input);
+        }
+        
+        public Type getType() {
+            return type;
+        }
+        
+        public String getInput() {
+            return input;
+        }
     }
 
     private final AgentUi ui;
@@ -35,45 +65,45 @@ public class CommandDispatcher {
 
     public CommandResult dispatch(String line) throws UserInterruptException, EndOfFileException {
         if (line == null) {
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
         
         line = line.trim();
 
         if (line.isEmpty()) {
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("exit".equalsIgnoreCase(line) || "quit".equalsIgnoreCase(line)) {
             ui.printGoodbye();
-            return CommandResult.EXIT;
+            return CommandResult.exit();
         }
 
         if ("help".equalsIgnoreCase(line)) {
             ui.printHelp();
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("clear".equalsIgnoreCase(line)) {
             ui.clearScreen();
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("reset".equalsIgnoreCase(line)) {
             conversationManager.reset();
             ui.println(ConsoleStyle.success("会话已重置"));
             ui.println();
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("config".equalsIgnoreCase(line)) {
             ui.printConfig();
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("tokens".equalsIgnoreCase(line)) {
             tokenMetricsCollector.printDailySummary();
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("showlog".equalsIgnoreCase(line)) {
@@ -84,22 +114,22 @@ public class CommandDispatcher {
             } else {
                 ui.showLastConversationLog(currentConversationId);
             }
-            return CommandResult.CONTINUE;
+            return CommandResult.continueExecution();
         }
 
         if ("\"\"\"".equals(line) || "multi".equalsIgnoreCase(line)) {
             return handleMultilineInput();
         }
 
-        return CommandResult.PROCESS_INPUT;
+        return CommandResult.processInput(line);
     }
 
     private CommandResult handleMultilineInput() {
-        String line = inputHandler.readMultilineInput();
-        if (line == null || line.trim().isEmpty()) {
-            return CommandResult.CONTINUE;
+        String multilineInput = inputHandler.readMultilineInput();
+        if (multilineInput == null || multilineInput.trim().isEmpty()) {
+            return CommandResult.continueExecution();
         }
-        return CommandResult.PROCESS_INPUT;
+        return CommandResult.processInput(multilineInput);
     }
 
     public boolean validateConfig() {

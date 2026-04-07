@@ -80,16 +80,17 @@ public class AgentApplication {
 
                     CommandDispatcher.CommandResult result = dispatcher.dispatch(line);
 
-                    if (result == CommandDispatcher.CommandResult.EXIT) {
+                    if (result.getType() == CommandDispatcher.CommandResult.Type.EXIT) {
                         break;
                     }
 
-                    if (result == CommandDispatcher.CommandResult.CONTINUE) {
+                    if (result.getType() == CommandDispatcher.CommandResult.Type.CONTINUE) {
                         continue;
                     }
 
-                    if (result == CommandDispatcher.CommandResult.PROCESS_INPUT) {
-                        conversationLoop.processUserInput(line);
+                    if (result.getType() == CommandDispatcher.CommandResult.Type.PROCESS_INPUT) {
+                        String actualInput = result.getInput();
+                        conversationLoop.processUserInput(actualInput);
                         dispatcher.setCurrentConversationId(conversationLoop.getCurrentConversationId());
                     }
 

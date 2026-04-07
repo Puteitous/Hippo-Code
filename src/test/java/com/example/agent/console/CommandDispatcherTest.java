@@ -49,7 +49,8 @@ class CommandDispatcherTest {
         void testNullInput() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch(null);
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
+            assertNull(result.getInput());
         }
 
         @Test
@@ -57,7 +58,7 @@ class CommandDispatcherTest {
         void testEmptyInput() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
         }
 
         @Test
@@ -65,7 +66,7 @@ class CommandDispatcherTest {
         void testWhitespaceInput() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("   ");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
         }
 
         @Test
@@ -73,7 +74,8 @@ class CommandDispatcherTest {
         void testExitCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("exit");
             
-            assertEquals(CommandDispatcher.CommandResult.EXIT, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.EXIT, result.getType());
+            assertNull(result.getInput());
             verify(ui).printGoodbye();
         }
 
@@ -82,7 +84,7 @@ class CommandDispatcherTest {
         void testQuitCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("quit");
             
-            assertEquals(CommandDispatcher.CommandResult.EXIT, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.EXIT, result.getType());
             verify(ui).printGoodbye();
         }
 
@@ -91,7 +93,7 @@ class CommandDispatcherTest {
         void testExitCommandUppercase() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("EXIT");
             
-            assertEquals(CommandDispatcher.CommandResult.EXIT, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.EXIT, result.getType());
         }
 
         @Test
@@ -99,7 +101,7 @@ class CommandDispatcherTest {
         void testHelpCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("help");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(ui).printHelp();
         }
 
@@ -108,7 +110,7 @@ class CommandDispatcherTest {
         void testClearCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("clear");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(ui).clearScreen();
         }
 
@@ -117,7 +119,7 @@ class CommandDispatcherTest {
         void testResetCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("reset");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(conversationManager).reset();
         }
 
@@ -126,7 +128,7 @@ class CommandDispatcherTest {
         void testConfigCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("config");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(ui).printConfig();
         }
 
@@ -135,7 +137,7 @@ class CommandDispatcherTest {
         void testTokensCommand() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("tokens");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(tokenMetricsCollector).printDailySummary();
         }
 
@@ -146,7 +148,7 @@ class CommandDispatcherTest {
             
             CommandDispatcher.CommandResult result = dispatcher.dispatch("showlog");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
             verify(ui).showLastConversationLog("test-conversation-id");
         }
 
@@ -155,7 +157,8 @@ class CommandDispatcherTest {
         void testNormalInput() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("hello world");
             
-            assertEquals(CommandDispatcher.CommandResult.PROCESS_INPUT, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.PROCESS_INPUT, result.getType());
+            assertEquals("hello world", result.getInput());
         }
 
         @Test
@@ -166,6 +169,8 @@ class CommandDispatcherTest {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("multi");
             
             verify(inputHandler).readMultilineInput();
+            assertEquals(CommandDispatcher.CommandResult.Type.PROCESS_INPUT, result.getType());
+            assertEquals("test input", result.getInput());
         }
 
         @Test
@@ -176,6 +181,7 @@ class CommandDispatcherTest {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("\"\"\"");
             
             verify(inputHandler).readMultilineInput();
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
         }
     }
 
@@ -246,7 +252,7 @@ class CommandDispatcherTest {
         void testCommandWithSpaces() throws UserInterruptException, EndOfFileException {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("  exit  ");
             
-            assertEquals(CommandDispatcher.CommandResult.EXIT, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.EXIT, result.getType());
         }
 
         @Test
@@ -256,7 +262,7 @@ class CommandDispatcherTest {
             
             CommandDispatcher.CommandResult result = dispatcher.dispatch("multi");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
         }
 
         @Test
@@ -266,7 +272,51 @@ class CommandDispatcherTest {
             
             CommandDispatcher.CommandResult result = dispatcher.dispatch("multi");
             
-            assertEquals(CommandDispatcher.CommandResult.CONTINUE, result);
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
+        }
+    }
+
+    @Nested
+    @DisplayName("CommandResult数据携带测试")
+    class CommandResultDataTests {
+
+        @Test
+        @DisplayName("PROCESS_INPUT携带输入内容")
+        void testProcessInputCarriesData() throws UserInterruptException, EndOfFileException {
+            CommandDispatcher.CommandResult result = dispatcher.dispatch("测试输入");
+            
+            assertEquals(CommandDispatcher.CommandResult.Type.PROCESS_INPUT, result.getType());
+            assertEquals("测试输入", result.getInput());
+        }
+
+        @Test
+        @DisplayName("多行输入携带完整内容")
+        void testMultilineInputCarriesFullContent() throws UserInterruptException, EndOfFileException {
+            String multilineContent = "第一行\n第二行\n第三行";
+            when(inputHandler.readMultilineInput()).thenReturn(multilineContent);
+            
+            CommandDispatcher.CommandResult result = dispatcher.dispatch("multi");
+            
+            assertEquals(CommandDispatcher.CommandResult.Type.PROCESS_INPUT, result.getType());
+            assertEquals(multilineContent, result.getInput());
+        }
+
+        @Test
+        @DisplayName("CONTINUE类型input为null")
+        void testContinueTypeHasNullInput() throws UserInterruptException, EndOfFileException {
+            CommandDispatcher.CommandResult result = dispatcher.dispatch("help");
+            
+            assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
+            assertNull(result.getInput());
+        }
+
+        @Test
+        @DisplayName("EXIT类型input为null")
+        void testExitTypeHasNullInput() throws UserInterruptException, EndOfFileException {
+            CommandDispatcher.CommandResult result = dispatcher.dispatch("exit");
+            
+            assertEquals(CommandDispatcher.CommandResult.Type.EXIT, result.getType());
+            assertNull(result.getInput());
         }
     }
 }
