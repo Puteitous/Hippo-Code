@@ -25,6 +25,7 @@ public class ConversationLogger {
     private final AtomicInteger totalInputTokens = new AtomicInteger(0);
     private final AtomicInteger totalOutputTokens = new AtomicInteger(0);
     private final AtomicInteger totalToolCalls = new AtomicInteger(0);
+    private final AtomicInteger llmCallCount = new AtomicInteger(0);
     
     public ConversationLogger(String conversationId, Path logFile) {
         this.conversationId = conversationId;
@@ -70,12 +71,33 @@ public class ConversationLogger {
         logger.debug("记录用户输入，估算 token: {}", estimatedTokens);
     }
     
-    public void logAiResponse(String response, Usage usage) {
+    public void logLlmCall(Usage usage, boolean hasToolCalls) {
+        llmCallCount.incrementAndGet();
+        
         if (usage != null) {
             totalInputTokens.addAndGet(usage.getPromptTokens());
             totalOutputTokens.addAndGet(usage.getCompletionTokens());
         }
         
+        StringBuilder entry = new StringBuilder();
+        entry.append("\n┌─ LLM 调用 #").append(llmCallCount.get()).append(" ────────────────────────────────\n");
+        entry.append("│ 时间: ").append(LocalDateTime.now().format(TIMESTAMP_FORMAT)).append("\n");
+        if (usage != null) {
+            entry.append("│ Token 使用: Prompt=").append(usage.getPromptTokens())
+                 .append(", Completion=").append(usage.getCompletionTokens())
+                 .append(", Total=").append(usage.getTotalTokens()).append("\n");
+        }
+        entry.append("│ 类型: ").append(hasToolCalls ? "工具调用" : "最终响应").append("\n");
+        entry.append("└────────────────────────────────────────────\n");
+        
+        writeToFile(entry.toString());
+        logger.debug("记录 LLM 调用 #{}: prompt={}, completion={}", 
+            llmCallCount.get(), 
+            usage != null ? usage.getPromptTokens() : 0,
+            usage != null ? usage.getCompletionTokens() : 0);
+    }
+    
+    public void logAiResponse(String response, Usage usage) {
         StringBuilder entry = new StringBuilder();
         entry.append("\n┌─ AI 响应 ─────────────────────────────────\n");
         entry.append("│ 时间: ").append(LocalDateTime.now().format(TIMESTAMP_FORMAT)).append("\n");
@@ -129,6 +151,7 @@ public class ConversationLogger {
         summary.append("总输入 Token: ").append(totalInputTokens.get()).append("\n");
         summary.append("总输出 Token: ").append(totalOutputTokens.get()).append("\n");
         summary.append("总 Token: ").append(totalInputTokens.get() + totalOutputTokens.get()).append("\n");
+        summary.append("LLM 调用次数: ").append(llmCallCount.get()).append("\n");
         summary.append("工具调用次数: ").append(totalToolCalls.get()).append("\n");
         summary.append("═".repeat(80)).append("\n");
         
@@ -178,5 +201,17 @@ public class ConversationLogger {
     
     public int getTotalToolCalls() {
         return totalToolCalls.get();
+    }
+    
+    public int getLlmCallCount() {
+        return llmCallCount.get();
+    }
+    
+    public void logInterruptedSummary() {
+        logSummary();
+        
+        StringBuilder interruptNote = new StringBuilder();
+        interruptNote.append("\n⚠️ 对话被中断，以上为已记录的统计数据\n");
+        writeToFile(interruptNote.toString());
     }
 }

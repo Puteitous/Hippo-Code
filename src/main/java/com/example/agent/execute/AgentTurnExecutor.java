@@ -39,7 +39,7 @@ public class AgentTurnExecutor {
         this.context = context;
     }
 
-    public AgentTurnResult execute(ConversationLogger conversationLogger) throws LlmException {
+    public AgentTurnResult execute(ConversationLogger conversationLogger, String conversationId) throws LlmException {
         ui.println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
         ui.println(ConsoleStyle.gray("  │"));
         ui.print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
@@ -82,6 +82,20 @@ public class AgentTurnExecutor {
             return AgentTurnResult.ERROR;
         }
 
+        Usage usage = response.getUsage();
+        if (usage != null && conversationId != null) {
+            context.getTokenMetricsCollector().recordConversation(
+                    conversationId,
+                    LocalDateTime.now(),
+                    conversationManager.getTokenCount(),
+                    usage
+            );
+        }
+
+        if (conversationLogger != null) {
+            conversationLogger.logLlmCall(usage, response.hasToolCalls());
+        }
+
         if (response.hasToolCalls()) {
             conversationManager.addAssistantMessage(assistantMessage);
 
@@ -119,22 +133,8 @@ public class AgentTurnExecutor {
 
             conversationManager.addAssistantMessage(assistantMessage);
 
-            Usage usage = response.getUsage();
             if (conversationLogger != null) {
                 conversationLogger.logAiResponse(contentBuilder.toString(), usage);
-            }
-
-            if (usage != null) {
-                context.getTokenMetricsCollector().recordConversation(
-                        context.getTokenMetricsCollector().toString(),
-                        LocalDateTime.now(),
-                        conversationManager.getTokenCount(),
-                        usage
-                );
-            }
-
-            if (conversationLogger != null) {
-                conversationLogger.logSummary();
             }
 
             ui.println();

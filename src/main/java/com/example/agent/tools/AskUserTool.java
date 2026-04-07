@@ -92,7 +92,7 @@ public class AskUserTool implements ToolExecutor {
     private String promptUser(String question, List<String> options, boolean allowCustomInput) {
         System.out.println();
         System.out.println("┌─────────────────────────────────────────────────────────────┐");
-        System.out.println("│  🤖 Agent 需要您的确认                                      │");
+        System.out.println("│   Agent 需要您的确认                                      │");
         System.out.println("└─────────────────────────────────────────────────────────────┘");
         System.out.println();
         System.out.println("问题: " + question);

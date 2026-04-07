@@ -79,10 +79,69 @@ class ConversationLoggerTest {
         
         conversationLogger.logAiResponse(response, usage);
         
+        logger.info("AI 响应日志测试通过");
+    }
+    
+    @Test
+    void testLogLlmCall() {
+        Usage usage = new Usage();
+        usage.setPromptTokens(520);
+        usage.setCompletionTokens(180);
+        usage.setTotalTokens(700);
+        
+        conversationLogger.logLlmCall(usage, false);
+        
+        assertEquals(1, conversationLogger.getLlmCallCount());
         assertEquals(520, conversationLogger.getTotalInputTokens());
         assertEquals(180, conversationLogger.getTotalOutputTokens());
         
-        logger.info("AI 响应日志测试通过");
+        logger.info("LLM 调用日志测试通过");
+    }
+    
+    @Test
+    void testLogLlmCallWithToolCalls() {
+        Usage usage = new Usage();
+        usage.setPromptTokens(600);
+        usage.setCompletionTokens(200);
+        usage.setTotalTokens(800);
+        
+        conversationLogger.logLlmCall(usage, true);
+        
+        assertEquals(1, conversationLogger.getLlmCallCount());
+        
+        try {
+            String content = Files.readString(logFile);
+            assertTrue(content.contains("工具调用"), "应该标记为工具调用类型");
+        } catch (Exception e) {
+            fail("读取日志文件失败: " + e.getMessage());
+        }
+        
+        logger.info("带工具调用的 LLM 调用日志测试通过");
+    }
+    
+    @Test
+    void testLogInterruptedSummary() {
+        conversationLogger.logUserInput("测试输入", 10);
+        
+        Usage usage = new Usage();
+        usage.setPromptTokens(100);
+        usage.setCompletionTokens(50);
+        usage.setTotalTokens(150);
+        conversationLogger.logLlmCall(usage, true);
+        
+        conversationLogger.logInterruptedSummary();
+        
+        assertTrue(Files.exists(logFile), "日志文件应该存在");
+        
+        try {
+            String content = Files.readString(logFile);
+            assertTrue(content.contains("对话被中断"), "应该包含中断提示");
+            assertTrue(content.contains("LLM 调用次数: 1"), "应该包含 LLM 调用次数");
+        } catch (Exception e) {
+            fail("读取日志文件失败: " + e.getMessage());
+        }
+        
+        logger.info("中断摘要日志测试通过");
     }
     
     @Test
@@ -108,7 +167,7 @@ class ConversationLoggerTest {
         usage.setPromptTokens(100);
         usage.setCompletionTokens(50);
         usage.setTotalTokens(150);
-        conversationLogger.logAiResponse("测试响应", usage);
+        conversationLogger.logLlmCall(usage, false);
         
         conversationLogger.logToolCall("test_tool", "{}", "结果", 100, true);
         
@@ -120,6 +179,7 @@ class ConversationLoggerTest {
             String content = Files.readString(logFile);
             assertTrue(content.contains("对话摘要"), "应该包含对话摘要");
             assertTrue(content.contains("总 Token: 160"), "应该包含正确的总 token 数");
+            assertTrue(content.contains("LLM 调用次数: 1"), "应该包含 LLM 调用次数");
             assertTrue(content.contains("工具调用次数: 1"), "应该包含正确的工具调用次数");
         } catch (Exception e) {
             fail("读取日志文件失败: " + e.getMessage());
@@ -134,22 +194,31 @@ class ConversationLoggerTest {
         
         conversationLogger.logUserInput("帮我分析项目结构", 20);
         
+        Usage usage1 = new Usage();
+        usage1.setPromptTokens(500);
+        usage1.setCompletionTokens(100);
+        usage1.setTotalTokens(600);
+        conversationLogger.logLlmCall(usage1, true);
+        
         conversationLogger.logToolCall("list_directory", 
             "{\"path\": \".\", \"recursive\": true}", 
             "项目结构...", 
             120, 
             true);
         
-        Usage usage = new Usage();
-        usage.setPromptTokens(800);
-        usage.setCompletionTokens(300);
-        usage.setTotalTokens(1100);
-        conversationLogger.logAiResponse("项目结构分析完成...", usage);
+        Usage usage2 = new Usage();
+        usage2.setPromptTokens(800);
+        usage2.setCompletionTokens(300);
+        usage2.setTotalTokens(1100);
+        conversationLogger.logLlmCall(usage2, false);
+        
+        conversationLogger.logAiResponse("项目结构分析完成...", usage2);
         
         conversationLogger.logSummary();
         
-        assertEquals(820, conversationLogger.getTotalInputTokens());
-        assertEquals(300, conversationLogger.getTotalOutputTokens());
+        assertEquals(1320, conversationLogger.getTotalInputTokens());
+        assertEquals(400, conversationLogger.getTotalOutputTokens());
+        assertEquals(2, conversationLogger.getLlmCallCount());
         assertEquals(1, conversationLogger.getTotalToolCalls());
         
         logger.info("完整对话流程测试通过");

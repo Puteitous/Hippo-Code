@@ -183,50 +183,62 @@ public class ConversationLoop {
 
     private void processAgentLoop() {
         int emptyResponseRetries = 0;
+        boolean completed = false;
 
-        while (!turnExecutor.isInterrupted()) {
-            try {
-                AgentTurnResult result = turnExecutor.execute(conversationLogger);
+        try {
+            while (!turnExecutor.isInterrupted()) {
+                try {
+                    AgentTurnResult result = turnExecutor.execute(conversationLogger, currentConversationId);
 
-                if (result == AgentTurnResult.EMPTY_RESPONSE) {
-                    emptyResponseRetries++;
-                    if (emptyResponseRetries <= MAX_EMPTY_RESPONSE_RETRIES) {
-                        ui.println(ConsoleStyle.gray("  │"));
-                        ui.println(ConsoleStyle.yellow("  │  检测到空响应，正在重试 (" + emptyResponseRetries + "/" + MAX_EMPTY_RESPONSE_RETRIES + ")..."));
-                        ui.println(ConsoleStyle.gray("  │"));
-                        continue;
-                    } else {
-                        ui.println(ConsoleStyle.gray("  │"));
-                        ui.println(ConsoleStyle.yellow("  └─ AI 多次返回空响应，请尝试重新描述您的需求。"));
-                        ui.println();
+                    if (result == AgentTurnResult.EMPTY_RESPONSE) {
+                        emptyResponseRetries++;
+                        if (emptyResponseRetries <= MAX_EMPTY_RESPONSE_RETRIES) {
+                            ui.println(ConsoleStyle.gray("  │"));
+                            ui.println(ConsoleStyle.yellow("  │  检测到空响应，正在重试 (" + emptyResponseRetries + "/" + MAX_EMPTY_RESPONSE_RETRIES + ")..."));
+                            ui.println(ConsoleStyle.gray("  │"));
+                            continue;
+                        } else {
+                            ui.println(ConsoleStyle.gray("  │"));
+                            ui.println(ConsoleStyle.yellow("  └─ AI 多次返回空响应，请尝试重新描述您的需求。"));
+                            ui.println();
+                            break;
+                        }
+                    }
+
+                    emptyResponseRetries = 0;
+
+                    if (result == null || result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
+                        completed = (result == AgentTurnResult.DONE);
                         break;
                     }
-                }
 
-                emptyResponseRetries = 0;
-
-                if (result == null || result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
+                } catch (LlmException e) {
+                    handleApiError(e);
+                    break;
+                } catch (RuntimeException e) {
+                    if ("Interrupted".equals(e.getMessage())) {
+                        throw new UserInterruptException("User interrupted");
+                    }
+                    ui.println();
+                    ui.println(ConsoleStyle.gray("  │"));
+                    ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
+                    e.printStackTrace();
+                    break;
+                } catch (Exception e) {
+                    ui.println();
+                    ui.println(ConsoleStyle.gray("  │"));
+                    ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
+                    e.printStackTrace();
                     break;
                 }
-
-            } catch (LlmException e) {
-                handleApiError(e);
-                break;
-            } catch (RuntimeException e) {
-                if ("Interrupted".equals(e.getMessage())) {
-                    throw new UserInterruptException("User interrupted");
+            }
+        } finally {
+            if (conversationLogger != null) {
+                if (completed) {
+                    conversationLogger.logSummary();
+                } else {
+                    conversationLogger.logInterruptedSummary();
                 }
-                ui.println();
-                ui.println(ConsoleStyle.gray("  │"));
-                ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
-                e.printStackTrace();
-                break;
-            } catch (Exception e) {
-                ui.println();
-                ui.println(ConsoleStyle.gray("  │"));
-                ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
-                e.printStackTrace();
-                break;
             }
         }
     }

@@ -128,7 +128,7 @@ class ConversationLoopTest {
 
             conversationLoop.processUserInput(longInput);
 
-            verify(turnExecutor, never()).execute(any());
+            verify(turnExecutor, never()).execute(any(), any());
         }
     }
 
@@ -257,7 +257,7 @@ class ConversationLoopTest {
 
             conversationLoop.processUserInput("测试");
 
-            verify(turnExecutor, never()).execute(any());
+            verify(turnExecutor, never()).execute(any(), any());
         }
     }
 
@@ -268,7 +268,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("LlmApiException处理")
         void testLlmApiException() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new LlmApiException("API Error", 500, null));
+            when(turnExecutor.execute(any(), any())).thenThrow(new LlmApiException("API Error", 500, null));
 
             assertDoesNotThrow(() -> conversationLoop.processUserInput("测试"));
         }
@@ -276,7 +276,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("LlmTimeoutException处理")
         void testLlmTimeoutException() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new LlmTimeoutException("Timeout", 30, null));
+            when(turnExecutor.execute(any(), any())).thenThrow(new LlmTimeoutException("Timeout", 30, null));
 
             assertDoesNotThrow(() -> conversationLoop.processUserInput("测试"));
         }
@@ -284,7 +284,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("LlmConnectionException处理")
         void testLlmConnectionException() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new LlmConnectionException("Connection failed", "http://test.com", null));
+            when(turnExecutor.execute(any(), any())).thenThrow(new LlmConnectionException("Connection failed", "http://test.com", null));
 
             assertDoesNotThrow(() -> conversationLoop.processUserInput("测试"));
         }
@@ -292,7 +292,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("RuntimeException with 'Interrupted' message")
         void testInterruptedRuntimeException() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new RuntimeException("Interrupted"));
+            when(turnExecutor.execute(any(), any())).thenThrow(new RuntimeException("Interrupted"));
 
             assertThrows(UserInterruptException.class, () -> conversationLoop.processUserInput("测试"));
         }
@@ -300,7 +300,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("其他RuntimeException处理")
         void testOtherRuntimeException() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new RuntimeException("Unexpected error"));
+            when(turnExecutor.execute(any(), any())).thenThrow(new RuntimeException("Unexpected error"));
 
             assertDoesNotThrow(() -> conversationLoop.processUserInput("测试"));
         }
@@ -313,23 +313,23 @@ class ConversationLoopTest {
         @Test
         @DisplayName("空响应重试后成功")
         void testEmptyResponseRetrySuccess() throws Exception {
-            when(turnExecutor.execute(any()))
+            when(turnExecutor.execute(any(), any()))
                     .thenReturn(AgentTurnResult.EMPTY_RESPONSE)
                     .thenReturn(AgentTurnResult.DONE);
 
             conversationLoop.processUserInput("测试");
 
-            verify(turnExecutor, times(2)).execute(any());
+            verify(turnExecutor, times(2)).execute(any(), any());
         }
 
         @Test
         @DisplayName("空响应超过最大重试次数")
         void testEmptyResponseMaxRetries() throws Exception {
-            when(turnExecutor.execute(any())).thenReturn(AgentTurnResult.EMPTY_RESPONSE);
+            when(turnExecutor.execute(any(), any())).thenReturn(AgentTurnResult.EMPTY_RESPONSE);
 
             conversationLoop.processUserInput("测试");
 
-            verify(turnExecutor, times(3)).execute(any());
+            verify(turnExecutor, times(3)).execute(any(), any());
         }
     }
 
@@ -340,7 +340,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("调用历史记录精简")
         void testHistoryTrim() throws Exception {
-            when(turnExecutor.execute(any())).thenReturn(AgentTurnResult.DONE);
+            when(turnExecutor.execute(any(), any())).thenReturn(AgentTurnResult.DONE);
             conversationLoop.processUserInput("测试");
 
             verify(conversationManager).trimHistory(any());
@@ -356,7 +356,7 @@ class ConversationLoopTest {
         void testGetCurrentConversationId() throws Exception {
             assertNull(conversationLoop.getCurrentConversationId());
 
-            when(turnExecutor.execute(any())).thenReturn(AgentTurnResult.DONE);
+            when(turnExecutor.execute(any(), any())).thenReturn(AgentTurnResult.DONE);
             conversationLoop.processUserInput("测试");
 
             assertNotNull(conversationLoop.getCurrentConversationId());
@@ -416,7 +416,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("超时错误可重试")
         void testTimeoutRetryable() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new LlmTimeoutException("Timeout", 30, null));
+            when(turnExecutor.execute(any(), any())).thenThrow(new LlmTimeoutException("Timeout", 30, null));
 
             conversationLoop.processUserInput("测试");
 
@@ -426,7 +426,7 @@ class ConversationLoopTest {
         @Test
         @DisplayName("连接错误可重试")
         void testConnectionRetryable() throws Exception {
-            when(turnExecutor.execute(any())).thenThrow(new LlmConnectionException("Connection failed", "http://test.com", null));
+            when(turnExecutor.execute(any(), any())).thenThrow(new LlmConnectionException("Connection failed", "http://test.com", null));
 
             conversationLoop.processUserInput("测试");
 
@@ -438,7 +438,7 @@ class ConversationLoopTest {
         void testServerErrorRetryable() throws Exception {
             LlmApiException serverError = mock(LlmApiException.class);
             when(serverError.isServerError()).thenReturn(true);
-            when(turnExecutor.execute(any())).thenThrow(serverError);
+            when(turnExecutor.execute(any(), any())).thenThrow(serverError);
 
             conversationLoop.processUserInput("测试");
 
@@ -450,7 +450,7 @@ class ConversationLoopTest {
         void testRateLimitedRetryable() throws Exception {
             LlmApiException rateLimited = mock(LlmApiException.class);
             when(rateLimited.isRateLimited()).thenReturn(true);
-            when(turnExecutor.execute(any())).thenThrow(rateLimited);
+            when(turnExecutor.execute(any(), any())).thenThrow(rateLimited);
 
             conversationLoop.processUserInput("测试");
 
