@@ -195,4 +195,194 @@ class GrepToolTest {
         assertNotNull(result);
         assertTrue(result.contains("Grep 搜索结果"));
     }
+
+    @Test
+    void testSearchRootDirectoryFiles() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("file_pattern", "pom.xml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("pom.xml"));
+        assertFalse(result.contains("未找到匹配的内容"));
+    }
+
+    @Test
+    void testSearchWithExplicitRootPath() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "Hippo");
+        args.put("path", ".");
+        args.put("file_pattern", "*.md");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains(".md"));
+    }
+
+    @Test
+    void testSearchMarkdownFilesInRoot() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "README");
+        args.put("file_pattern", "*.md");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("README.md") || result.contains("找到"));
+    }
+
+    @Test
+    void testSearchConfigFileInRoot() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "yaml");
+        args.put("file_pattern", "*.yaml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithEmptyPath() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "xml");
+        args.put("path", "");
+        args.put("file_pattern", "pom.xml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithDotSlashPath() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("path", "./");
+        args.put("file_pattern", "pom.xml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("pom.xml"));
+    }
+
+    @Test
+    void testSearchRootFileWithAbsolutePath() throws Exception {
+        String userDir = System.getProperty("user.dir");
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("path", userDir);
+        args.put("file_pattern", "pom.xml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("pom.xml"));
+    }
+
+    @Test
+    void testSearchGitignoreInRoot() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "gitignore");
+        args.put("file_pattern", ".gitignore");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithNullFilePattern() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("file_pattern", (String) null);
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithEmptyFilePattern() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("file_pattern", "");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchBoundaryMaxResults() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "import");
+        args.put("max_results", 1);
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("已达到最大结果数限制") || result.contains("找到 1 处"));
+    }
+
+    @Test
+    void testSearchWithMaxResultsExceedsLimit() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "import");
+        args.put("max_results", 1000);
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithMinResults() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "import");
+        args.put("max_results", 0);
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchSpecialCharactersInPattern() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "\\$\\{\\w+\\}");
+        args.put("file_pattern", "*.yaml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("Grep 搜索结果"));
+    }
+
+    @Test
+    void testSearchWithBackslashPath() throws Exception {
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("pattern", "project");
+        args.put("path", ".\\");
+        args.put("file_pattern", "pom.xml");
+        
+        String result = tool.execute(args);
+        
+        assertNotNull(result);
+        assertTrue(result.contains("pom.xml"));
+    }
 }
