@@ -1,8 +1,10 @@
 package com.example.agent.logging;
 
 import com.example.agent.llm.model.Usage;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,14 +18,42 @@ class ConversationLoggerTest {
     
     private static final Logger logger = LoggerFactory.getLogger(ConversationLoggerTest.class);
     
+    @TempDir
+    Path tempDir;
+    
     private ConversationLogger conversationLogger;
     private Path logFile;
+    private String conversationId;
     
     @BeforeEach
     void setUp() {
-        String conversationId = "test_" + System.currentTimeMillis();
-        logFile = LogDirectoryManager.getConversationLogFile(conversationId, LocalDate.now());
+        conversationId = "TEST_" + System.currentTimeMillis();
+        logFile = tempDir.resolve("conversations")
+                        .resolve(LocalDate.now().toString())
+                        .resolve("[TEST]_conv_" + conversationId + ".log");
+        
+        try {
+            Files.createDirectories(logFile.getParent());
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create test log directory", e);
+        }
+        
         conversationLogger = new ConversationLogger(conversationId, logFile);
+    }
+    
+    @AfterEach
+    void tearDown() {
+        if (logFile != null && Files.exists(logFile)) {
+            try {
+                Files.deleteIfExists(logFile);
+                Path parentDir = logFile.getParent();
+                if (parentDir != null && Files.list(parentDir).findFirst().isEmpty()) {
+                    Files.deleteIfExists(parentDir);
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to clean up test log file: {}", logFile, e);
+            }
+        }
     }
     
     @Test

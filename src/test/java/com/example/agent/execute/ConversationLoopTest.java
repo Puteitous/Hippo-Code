@@ -12,15 +12,21 @@ import com.example.agent.llm.exception.LlmTimeoutException;
 import com.example.agent.plan.*;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.logging.LogDirectoryManager;
 import org.jline.reader.UserInterruptException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.MockedStatic;
 
+import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +34,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ConversationLoopTest {
+
+    @TempDir
+    Path tempDir;
 
     private AgentContext context;
     private AgentTurnExecutor turnExecutor;
@@ -39,6 +48,7 @@ class ConversationLoopTest {
     private TaskPlanner taskPlanner;
     private PlanExecutor planExecutor;
     private ConversationLoop conversationLoop;
+    private MockedStatic<LogDirectoryManager> logDirMock;
 
     @BeforeEach
     void setUp() {
@@ -60,10 +70,27 @@ class ConversationLoopTest {
         when(intentRecognizer.isEnabled()).thenReturn(true);
         when(taskPlanner.isEnabled()).thenReturn(true);
 
+        logDirMock = mockStatic(LogDirectoryManager.class);
+        logDirMock.when(() -> LogDirectoryManager.getConversationLogFile(anyString(), any(LocalDate.class)))
+                .thenAnswer(invocation -> {
+                    String convId = invocation.getArgument(0);
+                    LocalDate date = invocation.getArgument(1);
+                    return tempDir.resolve("conversations")
+                            .resolve(date.toString())
+                            .resolve("conv_" + convId + ".log");
+                });
+
         conversationLoop = new ConversationLoop(
                 context, turnExecutor, inputHandler, ui,
                 intentRecognizer, taskPlanner, planExecutor
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (logDirMock != null) {
+            logDirMock.close();
+        }
     }
 
     @Nested

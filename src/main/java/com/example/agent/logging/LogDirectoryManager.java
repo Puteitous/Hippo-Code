@@ -19,6 +19,10 @@ public class LogDirectoryManager {
         return LOG_ROOT;
     }
     
+    public static Path getSystemLogDir() {
+        return LOG_ROOT.resolve("system");
+    }
+    
     public static Path getConversationLogDir(LocalDate date) {
         return LOG_ROOT.resolve("conversations")
                       .resolve(date.format(DATE_FORMAT));
@@ -42,8 +46,14 @@ public class LogDirectoryManager {
     
     public static void ensureDirectoriesExist() {
         try {
+            Path systemDir = getSystemLogDir();
             Path conversationDir = getConversationLogDir(LocalDate.now());
             Path metricsDir = getMetricsDir();
+            
+            if (!java.nio.file.Files.exists(systemDir)) {
+                java.nio.file.Files.createDirectories(systemDir);
+                logger.debug("创建系统日志目录: {}", systemDir);
+            }
             
             if (!java.nio.file.Files.exists(conversationDir)) {
                 java.nio.file.Files.createDirectories(conversationDir);

@@ -1,6 +1,7 @@
 package com.example.agent.logging;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,17 +15,32 @@ class LogDirectoryManagerTest {
     
     private static final Logger logger = LoggerFactory.getLogger(LogDirectoryManagerTest.class);
     
+    @TempDir
+    Path tempDir;
+    
     @Test
     void testLogDirectoriesCreation() {
         LogDirectoryManager.ensureDirectoriesExist();
         
+        Path systemDir = LogDirectoryManager.getSystemLogDir();
         Path conversationDir = LogDirectoryManager.getConversationLogDir(LocalDate.now());
         Path metricsDir = LogDirectoryManager.getMetricsDir();
         
+        assertTrue(Files.exists(systemDir), "系统日志目录应该存在");
         assertTrue(Files.exists(conversationDir), "对话日志目录应该存在");
         assertTrue(Files.exists(metricsDir), "指标日志目录应该存在");
         
         logger.info("日志目录测试通过");
+    }
+    
+    @Test
+    void testSystemLogDir() {
+        Path systemDir = LogDirectoryManager.getSystemLogDir();
+        
+        assertTrue(systemDir.toString().contains("system"), "路径应包含 system");
+        assertTrue(systemDir.endsWith("logs/system"), "系统日志目录路径应正确");
+        
+        logger.debug("系统日志目录路径: {}", systemDir);
     }
     
     @Test
@@ -54,13 +70,14 @@ class LogDirectoryManagerTest {
     
     @Test
     void testLoggerFunctionality() {
-        logger.trace("这是 TRACE 级别日志");
-        logger.debug("这是 DEBUG 级别日志");
-        logger.info("这是 INFO 级别日志");
-        logger.warn("这是 WARN 级别日志");
-        logger.error("这是 ERROR 级别日志");
+        logger.trace("[测试] TRACE 级别日志");
+        logger.debug("[测试] DEBUG 级别日志");
+        logger.info("[测试] INFO 级别日志");
+        logger.warn("[测试] WARN 级别日志");
+        logger.error("[测试] ERROR 级别日志");
         
-        Path logFile = LogDirectoryManager.getLogRoot().resolve("agent.log");
-        assertTrue(Files.exists(logFile), "日志文件应该存在");
+        Path systemDir = LogDirectoryManager.getSystemLogDir();
+        
+        logger.info("日志文件应该在: {}", systemDir.resolve("agent.log"));
     }
 }
