@@ -25,6 +25,7 @@ public class SessionStorage {
     private static final DateTimeFormatter FILE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final String SESSION_FILE_PREFIX = "session_";
     private static final String SESSION_FILE_SUFFIX = ".json";
+    private static final String INVALID_FILENAME_CHARS = "<>:\"/\\|?*";
 
     private final Path storageDirectory;
     private final ObjectMapper objectMapper;
@@ -75,6 +76,10 @@ public class SessionStorage {
     }
 
     public SessionData saveSession(SessionData session) {
+        return saveSession(session, true);
+    }
+
+    public SessionData saveSession(SessionData session, boolean updateTimestamp) {
         if (session == null) {
             logger.warn("尝试保存空会话");
             return null;
@@ -92,7 +97,9 @@ public class SessionStorage {
                 session.setSessionId(sessionId);
             }
 
-            session.touch();
+            if (updateTimestamp) {
+                session.touch();
+            }
             
             Path sessionFile = getSessionFilePath(sessionId);
             Path tempFile = sessionFile.resolveSibling(sessionFile.getFileName() + ".tmp");
@@ -127,6 +134,11 @@ public class SessionStorage {
 
     public Optional<SessionData> loadSession(String sessionId) {
         if (sessionId == null || sessionId.isEmpty()) {
+            return Optional.empty();
+        }
+        
+        if (!isValidSessionId(sessionId)) {
+            logger.warn("无效的会话ID: {}", sessionId);
             return Optional.empty();
         }
 
@@ -259,7 +271,7 @@ public class SessionStorage {
             .filter(s -> s.getLastActiveAt().isBefore(cutoff))
             .forEach(session -> {
                 session.setStatus(SessionData.Status.IGNORED);
-                saveSession(session);
+                saveSession(session, false);
                 logger.info("过期会话已标记为忽略: {}", session.getSessionId());
             });
     }
@@ -295,6 +307,15 @@ public class SessionStorage {
     private boolean isSessionFile(Path path) {
         String fileName = path.getFileName().toString();
         return fileName.startsWith(SESSION_FILE_PREFIX) && fileName.endsWith(SESSION_FILE_SUFFIX);
+    }
+
+    private boolean isValidSessionId(String sessionId) {
+        for (char c : INVALID_FILENAME_CHARS.toCharArray()) {
+            if (sessionId.indexOf(c) >= 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Optional<SessionData> loadSessionFromFile(Path file) {

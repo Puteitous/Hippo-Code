@@ -392,16 +392,15 @@ class SessionStorageTest {
         
         SessionData oldSession = SessionData.create("old-expired", messages, SessionData.Status.INTERRUPTED);
         oldSession.setLastActiveAt(LocalDateTime.now().minusHours(100));
+        storage.saveSession(oldSession, false);
         
         SessionData newSession = SessionData.create("new-active", messages, SessionData.Status.INTERRUPTED);
         newSession.setLastActiveAt(LocalDateTime.now().minusHours(1));
+        storage.saveSession(newSession, false);
         
         SessionData completedSession = SessionData.create("completed-old", messages, SessionData.Status.COMPLETED);
         completedSession.setLastActiveAt(LocalDateTime.now().minusHours(100));
-        
-        storage.saveSession(oldSession);
-        storage.saveSession(newSession);
-        storage.saveSession(completedSession);
+        storage.saveSession(completedSession, false);
         
         storage.cleanupExpiredSessions(72);
         
