@@ -135,6 +135,23 @@ public class SessionData {
         this.lastUserMessage = lastUserMessage;
     }
 
+    public String getLastToolCalls() {
+        if (messages == null || messages.isEmpty()) {
+            return null;
+        }
+        
+        Message lastMessage = messages.get(messages.size() - 1);
+        if (lastMessage.getToolCalls() == null || lastMessage.getToolCalls().isEmpty()) {
+            return null;
+        }
+        
+        return lastMessage.getToolCalls().stream()
+            .filter(tc -> tc != null && tc.getFunction() != null)
+            .map(tc -> tc.getFunction().getName())
+            .filter(name -> name != null && !name.isEmpty())
+            .collect(java.util.stream.Collectors.joining(", "));
+    }
+
     @Override
     public String toString() {
         return "SessionData{" +

@@ -1,6 +1,8 @@
 package com.example.agent.session;
 
+import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.ToolCall;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Test;
@@ -371,5 +373,166 @@ class SessionDataTest {
         assertTrue(str.contains("tostring-test"));
         assertTrue(str.contains("INTERRUPTED"));
         assertTrue(str.contains("messageCount=1"));
+    }
+
+    @Test
+    void testGetLastToolCallsWithEmptyMessages() {
+        SessionData session = new SessionData("empty");
+        session.setMessages(Collections.emptyList());
+        
+        assertNull(session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithNullMessages() {
+        SessionData session = new SessionData("null-messages");
+        session.setMessages(null);
+        
+        assertNull(session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsNoToolCalls() {
+        List<Message> messages = Arrays.asList(
+            Message.user("Hello"),
+            Message.assistant("Hi there!")
+        );
+        
+        SessionData session = SessionData.create("no-tools", messages, SessionData.Status.ACTIVE);
+        
+        assertNull(session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithSingleToolCall() {
+        ToolCall toolCall = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        Message assistantMsg = Message.assistantWithToolCalls(Arrays.asList(toolCall));
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Read the file"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("single-tool", messages, SessionData.Status.INTERRUPTED);
+        
+        assertEquals("read_file", session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithMultipleToolCalls() {
+        ToolCall toolCall1 = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        ToolCall toolCall2 = new ToolCall("call-2", new FunctionCall("write_file", "{}"));
+        ToolCall toolCall3 = new ToolCall("call-3", new FunctionCall("bash", "{}"));
+        
+        Message assistantMsg = Message.assistantWithToolCalls(Arrays.asList(toolCall1, toolCall2, toolCall3));
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Process files"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("multi-tools", messages, SessionData.Status.INTERRUPTED);
+        
+        assertEquals("read_file, write_file, bash", session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsOnlyFromLastMessage() {
+        ToolCall toolCall1 = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        Message firstAssistant = Message.assistantWithToolCalls(Arrays.asList(toolCall1));
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("First request"),
+            firstAssistant,
+            Message.user("Second request"),
+            Message.assistant("Done")
+        );
+        
+        SessionData session = SessionData.create("not-last", messages, SessionData.Status.ACTIVE);
+        
+        assertNull(session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithNullToolCall() {
+        ToolCall toolCall1 = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        
+        List<ToolCall> toolCalls = new java.util.ArrayList<>();
+        toolCalls.add(toolCall1);
+        toolCalls.add(null);
+        
+        Message assistantMsg = Message.assistantWithToolCalls(toolCalls);
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Test"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("null-toolcall", messages, SessionData.Status.INTERRUPTED);
+        
+        assertEquals("read_file", session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithNullFunction() {
+        ToolCall toolCall1 = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        ToolCall toolCall2 = new ToolCall("call-2", null);
+        
+        Message assistantMsg = Message.assistantWithToolCalls(Arrays.asList(toolCall1, toolCall2));
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Test"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("null-function", messages, SessionData.Status.INTERRUPTED);
+        
+        assertEquals("read_file", session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithEmptyToolCallName() {
+        ToolCall toolCall1 = new ToolCall("call-1", new FunctionCall("read_file", "{}"));
+        ToolCall toolCall2 = new ToolCall("call-2", new FunctionCall("", "{}"));
+        ToolCall toolCall3 = new ToolCall("call-3", new FunctionCall(null, "{}"));
+        
+        Message assistantMsg = Message.assistantWithToolCalls(Arrays.asList(toolCall1, toolCall2, toolCall3));
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Test"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("empty-name", messages, SessionData.Status.INTERRUPTED);
+        
+        assertEquals("read_file", session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsWithEmptyToolCallsList() {
+        Message assistantMsg = new Message("assistant", "Response");
+        assistantMsg.setToolCalls(Collections.emptyList());
+        
+        List<Message> messages = Arrays.asList(
+            Message.user("Test"),
+            assistantMsg
+        );
+        
+        SessionData session = SessionData.create("empty-list", messages, SessionData.Status.ACTIVE);
+        
+        assertNull(session.getLastToolCalls());
+    }
+
+    @Test
+    void testGetLastToolCallsAfterSetMessages() {
+        SessionData session = new SessionData("update-test");
+        
+        assertNull(session.getLastToolCalls());
+        
+        ToolCall toolCall = new ToolCall("call-1", new FunctionCall("bash", "{}"));
+        Message assistantMsg = Message.assistantWithToolCalls(Arrays.asList(toolCall));
+        session.setMessages(Arrays.asList(Message.user("Test"), assistantMsg));
+        
+        assertEquals("bash", session.getLastToolCalls());
     }
 }

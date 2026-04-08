@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 
 public class ConversationLoop {
@@ -371,8 +372,33 @@ public class ConversationLoop {
         currentConversationId = session.getSessionId();
         conversationRound = countUserMessages(session.getMessages());
         
-        ui.println(ConsoleStyle.green("✓ 会话已恢复: " + session.getSessionId()));
-        ui.println(ConsoleStyle.gray("  消息数: " + session.getMessageCount() + " | 状态: " + session.getStatus()));
+        String shortId = session.getSessionId().substring(0, Math.min(12, session.getSessionId().length()));
+        String time = session.getLastActiveAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"));
+        
+        ui.println();
+        ui.println(ConsoleStyle.green("╔══════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.green("║                    ✓ 会话已恢复                              ║"));
+        ui.println(ConsoleStyle.green("╠══════════════════════════════════════════════════════════════╣"));
+        ui.println(ConsoleStyle.green("║") + 
+            String.format("  会话: %-52s", shortId) + 
+            ConsoleStyle.green("║"));
+        ui.println(ConsoleStyle.green("║") + 
+            String.format("  时间: %-52s", time) + 
+            ConsoleStyle.green("║"));
+        ui.println(ConsoleStyle.green("║") + 
+            String.format("  消息: %-52d", session.getMessageCount()) + 
+            ConsoleStyle.green("║"));
+        
+        String toolCalls = session.getLastToolCalls();
+        if (toolCalls != null && !toolCalls.isEmpty()) {
+            ui.println(ConsoleStyle.green("║") + 
+                String.format("  工具: %-52s", toolCalls) + 
+                ConsoleStyle.green("║"));
+        }
+        
+        ui.println(ConsoleStyle.green("╚══════════════════════════════════════════════════════════════╝"));
+        ui.println();
+        ui.println(ConsoleStyle.gray("提示: 您可以继续之前的对话，或输入 'reset' 开始新会话"));
         ui.println();
     }
 

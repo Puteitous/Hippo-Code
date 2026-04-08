@@ -46,9 +46,15 @@ public class AgentUi {
         println(ConsoleStyle.green("  clear   ") + " - 清屏");
         println(ConsoleStyle.green("  reset   ") + " - 重置会话历史");
         println(ConsoleStyle.green("  config  ") + " - 显示当前配置");
-        println(ConsoleStyle.green("  tokens  ") + " - 显示今日 Token 消耗统计");
-        println(ConsoleStyle.green("  showlog ") + " - 显示最近一次对话日志");
-        println(ConsoleStyle.green("  multi   ") + " - 进入多行输入模式");
+        println(ConsoleStyle.green("  tokens  ") + " - 显示今日Token统计");
+        println(ConsoleStyle.green("  showlog ") + " - 显示最近对话日志");
+        println();
+        println(ConsoleStyle.boldCyan("会话管理:"));
+        println(ConsoleStyle.green("  sessions") + " - 列出所有保存的会话");
+        println(ConsoleStyle.green("  resume  ") + " - 恢复最近的会话");
+        println(ConsoleStyle.green("  resume <序号>") + " - 恢复指定会话");
+        println(ConsoleStyle.green("  delete-session <序号>") + " - 删除指定会话");
+        println();
         println(ConsoleStyle.green("  exit    ") + " - 退出程序");
         println(ConsoleStyle.green("  quit    ") + " - 退出程序");
         println();

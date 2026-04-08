@@ -24,6 +24,7 @@ import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
 
 import java.io.IOException;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 public class AgentApplication {
@@ -150,17 +151,39 @@ public class AgentApplication {
         
         ui.println();
         ui.println(ConsoleStyle.yellow("╔══════════════════════════════════════════════════════════════╗"));
-        ui.println(ConsoleStyle.yellow("║                    检测到未完成的会话                         ║"));
+        ui.println(ConsoleStyle.yellow("║                  🔄 检测到未完成的会话                        ║"));
         ui.println(ConsoleStyle.yellow("╠══════════════════════════════════════════════════════════════╣"));
+        
+        String shortId = session.getSessionId().substring(0, Math.min(12, session.getSessionId().length()));
+        String time = session.getLastActiveAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"));
+        
         ui.println(ConsoleStyle.yellow("║") + 
-            String.format("  会话ID: %-50s", session.getSessionId()) + 
+            String.format("  会话: %-52s", shortId) + 
             ConsoleStyle.yellow("║"));
         ui.println(ConsoleStyle.yellow("║") + 
-            String.format("  消息数: %-50d", session.getMessageCount()) + 
+            String.format("  时间: %-52s", time) + 
             ConsoleStyle.yellow("║"));
         ui.println(ConsoleStyle.yellow("║") + 
-            String.format("  状态: %-52s", session.getStatus()) + 
+            String.format("  消息: %-52d", session.getMessageCount()) + 
             ConsoleStyle.yellow("║"));
+        
+        String preview = session.getLastUserMessage();
+        if (preview != null) {
+            if (preview.length() > 40) {
+                preview = preview.substring(0, 40) + "...";
+            }
+            ui.println(ConsoleStyle.yellow("║") + 
+                String.format("  预览: %-52s", preview) + 
+                ConsoleStyle.yellow("║"));
+        }
+        
+        String toolCalls = session.getLastToolCalls();
+        if (toolCalls != null && !toolCalls.isEmpty()) {
+            ui.println(ConsoleStyle.yellow("║") + 
+                String.format("  待执行: %-50s", toolCalls) + 
+                ConsoleStyle.yellow("║"));
+        }
+        
         ui.println(ConsoleStyle.yellow("╚══════════════════════════════════════════════════════════════╝"));
         ui.println();
         ui.println(ConsoleStyle.gray("是否恢复该会话？(y/n，默认 n): "));

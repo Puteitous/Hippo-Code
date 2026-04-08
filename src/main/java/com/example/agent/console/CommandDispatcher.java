@@ -186,29 +186,44 @@ public class CommandDispatcher {
         }
         
         ui.println(ConsoleStyle.cyan("╔══════════════════════════════════════════════════════════════╗"));
-        ui.println(ConsoleStyle.cyan("║                      已保存的会话                             ║"));
+        ui.println(ConsoleStyle.cyan("║                      📋 已保存的会话                          ║"));
         ui.println(ConsoleStyle.cyan("╠══════════════════════════════════════════════════════════════╣"));
         
         int index = 1;
         for (SessionData session : sessions) {
             String statusIcon = getStatusIcon(session.getStatus());
+            String shortId = session.getSessionId().substring(0, Math.min(10, session.getSessionId().length()));
             String time = session.getLastActiveAt().format(TIME_FORMAT);
-            String preview = session.getLastUserMessage() != null 
-                ? session.getLastUserMessage() 
-                : "(无预览)";
-            if (preview.length() > 30) {
-                preview = preview.substring(0, 30) + "...";
+            
+            String preview = session.getLastUserMessage();
+            if (preview != null && preview.length() > 35) {
+                preview = preview.substring(0, 35) + "...";
+            } else if (preview == null) {
+                preview = "(无预览)";
             }
             
             ui.println(ConsoleStyle.cyan("║") + 
-                String.format(" %2d. %s %-12s | %s | %d条消息", 
-                    index++, statusIcon, session.getSessionId().substring(0, Math.min(12, session.getSessionId().length())), 
-                    time, session.getMessageCount()) +
-                ConsoleStyle.cyan("        ") + ConsoleStyle.cyan("║"));
+                ConsoleStyle.bold(String.format(" %2d.", index++)) +
+                String.format(" %s %-10s | %s | %d条", 
+                    statusIcon, shortId, time, session.getMessageCount()) +
+                ConsoleStyle.cyan("                    ║"));
+            
             ui.println(ConsoleStyle.cyan("║") + 
-                String.format("     %s", preview) +
-                ConsoleStyle.cyan("                                              ").substring(0, 50 - preview.length()) + 
+                String.format("      %s", preview) +
+                ConsoleStyle.cyan("                                          ").substring(0, Math.max(0, 50 - preview.length())) + 
                 ConsoleStyle.cyan("║"));
+            
+            String toolCalls = session.getLastToolCalls();
+            if (toolCalls != null && !toolCalls.isEmpty()) {
+                String toolInfo = "工具: " + toolCalls;
+                if (toolInfo.length() > 45) {
+                    toolInfo = toolInfo.substring(0, 45) + "...";
+                }
+                ui.println(ConsoleStyle.cyan("║") + 
+                    ConsoleStyle.yellow(String.format("      %s", toolInfo)) +
+                    ConsoleStyle.cyan("                                          ").substring(0, Math.max(0, 50 - toolInfo.length())) + 
+                    ConsoleStyle.cyan("║"));
+            }
         }
         
         ui.println(ConsoleStyle.cyan("╚══════════════════════════════════════════════════════════════╝"));
