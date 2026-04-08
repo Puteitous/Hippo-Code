@@ -227,6 +227,43 @@ public class SessionStorage {
         logger.info("清理了已完成的会话");
     }
 
+    public boolean markAsIgnored(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return false;
+        }
+
+        Optional<SessionData> sessionOpt = loadSession(sessionId);
+        if (sessionOpt.isEmpty()) {
+            logger.warn("标记忽略失败，会话不存在: {}", sessionId);
+            return false;
+        }
+
+        SessionData session = sessionOpt.get();
+        session.setStatus(SessionData.Status.IGNORED);
+        saveSession(session);
+        
+        logger.info("会话已标记为忽略: {}", sessionId);
+        return true;
+    }
+
+    public void cleanupExpiredSessions(int timeoutHours) {
+        if (timeoutHours <= 0) {
+            return;
+        }
+
+        List<SessionData> sessions = listSessions();
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(timeoutHours);
+        
+        sessions.stream()
+            .filter(s -> s.getStatus() == SessionData.Status.INTERRUPTED)
+            .filter(s -> s.getLastActiveAt().isBefore(cutoff))
+            .forEach(session -> {
+                session.setStatus(SessionData.Status.IGNORED);
+                saveSession(session);
+                logger.info("过期会话已标记为忽略: {}", session.getSessionId());
+            });
+    }
+
     private String generateSessionId() {
         return LocalDateTime.now().format(FILE_DATE_FORMAT) + "_" + 
                Long.toHexString(System.currentTimeMillis() % 0xFFFF);

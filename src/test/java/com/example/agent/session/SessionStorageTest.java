@@ -79,14 +79,16 @@ class SessionStorageTest {
         SessionData active = SessionData.create("active", messages, SessionData.Status.ACTIVE);
         SessionData interrupted = SessionData.create("interrupted", messages, SessionData.Status.INTERRUPTED);
         SessionData completed = SessionData.create("completed", messages, SessionData.Status.COMPLETED);
+        SessionData ignored = SessionData.create("ignored", messages, SessionData.Status.IGNORED);
         
         storage.saveSession(active);
         storage.saveSession(interrupted);
         storage.saveSession(completed);
+        storage.saveSession(ignored);
 
         List<SessionData> resumable = storage.listResumableSessions();
-        assertEquals(2, resumable.size());
-        assertTrue(resumable.stream().allMatch(SessionData::canResume));
+        assertEquals(1, resumable.size());
+        assertEquals("interrupted", resumable.get(0).getSessionId());
     }
 
     @Test
@@ -345,5 +347,104 @@ class SessionStorageTest {
         List<SessionData> remaining = storage.listSessions();
         assertEquals(1, remaining.size());
         assertEquals("active-cleanup", remaining.get(0).getSessionId());
+    }
+
+    @Test
+    void testMarkAsIgnored() {
+        List<Message> messages = Arrays.asList(Message.user("Test"));
+        
+        SessionData session = SessionData.create("to-ignore", messages, SessionData.Status.INTERRUPTED);
+        storage.saveSession(session);
+        
+        assertTrue(storage.findLatestResumableSession().isPresent());
+        
+        boolean result = storage.markAsIgnored("to-ignore");
+        assertTrue(result);
+        
+        Optional<SessionData> loaded = storage.loadSession("to-ignore");
+        assertTrue(loaded.isPresent());
+        assertEquals(SessionData.Status.IGNORED, loaded.get().getStatus());
+        
+        assertFalse(storage.findLatestResumableSession().isPresent());
+    }
+
+    @Test
+    void testMarkAsIgnoredNonExistentSession() {
+        boolean result = storage.markAsIgnored("non-existent");
+        assertFalse(result);
+    }
+
+    @Test
+    void testMarkAsIgnoredWithNullId() {
+        boolean result = storage.markAsIgnored(null);
+        assertFalse(result);
+    }
+
+    @Test
+    void testMarkAsIgnoredWithEmptyId() {
+        boolean result = storage.markAsIgnored("");
+        assertFalse(result);
+    }
+
+    @Test
+    void testCleanupExpiredSessions() {
+        List<Message> messages = Arrays.asList(Message.user("Test"));
+        
+        SessionData oldSession = SessionData.create("old-expired", messages, SessionData.Status.INTERRUPTED);
+        oldSession.setLastActiveAt(LocalDateTime.now().minusHours(100));
+        
+        SessionData newSession = SessionData.create("new-active", messages, SessionData.Status.INTERRUPTED);
+        newSession.setLastActiveAt(LocalDateTime.now().minusHours(1));
+        
+        SessionData completedSession = SessionData.create("completed-old", messages, SessionData.Status.COMPLETED);
+        completedSession.setLastActiveAt(LocalDateTime.now().minusHours(100));
+        
+        storage.saveSession(oldSession);
+        storage.saveSession(newSession);
+        storage.saveSession(completedSession);
+        
+        storage.cleanupExpiredSessions(72);
+        
+        Optional<SessionData> oldLoaded = storage.loadSession("old-expired");
+        assertTrue(oldLoaded.isPresent());
+        assertEquals(SessionData.Status.IGNORED, oldLoaded.get().getStatus());
+        
+        Optional<SessionData> newLoaded = storage.loadSession("new-active");
+        assertTrue(newLoaded.isPresent());
+        assertEquals(SessionData.Status.INTERRUPTED, newLoaded.get().getStatus());
+        
+        Optional<SessionData> completedLoaded = storage.loadSession("completed-old");
+        assertTrue(completedLoaded.isPresent());
+        assertEquals(SessionData.Status.COMPLETED, completedLoaded.get().getStatus());
+    }
+
+    @Test
+    void testCleanupExpiredSessionsWithZeroTimeout() {
+        List<Message> messages = Arrays.asList(Message.user("Test"));
+        
+        SessionData session = SessionData.create("zero-timeout", messages, SessionData.Status.INTERRUPTED);
+        session.setLastActiveAt(LocalDateTime.now().minusHours(100));
+        storage.saveSession(session);
+        
+        storage.cleanupExpiredSessions(0);
+        
+        Optional<SessionData> loaded = storage.loadSession("zero-timeout");
+        assertTrue(loaded.isPresent());
+        assertEquals(SessionData.Status.INTERRUPTED, loaded.get().getStatus());
+    }
+
+    @Test
+    void testCanResumeOnlyInterrupted() {
+        List<Message> messages = Arrays.asList(Message.user("Test"));
+        
+        SessionData active = SessionData.create("active-resume", messages, SessionData.Status.ACTIVE);
+        SessionData interrupted = SessionData.create("interrupted-resume", messages, SessionData.Status.INTERRUPTED);
+        SessionData completed = SessionData.create("completed-resume", messages, SessionData.Status.COMPLETED);
+        SessionData ignored = SessionData.create("ignored-resume", messages, SessionData.Status.IGNORED);
+        
+        assertFalse(active.canResume());
+        assertTrue(interrupted.canResume());
+        assertFalse(completed.canResume());
+        assertFalse(ignored.canResume());
     }
 }

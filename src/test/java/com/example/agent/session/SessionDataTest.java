@@ -59,7 +59,7 @@ class SessionDataTest {
     void testCanResume() {
         SessionData active = new SessionData();
         active.setStatus(SessionData.Status.ACTIVE);
-        assertTrue(active.canResume());
+        assertFalse(active.canResume());
 
         SessionData interrupted = new SessionData();
         interrupted.setStatus(SessionData.Status.INTERRUPTED);
@@ -68,6 +68,10 @@ class SessionDataTest {
         SessionData completed = new SessionData();
         completed.setStatus(SessionData.Status.COMPLETED);
         assertFalse(completed.canResume());
+
+        SessionData ignored = new SessionData();
+        ignored.setStatus(SessionData.Status.IGNORED);
+        assertFalse(ignored.canResume());
     }
 
     @Test

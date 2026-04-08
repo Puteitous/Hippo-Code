@@ -15,7 +15,8 @@ public class SessionData {
     public enum Status {
         ACTIVE,
         COMPLETED,
-        INTERRUPTED
+        INTERRUPTED,
+        IGNORED
     }
 
     private String sessionId;
@@ -73,7 +74,7 @@ public class SessionData {
     }
 
     public boolean canResume() {
-        return status == Status.INTERRUPTED || status == Status.ACTIVE;
+        return status == Status.INTERRUPTED;
     }
 
     public String getSessionId() {

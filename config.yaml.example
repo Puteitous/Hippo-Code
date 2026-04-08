@@ -81,3 +81,4 @@ persist_sessions: true      # 是否持久化会话
 max_saved_sessions: 10      # 最大保存会话数
 session_directory: "logs/sessions"  # 会话存储目录
 auto_resume: true           # 启动时自动检查可恢复会话
+resume_timeout_hours: 72  # 超过 72 小时的会话自动标记为 IGNORED

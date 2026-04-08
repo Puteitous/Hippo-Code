@@ -138,6 +138,8 @@ public class AgentApplication {
 
     private void checkAndPromptResume(AgentUi ui, SessionStorage sessionStorage, 
                                        ConversationLoop conversationLoop, InputHandler inputHandler) {
+        sessionStorage.cleanupExpiredSessions(72);
+        
         Optional<SessionData> latestSession = sessionStorage.findLatestResumableSession();
         
         if (!latestSession.isPresent()) {
@@ -168,10 +170,12 @@ public class AgentApplication {
             if ("y".equalsIgnoreCase(response) || "yes".equalsIgnoreCase(response)) {
                 conversationLoop.resumeSession(session);
             } else {
+                sessionStorage.markAsIgnored(session.getSessionId());
                 ui.println(ConsoleStyle.gray("开始新会话..."));
                 ui.println();
             }
         } catch (Exception e) {
+            sessionStorage.markAsIgnored(session.getSessionId());
             ui.println(ConsoleStyle.gray("开始新会话..."));
             ui.println();
         }

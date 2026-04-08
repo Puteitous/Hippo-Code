@@ -13,6 +13,7 @@ public class SessionConfig {
     private static final String DEFAULT_HISTORY_FILE = ".agent_history";
     private static final int DEFAULT_MAX_SAVED_SESSIONS = 10;
     private static final String DEFAULT_SESSION_DIRECTORY = "logs/sessions";
+    private static final int DEFAULT_RESUME_TIMEOUT_HOURS = 72;
     private static final int MIN_MAX_SAVED_SESSIONS = 0;
     private static final int MAX_MAX_SAVED_SESSIONS = 1000;
 
@@ -39,6 +40,9 @@ public class SessionConfig {
     
     @JsonProperty("auto_resume")
     private boolean autoResume = true;
+    
+    @JsonProperty("resume_timeout_hours")
+    private int resumeTimeoutHours = DEFAULT_RESUME_TIMEOUT_HOURS;
 
     public SessionConfig() {
     }
@@ -130,6 +134,19 @@ public class SessionConfig {
         this.autoResume = autoResume;
     }
 
+    public int getResumeTimeoutHours() {
+        return resumeTimeoutHours;
+    }
+
+    public void setResumeTimeoutHours(int resumeTimeoutHours) {
+        if (resumeTimeoutHours < 0) {
+            logger.warn("resumeTimeoutHours 不能为负数，使用默认值: {}", DEFAULT_RESUME_TIMEOUT_HOURS);
+            this.resumeTimeoutHours = DEFAULT_RESUME_TIMEOUT_HOURS;
+        } else {
+            this.resumeTimeoutHours = resumeTimeoutHours;
+        }
+    }
+
     public void validate() {
         if (maxHistory < 0) {
             logger.warn("配置验证: maxHistory 为负数，已重置为默认值");
@@ -169,6 +186,7 @@ public class SessionConfig {
                 ", maxSavedSessions=" + maxSavedSessions +
                 ", sessionDirectory='" + sessionDirectory + '\'' +
                 ", autoResume=" + autoResume +
+                ", resumeTimeoutHours=" + resumeTimeoutHours +
                 '}';
     }
 }
