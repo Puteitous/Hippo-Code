@@ -509,4 +509,168 @@ class ConversationManagerTest {
             assertDoesNotThrow(() -> manager.trimHistory(null));
         }
     }
+
+    @Nested
+    @DisplayName("未完成工具调用修复测试")
+    class UnfinishedToolCallFixTests {
+
+        @Test
+        @DisplayName("无未完成工具调用时不修改历史")
+        void testNoUnfinishedToolCall() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Hello");
+            manager.addAssistantMessage(Message.assistant("Hi"));
+            
+            int countBefore = manager.getMessageCount();
+            manager.fixUnfinishedToolCall();
+            
+            assertEquals(countBefore, manager.getMessageCount());
+        }
+
+        @Test
+        @DisplayName("修复未完成的工具调用 - 有内容")
+        void testFixUnfinishedToolCallWithContent() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Create a file");
+            
+            Message assistantMsg = Message.assistant("I will create the file");
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-1",
+                new com.example.agent.llm.model.FunctionCall("create_file", "{}")
+            ));
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().contains("I will create the file"));
+            assertTrue(lastMsg.getContent().contains("会话中断"));
+            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file"));
+            assertTrue(lastMsg.getContent().contains("请继续"));
+        }
+
+        @Test
+        @DisplayName("修复未完成的工具调用 - 无内容")
+        void testFixUnfinishedToolCallWithoutContent() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Create a file");
+            
+            Message assistantMsg = Message.assistantWithToolCalls(List.of(
+                new com.example.agent.llm.model.ToolCall(
+                    "call-1",
+                    new com.example.agent.llm.model.FunctionCall("create_file", "{}")
+                )
+            ));
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().contains("会话中断"));
+            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file"));
+            assertFalse(lastMsg.getContent().contains("null"));
+        }
+
+        @Test
+        @DisplayName("修复多个未完成的工具调用")
+        void testFixMultipleUnfinishedToolCalls() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Create and edit files");
+            
+            Message assistantMsg = Message.assistant("I will perform multiple operations");
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-1",
+                new com.example.agent.llm.model.FunctionCall("create_file", "{}")
+            ));
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-2",
+                new com.example.agent.llm.model.FunctionCall("edit_file", "{}")
+            ));
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file, edit_file"));
+        }
+
+        @Test
+        @DisplayName("修复工具调用 - 空工具名称被过滤")
+        void testFixToolCallWithEmptyName() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Test");
+            
+            Message assistantMsg = Message.assistant("Processing");
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-1",
+                new com.example.agent.llm.model.FunctionCall("valid_tool", "{}")
+            ));
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-2",
+                new com.example.agent.llm.model.FunctionCall("", "{}")
+            ));
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().contains("待执行的操作: valid_tool"));
+            assertFalse(lastMsg.getContent().contains(", ,"));
+        }
+
+        @Test
+        @DisplayName("修复工具调用 - null工具调用被过滤")
+        void testFixToolCallWithNullElements() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Test");
+            
+            Message assistantMsg = Message.assistant("Processing");
+            List<com.example.agent.llm.model.ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(new com.example.agent.llm.model.ToolCall(
+                "call-1",
+                new com.example.agent.llm.model.FunctionCall("tool1", "{}")
+            ));
+            toolCalls.add(null);
+            assistantMsg.setToolCalls(toolCalls);
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().contains("待执行的操作: tool1"));
+        }
+
+        @Test
+        @DisplayName("修复工具调用 - 保留原有内容格式")
+        void testFixToolCallPreservesContentFormat() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            manager.addUserMessage("Test");
+            
+            String originalContent = "Line 1\nLine 2\nLine 3";
+            Message assistantMsg = Message.assistant(originalContent);
+            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
+                "call-1",
+                new com.example.agent.llm.model.FunctionCall("test_tool", "{}")
+            ));
+            manager.addAssistantMessage(assistantMsg);
+            
+            manager.fixUnfinishedToolCall();
+            
+            List<Message> history = manager.getHistory();
+            Message lastMsg = history.get(history.size() - 1);
+            
+            assertTrue(lastMsg.getContent().startsWith(originalContent));
+            assertTrue(lastMsg.getContent().contains("\n\n（会话中断"));
+        }
+    }
 }
