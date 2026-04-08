@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -28,6 +29,9 @@ public class SessionStorage {
     private final Path storageDirectory;
     private final ObjectMapper objectMapper;
     private final int maxSavedSessions;
+    private volatile boolean directoryAvailable = false;
+    private volatile boolean initializationComplete = false;
+    private final Object initLock = new Object();
 
     public SessionStorage() {
         this(Paths.get("logs", "sessions"), 10);
@@ -39,20 +43,35 @@ public class SessionStorage {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.findAndRegisterModules();
         this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-        
-        ensureDirectoryExists();
     }
 
     private void ensureDirectoryExists() {
-        try {
-            if (!Files.exists(storageDirectory)) {
-                Files.createDirectories(storageDirectory);
-                logger.info("创建会话存储目录: {}", storageDirectory);
+        synchronized (initLock) {
+            if (initializationComplete) {
+                return;
             }
-        } catch (IOException e) {
-            logger.error("创建会话存储目录失败: {}", storageDirectory, e);
-            throw new RuntimeException("无法创建会话存储目录: " + storageDirectory, e);
+            
+            try {
+                if (!Files.exists(storageDirectory)) {
+                    Files.createDirectories(storageDirectory);
+                    logger.info("创建会话存储目录: {}", storageDirectory);
+                }
+                directoryAvailable = true;
+            } catch (IOException e) {
+                logger.error("创建会话存储目录失败，会话持久化将被禁用: {}", storageDirectory, e);
+            } catch (SecurityException e) {
+                logger.error("无权限创建会话存储目录，会话持久化将被禁用: {}", storageDirectory, e);
+            } finally {
+                initializationComplete = true;
+            }
         }
+    }
+
+    public boolean isAvailable() {
+        if (!initializationComplete) {
+            ensureDirectoryExists();
+        }
+        return directoryAvailable;
     }
 
     public SessionData saveSession(SessionData session) {
@@ -61,22 +80,41 @@ public class SessionStorage {
             return null;
         }
 
+        if (!isAvailable()) {
+            logger.warn("会话存储目录不可用，跳过保存: {}", session.getSessionId());
+            return null;
+        }
+
         try {
-            ensureDirectoryExists();
-            
             String sessionId = session.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
-                sessionId = generateSessionId();
+                sessionId = generateUniqueSessionId();
                 session.setSessionId(sessionId);
             }
 
             session.touch();
             
             Path sessionFile = getSessionFilePath(sessionId);
-            objectMapper.writeValue(sessionFile.toFile(), session);
+            Path tempFile = sessionFile.resolveSibling(sessionFile.getFileName() + ".tmp");
             
-            logger.info("会话已保存: {} (状态: {}, 消息数: {})", 
-                sessionId, session.getStatus(), session.getMessageCount());
+            try {
+                objectMapper.writeValue(tempFile.toFile(), session);
+                
+                try {
+                    Files.move(tempFile, sessionFile, 
+                        StandardCopyOption.REPLACE_EXISTING, 
+                        StandardCopyOption.ATOMIC_MOVE);
+                } catch (UnsupportedOperationException e) {
+                    Files.move(tempFile, sessionFile, StandardCopyOption.REPLACE_EXISTING);
+                    logger.debug("原子移动不支持，使用普通移动");
+                }
+                
+                logger.info("会话已保存: {} (状态: {}, 消息数: {})", 
+                    sessionId, session.getStatus(), session.getMessageCount());
+                
+            } finally {
+                Files.deleteIfExists(tempFile);
+            }
             
             cleanupOldSessions();
             
@@ -192,6 +230,25 @@ public class SessionStorage {
     private String generateSessionId() {
         return LocalDateTime.now().format(FILE_DATE_FORMAT) + "_" + 
                Long.toHexString(System.currentTimeMillis() % 0xFFFF);
+    }
+
+    private String generateUniqueSessionId() {
+        String sessionId;
+        int attempts = 0;
+        final int maxAttempts = 10;
+        
+        do {
+            sessionId = generateSessionId();
+            attempts++;
+            
+            if (attempts > maxAttempts) {
+                sessionId = sessionId + "_" + System.nanoTime();
+                logger.warn("生成唯一会话ID尝试次数过多，添加纳秒后缀");
+                break;
+            }
+        } while (Files.exists(getSessionFilePath(sessionId)));
+        
+        return sessionId;
     }
 
     private Path getSessionFilePath(String sessionId) {

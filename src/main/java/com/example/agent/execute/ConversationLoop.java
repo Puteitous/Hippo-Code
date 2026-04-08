@@ -272,10 +272,23 @@ public class ConversationLoop {
         try {
             SessionData.Status status = completed ? SessionData.Status.COMPLETED : SessionData.Status.INTERRUPTED;
             SessionData sessionData = conversationManager.exportSession(currentConversationId, status);
-            sessionStorage.saveSession(sessionData);
-            logger.debug("会话已保存: {}, 状态: {}", currentConversationId, status);
+            SessionData saved = sessionStorage.saveSession(sessionData);
+            
+            if (saved != null) {
+                logger.debug("会话已保存: {}, 状态: {}", currentConversationId, status);
+            } else {
+                ui.println();
+                ui.println(ConsoleStyle.yellow("  ⚠ 会话保存失败，历史记录可能丢失"));
+                ui.println(ConsoleStyle.gray("    提示: 请检查磁盘空间或会话存储目录权限"));
+                ui.println();
+                logger.warn("会话保存失败: {}", currentConversationId);
+            }
         } catch (Exception e) {
             logger.warn("保存会话失败: {}", e.getMessage());
+            ui.println();
+            ui.println(ConsoleStyle.yellow("  ⚠ 会话保存失败: " + e.getMessage()));
+            ui.println(ConsoleStyle.gray("    提示: 请检查磁盘空间或会话存储目录权限"));
+            ui.println();
         }
     }
 

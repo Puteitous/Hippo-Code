@@ -179,12 +179,30 @@ public class ConversationManager {
         Message lastMessage = conversationHistory.get(conversationHistory.size() - 1);
         conversationHistory.remove(conversationHistory.size() - 1);
         
+        StringBuilder prompt = new StringBuilder();
+        
         String content = lastMessage.getContent();
-        if (content == null || content.trim().isEmpty()) {
-            conversationHistory.add(Message.assistant("（会话中断，请继续）"));
-        } else {
-            conversationHistory.add(Message.assistant(content + "\n\n（会话中断，请继续）"));
+        if (content != null && !content.trim().isEmpty()) {
+            prompt.append(content).append("\n\n");
         }
+        
+        prompt.append("（会话中断");
+        
+        if (lastMessage.getToolCalls() != null && !lastMessage.getToolCalls().isEmpty()) {
+            String toolNames = lastMessage.getToolCalls().stream()
+                .filter(tc -> tc != null && tc.getFunction() != null)
+                .map(tc -> tc.getFunction().getName())
+                .filter(name -> name != null && !name.isEmpty())
+                .collect(java.util.stream.Collectors.joining(", "));
+            
+            if (!toolNames.isEmpty()) {
+                prompt.append("，待执行的操作: ").append(toolNames);
+            }
+        }
+        
+        prompt.append("，请继续）");
+        
+        conversationHistory.add(Message.assistant(prompt.toString()));
     }
 
     @FunctionalInterface

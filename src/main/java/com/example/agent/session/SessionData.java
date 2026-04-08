@@ -53,8 +53,9 @@ public class SessionData {
         }
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message msg = messages.get(i);
-            if ("user".equals(msg.getRole()) && msg.getContent() != null) {
-                String content = msg.getContent();
+            String role = msg.getRole();
+            String content = msg.getContent();
+            if ("user".equals(role) && content != null && !content.isEmpty()) {
                 this.lastUserMessage = content.length() > 100 
                     ? content.substring(0, 100) + "..." 
                     : content;
