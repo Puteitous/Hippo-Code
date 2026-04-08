@@ -21,6 +21,8 @@ import com.example.agent.plan.PlanExecutor;
 import com.example.agent.plan.PlanResult;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.session.SessionData;
+import com.example.agent.session.SessionStorage;
 import org.jline.reader.UserInterruptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +44,7 @@ public class ConversationLoop {
     private final IntentRecognizer intentRecognizer;
     private final TaskPlanner taskPlanner;
     private final PlanExecutor planExecutor;
+    private final SessionStorage sessionStorage;
 
     private int conversationRound = 0;
     private String currentConversationId;
@@ -52,20 +55,20 @@ public class ConversationLoop {
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui) {
-        this(context, turnExecutor, inputHandler, ui, null, null, null);
+        this(context, turnExecutor, inputHandler, ui, null, null, null, null);
     }
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui, 
                             IntentRecognizer intentRecognizer) {
-        this(context, turnExecutor, inputHandler, ui, intentRecognizer, null, null);
+        this(context, turnExecutor, inputHandler, ui, intentRecognizer, null, null, null);
     }
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui, 
                             IntentRecognizer intentRecognizer,
                             TaskPlanner taskPlanner) {
-        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, null);
+        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, null, null);
     }
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
@@ -73,6 +76,15 @@ public class ConversationLoop {
                             IntentRecognizer intentRecognizer,
                             TaskPlanner taskPlanner,
                             PlanExecutor planExecutor) {
+        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor, null);
+    }
+
+    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
+                            InputHandler inputHandler, AgentUi ui, 
+                            IntentRecognizer intentRecognizer,
+                            TaskPlanner taskPlanner,
+                            PlanExecutor planExecutor,
+                            SessionStorage sessionStorage) {
         this.context = context;
         this.turnExecutor = turnExecutor;
         this.conversationManager = context.getConversationManager();
@@ -82,6 +94,7 @@ public class ConversationLoop {
         this.intentRecognizer = intentRecognizer;
         this.taskPlanner = taskPlanner;
         this.planExecutor = planExecutor;
+        this.sessionStorage = sessionStorage != null ? sessionStorage : new SessionStorage();
     }
 
     public void processUserInput(String userInput) {
@@ -233,6 +246,8 @@ public class ConversationLoop {
                 }
             }
         } finally {
+            saveSession(completed);
+            
             if (conversationLogger != null) {
                 if (completed) {
                     conversationLogger.logSummary();
@@ -240,6 +255,27 @@ public class ConversationLoop {
                     conversationLogger.logInterruptedSummary();
                 }
             }
+        }
+    }
+
+    private void saveSession(boolean completed) {
+        if (sessionStorage == null) {
+            return;
+        }
+        
+        if (context == null || context.getConfig() == null || 
+            context.getConfig().getSession() == null ||
+            !context.getConfig().getSession().isPersistSessions()) {
+            return;
+        }
+        
+        try {
+            SessionData.Status status = completed ? SessionData.Status.COMPLETED : SessionData.Status.INTERRUPTED;
+            SessionData sessionData = conversationManager.exportSession(currentConversationId, status);
+            sessionStorage.saveSession(sessionData);
+            logger.debug("会话已保存: {}, 状态: {}", currentConversationId, status);
+        } catch (Exception e) {
+            logger.warn("保存会话失败: {}", e.getMessage());
         }
     }
 
@@ -305,5 +341,34 @@ public class ConversationLoop {
 
     public PlanResult getLastPlanResult() {
         return lastPlanResult;
+    }
+
+    public SessionStorage getSessionStorage() {
+        return sessionStorage;
+    }
+
+    public void resumeSession(SessionData session) {
+        if (session == null) {
+            return;
+        }
+        
+        conversationManager.importSession(session);
+        conversationManager.fixUnfinishedToolCall();
+        
+        currentConversationId = session.getSessionId();
+        conversationRound = countUserMessages(session.getMessages());
+        
+        ui.println(ConsoleStyle.green("✓ 会话已恢复: " + session.getSessionId()));
+        ui.println(ConsoleStyle.gray("  消息数: " + session.getMessageCount() + " | 状态: " + session.getStatus()));
+        ui.println();
+    }
+
+    private int countUserMessages(java.util.List<com.example.agent.llm.model.Message> messages) {
+        if (messages == null) {
+            return 0;
+        }
+        return (int) messages.stream()
+            .filter(m -> "user".equals(m.getRole()))
+            .count();
     }
 }

@@ -75,3 +75,9 @@ tokenizer:
   model: gpt-4          # 模型名称
   cache_enabled: true   # 缓存开关
   cache_max_size: 1000  # 缓存最大条目数
+
+session:
+persist_sessions: true      # 是否持久化会话
+max_saved_sessions: 10      # 最大保存会话数
+session_directory: "logs/sessions"  # 会话存储目录
+auto_resume: true           # 启动时自动检查可恢复会话

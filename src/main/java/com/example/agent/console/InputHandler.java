@@ -166,4 +166,8 @@ public class InputHandler {
     public int getMaxInputTokens() {
         return MAX_SINGLE_INPUT_TOKENS;
     }
+
+    public String readLine(String prompt) throws UserInterruptException, EndOfFileException {
+        return reader.readLine(prompt);
+    }
 }

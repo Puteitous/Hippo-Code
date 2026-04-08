@@ -4,27 +4,40 @@ import com.example.agent.config.Config;
 import com.example.agent.core.AgentContext;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.service.ConversationManager;
+import com.example.agent.session.SessionData;
+import com.example.agent.session.SessionStorage;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.UserInterruptException;
 
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Scanner;
 import java.util.function.Consumer;
 
 public class CommandDispatcher {
 
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+
     public static class CommandResult {
         public enum Type {
             CONTINUE,
             EXIT,
-            PROCESS_INPUT
+            PROCESS_INPUT,
+            RESUME_SESSION
         }
         
         private final Type type;
-        private final String input; // 用于存储实际要处理的输入内容
+        private final String input;
+        private final SessionData sessionToResume;
         
         private CommandResult(Type type, String input) {
+            this(type, input, null);
+        }
+        
+        private CommandResult(Type type, String input, SessionData session) {
             this.type = type;
             this.input = input;
+            this.sessionToResume = session;
         }
         
         public static CommandResult continueExecution() {
@@ -39,12 +52,20 @@ public class CommandDispatcher {
             return new CommandResult(Type.PROCESS_INPUT, input);
         }
         
+        public static CommandResult resumeSession(SessionData session) {
+            return new CommandResult(Type.RESUME_SESSION, null, session);
+        }
+        
         public Type getType() {
             return type;
         }
         
         public String getInput() {
             return input;
+        }
+        
+        public SessionData getSessionToResume() {
+            return sessionToResume;
         }
     }
 
@@ -53,6 +74,7 @@ public class CommandDispatcher {
     private final InputHandler inputHandler;
     private final ConversationManager conversationManager;
     private final TokenMetricsCollector tokenMetricsCollector;
+    private final SessionStorage sessionStorage;
     private String currentConversationId;
 
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler) {
@@ -61,6 +83,16 @@ public class CommandDispatcher {
         this.inputHandler = inputHandler;
         this.conversationManager = context.getConversationManager();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
+        this.sessionStorage = new SessionStorage();
+    }
+
+    public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler, SessionStorage sessionStorage) {
+        this.ui = ui;
+        this.config = context.getConfig();
+        this.inputHandler = inputHandler;
+        this.conversationManager = context.getConversationManager();
+        this.tokenMetricsCollector = context.getTokenMetricsCollector();
+        this.sessionStorage = sessionStorage;
     }
 
     public CommandResult dispatch(String line) throws UserInterruptException, EndOfFileException {
@@ -117,6 +149,18 @@ public class CommandDispatcher {
             return CommandResult.continueExecution();
         }
 
+        if ("sessions".equalsIgnoreCase(line)) {
+            return handleListSessions();
+        }
+
+        if (line.toLowerCase().startsWith("resume")) {
+            return handleResumeCommand(line);
+        }
+
+        if (line.toLowerCase().startsWith("delete-session")) {
+            return handleDeleteSessionCommand(line);
+        }
+
         if ("\"\"\"".equals(line) || "multi".equalsIgnoreCase(line)) {
             return handleMultilineInput();
         }
@@ -130,6 +174,163 @@ public class CommandDispatcher {
             return CommandResult.continueExecution();
         }
         return CommandResult.processInput(multilineInput);
+    }
+
+    private CommandResult handleListSessions() {
+        List<SessionData> sessions = sessionStorage.listSessions();
+        
+        if (sessions.isEmpty()) {
+            ui.println(ConsoleStyle.yellow("没有保存的会话"));
+            ui.println();
+            return CommandResult.continueExecution();
+        }
+        
+        ui.println(ConsoleStyle.cyan("╔══════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                      已保存的会话                             ║"));
+        ui.println(ConsoleStyle.cyan("╠══════════════════════════════════════════════════════════════╣"));
+        
+        int index = 1;
+        for (SessionData session : sessions) {
+            String statusIcon = getStatusIcon(session.getStatus());
+            String time = session.getLastActiveAt().format(TIME_FORMAT);
+            String preview = session.getLastUserMessage() != null 
+                ? session.getLastUserMessage() 
+                : "(无预览)";
+            if (preview.length() > 30) {
+                preview = preview.substring(0, 30) + "...";
+            }
+            
+            ui.println(ConsoleStyle.cyan("║") + 
+                String.format(" %2d. %s %-12s | %s | %d条消息", 
+                    index++, statusIcon, session.getSessionId().substring(0, Math.min(12, session.getSessionId().length())), 
+                    time, session.getMessageCount()) +
+                ConsoleStyle.cyan("        ") + ConsoleStyle.cyan("║"));
+            ui.println(ConsoleStyle.cyan("║") + 
+                String.format("     %s", preview) +
+                ConsoleStyle.cyan("                                              ").substring(0, 50 - preview.length()) + 
+                ConsoleStyle.cyan("║"));
+        }
+        
+        ui.println(ConsoleStyle.cyan("╚══════════════════════════════════════════════════════════════╝"));
+        ui.println();
+        ui.println(ConsoleStyle.gray("提示: 使用 'resume <序号>' 恢复会话，'delete-session <序号>' 删除会话"));
+        ui.println();
+        
+        return CommandResult.continueExecution();
+    }
+
+    private CommandResult handleResumeCommand(String line) {
+        String[] parts = line.split("\\s+", 2);
+        
+        if (parts.length < 2) {
+            List<SessionData> sessions = sessionStorage.listResumableSessions();
+            if (sessions.isEmpty()) {
+                ui.println(ConsoleStyle.yellow("没有可恢复的会话"));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            SessionData latest = sessions.get(0);
+            ui.println(ConsoleStyle.green("将恢复最近的会话: " + latest.getSessionId()));
+            ui.println(ConsoleStyle.gray("  消息数: " + latest.getMessageCount() + " | 状态: " + latest.getStatus()));
+            ui.println();
+            return CommandResult.resumeSession(latest);
+        }
+        
+        String arg = parts[1].trim();
+        
+        try {
+            int index = Integer.parseInt(arg);
+            List<SessionData> sessions = sessionStorage.listSessions();
+            
+            if (index < 1 || index > sessions.size()) {
+                ui.println(ConsoleStyle.red("无效的会话序号: " + index));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            SessionData session = sessions.get(index - 1);
+            if (!session.canResume()) {
+                ui.println(ConsoleStyle.yellow("该会话已完成，无法恢复"));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            return CommandResult.resumeSession(session);
+            
+        } catch (NumberFormatException e) {
+            SessionData session = sessionStorage.loadSession(arg).orElse(null);
+            if (session == null) {
+                ui.println(ConsoleStyle.red("找不到会话: " + arg));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            if (!session.canResume()) {
+                ui.println(ConsoleStyle.yellow("该会话已完成，无法恢复"));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            return CommandResult.resumeSession(session);
+        }
+    }
+
+    private CommandResult handleDeleteSessionCommand(String line) {
+        String[] parts = line.split("\\s+", 2);
+        
+        if (parts.length < 2) {
+            ui.println(ConsoleStyle.yellow("用法: delete-session <序号或会话ID>"));
+            ui.println();
+            return CommandResult.continueExecution();
+        }
+        
+        String arg = parts[1].trim();
+        
+        try {
+            int index = Integer.parseInt(arg);
+            List<SessionData> sessions = sessionStorage.listSessions();
+            
+            if (index < 1 || index > sessions.size()) {
+                ui.println(ConsoleStyle.red("无效的会话序号: " + index));
+                ui.println();
+                return CommandResult.continueExecution();
+            }
+            
+            SessionData session = sessions.get(index - 1);
+            boolean deleted = sessionStorage.deleteSession(session.getSessionId());
+            
+            if (deleted) {
+                ui.println(ConsoleStyle.green("会话已删除: " + session.getSessionId()));
+            } else {
+                ui.println(ConsoleStyle.red("删除会话失败"));
+            }
+            ui.println();
+            return CommandResult.continueExecution();
+            
+        } catch (NumberFormatException e) {
+            boolean deleted = sessionStorage.deleteSession(arg);
+            if (deleted) {
+                ui.println(ConsoleStyle.green("会话已删除: " + arg));
+            } else {
+                ui.println(ConsoleStyle.red("找不到会话: " + arg));
+            }
+            ui.println();
+            return CommandResult.continueExecution();
+        }
+    }
+
+    private String getStatusIcon(SessionData.Status status) {
+        switch (status) {
+            case ACTIVE:
+                return ConsoleStyle.green("●");
+            case INTERRUPTED:
+                return ConsoleStyle.yellow("○");
+            case COMPLETED:
+                return ConsoleStyle.gray("✓");
+            default:
+                return "?";
+        }
     }
 
     public boolean validateConfig() {

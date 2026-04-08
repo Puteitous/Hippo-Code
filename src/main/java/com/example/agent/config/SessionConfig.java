@@ -8,6 +8,8 @@ public class SessionConfig {
 
     private static final int DEFAULT_MAX_HISTORY = 50;
     private static final String DEFAULT_HISTORY_FILE = ".agent_history";
+    private static final int DEFAULT_MAX_SAVED_SESSIONS = 10;
+    private static final String DEFAULT_SESSION_DIRECTORY = "logs/sessions";
 
     @JsonProperty("auto_save")
     private boolean autoSave = true;
@@ -20,6 +22,18 @@ public class SessionConfig {
     
     @JsonProperty("save_directory")
     private String saveDirectory;
+    
+    @JsonProperty("persist_sessions")
+    private boolean persistSessions = true;
+    
+    @JsonProperty("max_saved_sessions")
+    private int maxSavedSessions = DEFAULT_MAX_SAVED_SESSIONS;
+    
+    @JsonProperty("session_directory")
+    private String sessionDirectory = DEFAULT_SESSION_DIRECTORY;
+    
+    @JsonProperty("auto_resume")
+    private boolean autoResume = true;
 
     public SessionConfig() {
     }
@@ -56,6 +70,38 @@ public class SessionConfig {
         this.saveDirectory = saveDirectory;
     }
 
+    public boolean isPersistSessions() {
+        return persistSessions;
+    }
+
+    public void setPersistSessions(boolean persistSessions) {
+        this.persistSessions = persistSessions;
+    }
+
+    public int getMaxSavedSessions() {
+        return maxSavedSessions;
+    }
+
+    public void setMaxSavedSessions(int maxSavedSessions) {
+        this.maxSavedSessions = maxSavedSessions;
+    }
+
+    public String getSessionDirectory() {
+        return sessionDirectory;
+    }
+
+    public void setSessionDirectory(String sessionDirectory) {
+        this.sessionDirectory = sessionDirectory;
+    }
+
+    public boolean isAutoResume() {
+        return autoResume;
+    }
+
+    public void setAutoResume(boolean autoResume) {
+        this.autoResume = autoResume;
+    }
+
     @Override
     public String toString() {
         return "SessionConfig{" +
@@ -63,6 +109,10 @@ public class SessionConfig {
                 ", maxHistory=" + maxHistory +
                 ", historyFile='" + historyFile + '\'' +
                 ", saveDirectory='" + saveDirectory + '\'' +
+                ", persistSessions=" + persistSessions +
+                ", maxSavedSessions=" + maxSavedSessions +
+                ", sessionDirectory='" + sessionDirectory + '\'' +
+                ", autoResume=" + autoResume +
                 '}';
     }
 }

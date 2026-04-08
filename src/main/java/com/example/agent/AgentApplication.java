@@ -17,11 +17,14 @@ import com.example.agent.plan.SequentialPlanExecutor;
 import com.example.agent.plan.SimpleTaskPlanner;
 import com.example.agent.plan.TaskPlanner;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.session.SessionData;
+import com.example.agent.session.SessionStorage;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
 
 import java.io.IOException;
+import java.util.Optional;
 
 public class AgentApplication {
 
@@ -42,8 +45,10 @@ public class AgentApplication {
             AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
             TokenEstimator tokenEstimator = context.getTokenEstimator();
             InputHandler inputHandler = new InputHandler(context.getReader(), tokenEstimator);
+            
+            SessionStorage sessionStorage = new SessionStorage();
 
-            CommandDispatcher dispatcher = new CommandDispatcher(context, ui, inputHandler);
+            CommandDispatcher dispatcher = new CommandDispatcher(context, ui, inputHandler, sessionStorage);
 
             if (!dispatcher.validateConfig()) {
                 return;
@@ -64,7 +69,7 @@ public class AgentApplication {
             PlanExecutor planExecutor = createPlanExecutor();
 
             ConversationLoop conversationLoop = new ConversationLoop(
-                    context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor
+                    context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor, sessionStorage
             );
 
             context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
@@ -72,6 +77,10 @@ public class AgentApplication {
             });
 
             ui.printWelcome();
+            
+            if (context.getConfig().getSession().isAutoResume()) {
+                checkAndPromptResume(ui, sessionStorage, conversationLoop, inputHandler);
+            }
 
             LineReader reader = context.getReader();
             while (true) {
@@ -85,6 +94,15 @@ public class AgentApplication {
                     }
 
                     if (result.getType() == CommandDispatcher.CommandResult.Type.CONTINUE) {
+                        continue;
+                    }
+
+                    if (result.getType() == CommandDispatcher.CommandResult.Type.RESUME_SESSION) {
+                        SessionData session = result.getSessionToResume();
+                        if (session != null) {
+                            conversationLoop.resumeSession(session);
+                            dispatcher.setCurrentConversationId(session.getSessionId());
+                        }
                         continue;
                     }
 
@@ -115,6 +133,47 @@ public class AgentApplication {
             if (context != null) {
                 context.close();
             }
+        }
+    }
+
+    private void checkAndPromptResume(AgentUi ui, SessionStorage sessionStorage, 
+                                       ConversationLoop conversationLoop, InputHandler inputHandler) {
+        Optional<SessionData> latestSession = sessionStorage.findLatestResumableSession();
+        
+        if (!latestSession.isPresent()) {
+            return;
+        }
+        
+        SessionData session = latestSession.get();
+        
+        ui.println();
+        ui.println(ConsoleStyle.yellow("╔══════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.yellow("║                    检测到未完成的会话                         ║"));
+        ui.println(ConsoleStyle.yellow("╠══════════════════════════════════════════════════════════════╣"));
+        ui.println(ConsoleStyle.yellow("║") + 
+            String.format("  会话ID: %-50s", session.getSessionId()) + 
+            ConsoleStyle.yellow("║"));
+        ui.println(ConsoleStyle.yellow("║") + 
+            String.format("  消息数: %-50d", session.getMessageCount()) + 
+            ConsoleStyle.yellow("║"));
+        ui.println(ConsoleStyle.yellow("║") + 
+            String.format("  状态: %-52s", session.getStatus()) + 
+            ConsoleStyle.yellow("║"));
+        ui.println(ConsoleStyle.yellow("╚══════════════════════════════════════════════════════════════╝"));
+        ui.println();
+        ui.println(ConsoleStyle.gray("是否恢复该会话？(y/n，默认 n): "));
+        
+        try {
+            String response = inputHandler.readLine("").trim();
+            if ("y".equalsIgnoreCase(response) || "yes".equalsIgnoreCase(response)) {
+                conversationLoop.resumeSession(session);
+            } else {
+                ui.println(ConsoleStyle.gray("开始新会话..."));
+                ui.println();
+            }
+        } catch (Exception e) {
+            ui.println(ConsoleStyle.gray("开始新会话..."));
+            ui.println();
         }
     }
 

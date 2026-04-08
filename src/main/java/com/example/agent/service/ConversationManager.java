@@ -6,6 +6,7 @@ import com.example.agent.context.config.ContextConfig;
 import com.example.agent.context.compressor.TruncateCompressor;
 import com.example.agent.context.policy.SlidingWindowPolicy;
 import com.example.agent.llm.model.Message;
+import com.example.agent.session.SessionData;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -136,6 +137,54 @@ public class ConversationManager {
 
     public Compressor getToolResultCompressor() {
         return toolResultCompressor;
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+
+    public SessionData exportSession(String sessionId, SessionData.Status status) {
+        List<Message> messagesCopy = new ArrayList<>(conversationHistory);
+        return SessionData.create(sessionId, messagesCopy, status);
+    }
+
+    public void importSession(SessionData session) {
+        if (session == null || session.getMessages() == null) {
+            return;
+        }
+        
+        conversationHistory.clear();
+        conversationHistory.addAll(session.getMessages());
+    }
+
+    public boolean hasUnfinishedToolCall() {
+        if (conversationHistory.isEmpty()) {
+            return false;
+        }
+        
+        Message lastMessage = conversationHistory.get(conversationHistory.size() - 1);
+        if ("assistant".equals(lastMessage.getRole()) && 
+            lastMessage.getToolCalls() != null && 
+            !lastMessage.getToolCalls().isEmpty()) {
+            return true;
+        }
+        return false;
+    }
+
+    public void fixUnfinishedToolCall() {
+        if (!hasUnfinishedToolCall()) {
+            return;
+        }
+        
+        Message lastMessage = conversationHistory.get(conversationHistory.size() - 1);
+        conversationHistory.remove(conversationHistory.size() - 1);
+        
+        String content = lastMessage.getContent();
+        if (content == null || content.trim().isEmpty()) {
+            conversationHistory.add(Message.assistant("（会话中断，请继续）"));
+        } else {
+            conversationHistory.add(Message.assistant(content + "\n\n（会话中断，请继续）"));
+        }
     }
 
     @FunctionalInterface
