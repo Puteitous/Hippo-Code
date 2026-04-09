@@ -1,18 +1,17 @@
 package com.example.agent.context;
 
 import com.example.agent.context.config.ContextConfig;
-import com.example.agent.llm.model.Message;
 import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * ContextManager 集成测试
+ * 
+ * 新架构：职责简化为三层记忆管理
  */
 class ContextManagerTest {
 
@@ -33,7 +32,11 @@ class ContextManagerTest {
         assertNotNull(contextManager.getHotMemory());
         assertNotNull(contextManager.getWarmMemory());
         assertNotNull(contextManager.getColdMemory());
-        assertNotNull(contextManager.getMetrics());
+    }
+
+    @Test
+    void testInitialize() {
+        assertDoesNotThrow(() -> contextManager.initialize());
     }
 
     @Test
@@ -46,31 +49,6 @@ class ContextManagerTest {
     }
 
     @Test
-    void testProcessUserInput() {
-        String userInput = "请分析 @src/main/java/Test.java 文件";
-        List<Message> messages = contextManager.processUserInput(userInput);
-
-        assertNotNull(messages);
-        // 由于文件可能不存在，消息列表可能为空
-    }
-
-    @Test
-    void testProcessUserInputEmpty() {
-        List<Message> messages = contextManager.processUserInput("");
-
-        assertNotNull(messages);
-        assertTrue(messages.isEmpty());
-    }
-
-    @Test
-    void testProcessUserInputNull() {
-        List<Message> messages = contextManager.processUserInput(null);
-
-        assertNotNull(messages);
-        assertTrue(messages.isEmpty());
-    }
-
-    @Test
     void testGetStatusReport() {
         String report = contextManager.getStatusReport();
 
@@ -79,47 +57,80 @@ class ContextManagerTest {
         assertTrue(report.contains("HotMemory"));
         assertTrue(report.contains("WarmMemory"));
         assertTrue(report.contains("ColdMemory"));
-        assertTrue(report.contains("性能指标"));
     }
 
     @Test
     void testCleanup() {
-        // 先处理一些输入以填充缓存
-        contextManager.processUserInput("测试查询");
+        // cleanup() 调用各层记忆的 cleanupCache()，只清理过期项
+        // 调用 clearCache() 清空所有缓存后，cleanup() 应该不会出错
+        contextManager.getWarmMemory().clearCache();
+        contextManager.getColdMemory().clearCache();
 
-        // 清理缓存
-        contextManager.cleanup();
+        assertDoesNotThrow(() -> contextManager.cleanup());
 
-        // 验证缓存已清理
         assertEquals(0, contextManager.getWarmMemory().getCacheSize());
         assertEquals(0, contextManager.getColdMemory().getCacheSize());
     }
 
     @Test
-    void testMetricsRecording() {
-        // 记录一些请求
-        contextManager.processUserInput("查询1");
-        contextManager.processUserInput("查询2");
-        contextManager.processUserInput("查询3");
+    void testCleanupWithEmptyCache() {
+        // 确保缓存为空
+        contextManager.getWarmMemory().clearCache();
+        contextManager.getColdMemory().clearCache();
 
-        ContextManager.MemoryMetrics metrics = contextManager.getMetrics();
-        String report = metrics.getReport();
-
-        assertNotNull(report);
-        assertTrue(report.contains("请求次数"));
+        // 清理空缓存不应该抛出异常
+        assertDoesNotThrow(() -> contextManager.cleanup());
     }
 
     @Test
-    void testWithCustomConfig() {
-        // 创建自定义配置
-        ContextConfig customConfig = new ContextConfig();
-        customConfig.getWarmMemory().setAtReferenceEnabled(false);
-        customConfig.getColdMemory().setEnabled(false);
+    void testMemoryAccessors() {
+        assertNotNull(contextManager.getHotMemory());
+        assertNotNull(contextManager.getWarmMemory());
+        assertNotNull(contextManager.getColdMemory());
+    }
 
-        ContextManager customManager = new ContextManager(tokenEstimator, customConfig);
+    @Test
+    void testStatusReportFormat() {
+        String report = contextManager.getStatusReport();
 
-        List<Message> messages = customManager.processUserInput("测试");
-        assertNotNull(messages);
-        assertTrue(messages.isEmpty()); // 禁用后应该没有消息
+        assertNotNull(report);
+        assertFalse(report.isEmpty());
+        assertTrue(report.contains("设计理念"));
+        assertTrue(report.contains("LLM 自主决策"));
+    }
+
+    @Test
+    void testNullTokenEstimator() {
+        // ContextManager 应该处理 tokenEstimator 为 null 的情况
+        // 或抛出合适的异常
+        assertDoesNotThrow(() -> new ContextManager(null, config));
+    }
+
+    @Test
+    void testNullConfig() {
+        // ContextManager 应该处理 config 为 null 的情况
+        assertDoesNotThrow(() -> new ContextManager(tokenEstimator, null));
+    }
+
+    @Test
+    void testMultipleInitializationCalls() {
+        assertDoesNotThrow(() -> {
+            contextManager.initialize();
+            contextManager.initialize();
+            contextManager.initialize();
+        });
+    }
+
+    @Test
+    void testEnhanceSystemPromptWithNull() {
+        String result = contextManager.enhanceSystemPrompt(null);
+        // 应该返回 null 或处理为安全值
+        assertNotNull(result);
+    }
+
+    @Test
+    void testEnhanceSystemPromptWithEmptyString() {
+        String result = contextManager.enhanceSystemPrompt("");
+        assertNotNull(result);
     }
 }

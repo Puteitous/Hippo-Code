@@ -208,8 +208,6 @@ class ContextPolicyTest {
         ContextConfig.WarmMemoryConfig warmMemory = config.getWarmMemory();
 
         assertNotNull(warmMemory);
-        assertTrue(warmMemory.isAtReferenceEnabled());
-        assertEquals(5, warmMemory.getMaxRefsPerMessage());
         assertEquals(4000, warmMemory.getMaxFileTokens());
         assertEquals(300, warmMemory.getCacheTtlSeconds());
     }
