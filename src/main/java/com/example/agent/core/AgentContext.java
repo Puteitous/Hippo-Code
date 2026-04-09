@@ -2,6 +2,9 @@ package com.example.agent.core;
 
 import com.example.agent.config.Config;
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.context.memory.HotMemory;
+import com.example.agent.context.memory.WarmMemory;
+import com.example.agent.context.memory.ColdMemory;
 import com.example.agent.llm.client.DefaultLlmClient;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.LogDirectoryManager;
@@ -62,6 +65,9 @@ public class AgentContext {
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
     private TokenMetricsCollector tokenMetricsCollector;
+    private HotMemory hotMemory;
+    private WarmMemory warmMemory;
+    private ColdMemory coldMemory;
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
@@ -84,7 +90,21 @@ public class AgentContext {
         this.toolRegistry = createToolRegistry();
         this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
         this.tokenEstimator = TokenEstimatorFactory.create(config);
-        this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
+        
+        // 初始化 HotMemory
+        this.hotMemory = new HotMemory(tokenEstimator, config.getContext().getHotMemory());
+        this.hotMemory.loadHippoRules();
+        this.hotMemory.loadMemoryMd();
+        
+        // 初始化 WarmMemory
+        this.warmMemory = new WarmMemory(tokenEstimator, config.getContext().getWarmMemory());
+        
+        // 初始化 ColdMemory
+        this.coldMemory = new ColdMemory(tokenEstimator, config.getContext().getColdMemory());
+        
+        // 增强系统提示词
+        String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
+        this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
     }
 
     private ToolRegistry createToolRegistry() {
@@ -101,7 +121,14 @@ public class AgentContext {
     }
 
     public void resetConversation() {
-        this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
+        // 重新加载 HotMemory（确保文件有更新时能重新加载）
+        if (this.hotMemory != null) {
+            this.hotMemory.reload();
+            String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
+            this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
+        } else {
+            this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
+        }
     }
 
     public Config getConfig() {
@@ -138,6 +165,18 @@ public class AgentContext {
 
     public TokenMetricsCollector getTokenMetricsCollector() {
         return tokenMetricsCollector;
+    }
+
+    public HotMemory getHotMemory() {
+        return hotMemory;
+    }
+
+    public WarmMemory getWarmMemory() {
+        return warmMemory;
+    }
+
+    public ColdMemory getColdMemory() {
+        return coldMemory;
     }
 
     public void close() {
