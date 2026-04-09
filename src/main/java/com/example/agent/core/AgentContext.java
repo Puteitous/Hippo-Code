@@ -34,14 +34,35 @@ public class AgentContext {
         你是一个编程助手，可以帮助用户进行软件开发任务。
         
         你可以访问以下工具：
-        - read_file: 读取文件内容
+        - read_file: 读取文件内容（支持缓存和智能截断）
         - write_file: 写入文件内容（覆盖整个文件）
         - edit_file: 精确编辑文件内容（替换特定文本片段）
         - list_directory: 列出目录内容，支持递归显示目录树
         - glob: 使用 glob 模式查找文件（如 **/*.java 查找所有 Java 文件）
         - grep: 在文件内容中搜索文本（支持正则表达式）
+        - search_code: 语义检索代码库，查找相关代码文件
         - ask_user: 向用户提问并等待回答（用于确认或获取信息）
         - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
+        
+        === 自主决策原则 ===
+        
+        🔍 上下文自主发现：
+        - 不要等待用户告诉你"读哪个文件"，你应该主动判断需要哪些信息
+        - 如果你对代码库不了解，先用 list_directory、glob、grep 探索项目结构
+        - 如果回答问题需要上下文，主动调用 read_file 读取相关文件
+        - 可以多次调用工具获取信息，直到你有足够的上下文回答问题
+        
+        📌 @引用语法糖支持：
+        - 用户输入中的 @path/to/file 表示"引用这个文件"
+        - 看到 @path/to/file 时，你应该主动调用 read_file 读取该文件
+        - 例如："请重构 @src/main/Example.java" → 你需要先读取 Example.java 再回答
+        - 支持相对路径和绝对路径
+        
+        🎯 工具调用策略：
+        - 先探索，后回答：处理复杂任务时，先用工具了解项目
+        - 按需调用：缺少什么信息，就调用什么工具获取
+        - 多次迭代：可以分多次调用工具，逐步深入
+        - 用户不需要知道你调用了哪些工具，他们只关心最终答案
         
         当用户请求涉及文件操作时，请使用相应的工具完成任务。
         在修改文件之前，请先读取文件内容了解当前状态。
@@ -87,8 +108,6 @@ public class AgentContext {
         logger.info("日志系统已初始化");
         
         this.llmClient = new DefaultLlmClient(config);
-        this.toolRegistry = createToolRegistry();
-        this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
         this.tokenEstimator = TokenEstimatorFactory.create(config);
         
         // 初始化 HotMemory
@@ -102,6 +121,23 @@ public class AgentContext {
         // 初始化 ColdMemory
         this.coldMemory = new ColdMemory(tokenEstimator, config.getContext().getColdMemory());
         
+        // 创建工具注册表并注入依赖
+        this.toolRegistry = createToolRegistry();
+        
+        // 注入 WarmMemory 到 ReadFileTool
+        ToolExecutor readFileTool = toolRegistry.getExecutor("read_file");
+        if (readFileTool instanceof ReadFileTool) {
+            ((ReadFileTool) readFileTool).setWarmMemory(this.warmMemory);
+        }
+        
+        // 注入 ColdMemory 到 SearchCodeTool
+        ToolExecutor searchCodeTool = toolRegistry.getExecutor("search_code");
+        if (searchCodeTool instanceof SearchCodeTool) {
+            ((SearchCodeTool) searchCodeTool).setColdMemory(this.coldMemory);
+        }
+        
+        this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
+        
         // 增强系统提示词
         String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
@@ -114,6 +150,7 @@ public class AgentContext {
         registry.register(new ListDirectoryTool());
         registry.register(new GlobTool());
         registry.register(new GrepTool());
+        registry.register(new SearchCodeTool());
         registry.register(new EditFileTool());
         registry.register(new AskUserTool());
         registry.register(new BashTool());

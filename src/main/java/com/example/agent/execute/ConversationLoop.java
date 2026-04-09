@@ -131,22 +131,6 @@ public class ConversationLoop {
             displayPlanInfo(lastExecutionPlan);
         }
 
-        // 处理 WarmMemory @ 引用
-        if (context.getWarmMemory() != null) {
-            java.util.List<com.example.agent.llm.model.Message> warmMessages = context.getWarmMemory().processReferences(userInput);
-            for (com.example.agent.llm.model.Message message : warmMessages) {
-                conversationManager.addAssistantMessage(message);
-            }
-        }
-
-        // 处理 ColdMemory 代码库检索
-        if (context.getColdMemory() != null) {
-            java.util.List<com.example.agent.llm.model.Message> coldMessages = context.getColdMemory().retrieve(userInput, 1000); // 1000 tokens 限制
-            for (com.example.agent.llm.model.Message message : coldMessages) {
-                conversationManager.addAssistantMessage(message);
-            }
-        }
-
         conversationManager.addUserMessage(userInput);
         conversationManager.trimHistory((messageCount, tokenCount) -> {
             ui.println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]") );

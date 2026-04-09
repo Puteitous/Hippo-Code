@@ -1,7 +1,6 @@
 package com.example.agent.context.memory;
 
 import com.example.agent.context.config.ContextConfig;
-import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,8 +11,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * ColdMemory 管理类
- * 负责代码库检索，基于语义和关键词的文件搜索
+ * ColdMemory 代码库检索缓存层
+ * 
+ * 新架构：职责简化为检索引擎 + 缓存
+ * - 不再预判，不再自动注入上下文
+ * - 供 search_code 工具调用
+ * - LLM 自主决定何时检索、检索什么
+ * 
  */
 public class ColdMemory {
 
@@ -22,7 +26,7 @@ public class ColdMemory {
     private final TokenEstimator tokenEstimator;
     private final ContextConfig.ColdMemoryConfig config;
     private final CodeSearchEngine searchEngine;
-    private final Map<String, List<SearchResult>> searchCache;
+    private final Map<String, CachedSearchResult> searchCache;
 
     public ColdMemory(TokenEstimator tokenEstimator, ContextConfig.ColdMemoryConfig config) {
         this.tokenEstimator = tokenEstimator;
@@ -36,80 +40,70 @@ public class ColdMemory {
     }
 
     /**
-     * 基于用户输入检索相关文件
+     * 检索代码库
      *
-     * @param userInput 用户输入
-     * @param maxTokens 最大 token 限制
-     * @return 包含检索结果的消息列表
+     * @param query 检索查询
+     * @param maxResults 最大结果数
+     * @param maxTokens 最大 token 数
+     * @return 格式化的检索结果列表
      */
-    public List<Message> retrieve(String userInput, int maxTokens) {
-        List<Message> messages = new ArrayList<>();
+    public List<String> search(String query, int maxResults, int maxTokens) {
+        List<String> formattedResults = new ArrayList<>();
 
-        if (!config.isEnabled() || userInput == null || userInput.isEmpty()) {
-            return messages;
-        }
+        long startTime = System.currentTimeMillis();
 
         // 检查缓存
-        List<SearchResult> cachedResults = searchCache.get(userInput);
-        if (cachedResults != null) {
-            logger.debug("从缓存获取检索结果");
-            return convertResultsToMessages(cachedResults, maxTokens);
+        CachedSearchResult cached = searchCache.get(query);
+        if (cached != null && !cached.isExpired()) {
+            logger.debug("检索缓存命中: '{}' (耗时: {}ms)", query, System.currentTimeMillis() - startTime);
+            return cached.results;
         }
 
         // 执行检索
-        List<SearchResult> results = searchEngine.search(userInput, config.getMaxResults());
+        List<SearchResult> results = searchEngine.search(query, maxResults);
         if (results.isEmpty()) {
-            logger.debug("没有找到相关文件");
-            return messages;
+            logger.debug("检索无结果: '{}'", query);
+            return formattedResults;
         }
 
-        // 缓存结果
-        searchCache.put(userInput, results);
-
-        // 转换为消息
-        messages = convertResultsToMessages(results, maxTokens);
-
-        return messages;
-    }
-
-    /**
-     * 将检索结果转换为消息
-     */
-    private List<Message> convertResultsToMessages(List<SearchResult> results, int maxTokens) {
-        List<Message> messages = new ArrayList<>();
+        // 格式化结果
         int totalTokens = 0;
-
         for (SearchResult result : results) {
-            String content = result.getContent();
-            int tokens = tokenEstimator.estimateTextTokens(content);
+            StringBuilder item = new StringBuilder();
+            item.append("📄 ").append(result.filePath).append("\n");
+            item.append("   相关性: ").append(String.format("%.0f%%", result.score * 100)).append("\n");
+            item.append("   摘要:\n");
 
-            if (totalTokens + tokens > maxTokens) {
-                logger.debug("达到 token 限制，停止添加检索结果");
-                break;
+            String preview = result.preview;
+            int resultTokens = tokenEstimator.estimateTextTokens(preview);
+
+            if (totalTokens + resultTokens > maxTokens) {
+                // 截断
+                int ratio = (maxTokens - totalTokens) * 4;
+                if (ratio > 0 && preview.length() > ratio) {
+                    preview = preview.substring(0, ratio) + "\n   ... (已截断)";
+                } else if (ratio <= 0) {
+                    break;
+                }
             }
 
-            // 创建工具消息
-            Message message = Message.toolResult(
-                    "cold_memory_" + result.getFilePath(),
-                    "search_file",
-                    "文件: " + result.getFilePath() + "\n" +
-                            "相关性: " + result.getRelevanceScore() + "\n\n" +
-                            content
-            );
-            
-            messages.add(message);
-            totalTokens += tokens;
+            // 缩进显示
+            String[] lines = preview.split("\n");
+            for (String line : lines) {
+                item.append("   ").append(line).append("\n");
+            }
+
+            formattedResults.add(item.toString());
+            totalTokens += resultTokens;
         }
 
-        return messages;
-    }
+        // 缓存结果（5分钟过期）
+        searchCache.put(query, new CachedSearchResult(formattedResults, 300 * 1000L));
 
-    /**
-     * 清理缓存
-     */
-    public void cleanupCache() {
-        searchCache.clear();
-        logger.debug("清除检索缓存");
+        logger.debug("检索完成: '{}' 返回 {} 个结果 (耗时: {}ms)",
+                query, formattedResults.size(), System.currentTimeMillis() - startTime);
+
+        return formattedResults;
     }
 
     /**
@@ -120,72 +114,85 @@ public class ColdMemory {
     }
 
     /**
-     * 检索结果类
+     * 清理过期缓存
      */
-    public static class SearchResult {
-        private final String filePath;
-        private final String content;
-        private final double relevanceScore;
-
-        public SearchResult(String filePath, String content, double relevanceScore) {
-            this.filePath = filePath;
-            this.content = content;
-            this.relevanceScore = relevanceScore;
-        }
-
-        public String getFilePath() {
-            return filePath;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public double getRelevanceScore() {
-            return relevanceScore;
+    public void cleanupCache() {
+        int before = searchCache.size();
+        searchCache.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        int removed = before - searchCache.size();
+        if (removed > 0) {
+            logger.debug("清理了 {} 个过期的检索缓存", removed);
         }
     }
 
     /**
-     * 代码搜索引擎（内部实现）
+     * 清空所有缓存
+     */
+    public void clearCache() {
+        searchCache.clear();
+        logger.debug("清空所有检索缓存");
+    }
+
+    /**
+     * 检索结果实体
+     */
+    private static class SearchResult {
+        final String filePath;
+        final String preview;
+        final double score;
+
+        SearchResult(String filePath, String preview, double score) {
+            this.filePath = filePath;
+            this.preview = preview;
+            this.score = score;
+        }
+    }
+
+    /**
+     * 缓存的检索结果
+     */
+    private static class CachedSearchResult {
+        final List<String> results;
+        final long expireTime;
+
+        CachedSearchResult(List<String> results, long ttlMillis) {
+            this.results = results;
+            this.expireTime = System.currentTimeMillis() + ttlMillis;
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() > expireTime;
+        }
+    }
+
+    /**
+     * 代码检索引擎
      */
     private static class CodeSearchEngine {
 
-        /**
-         * 搜索相关文件
-         *
-         * @param query 搜索查询
-         * @param maxResults 最大结果数
-         * @return 搜索结果列表
-         */
-        public List<SearchResult> search(String query, int maxResults) {
+        List<SearchResult> search(String query, int maxResults) {
             List<SearchResult> results = new ArrayList<>();
 
-            // TODO: 实现真实的代码检索逻辑
-            // 1. 扫描项目目录
-            // 2. 提取文件内容
-            // 3. 计算相关性得分
-            // 4. 排序并返回结果
+            logger.debug("执行检索: '{}'，最大结果数: {}", query, maxResults);
 
-            logger.debug("搜索查询: '{}'，最大结果数: {}", query, maxResults);
-
-            // 模拟搜索结果
+            // 简单的基于关键词的检索模拟
+            // 实际项目可以集成语义向量数据库
             results.add(new SearchResult(
                     "src/main/java/com/example/agent/core/AgentContext.java",
-                    "// AgentContext 核心类\npublic class AgentContext {\n    // 核心方法和属性\n}",
-                    0.95
+                    "// AgentContext 核心类\npublic class AgentContext {\n    // 上下文管理核心\n}",
+                    0.90
             ));
 
             results.add(new SearchResult(
-                    "src/main/java/com/example/agent/context/policy/ThreeTierPolicy.java",
-                    "// 三层记忆策略\npublic class ThreeTierPolicy implements ContextPolicy {\n    // 策略实现\n}",
-                    0.85
-            ));
-
-            results.add(new SearchResult(
-                    "src/main/java/com/example/agent/context/memory/WarmMemory.java",
-                    "// WarmMemory 管理类\npublic class WarmMemory {\n    // @ 引用处理\n}",
+                    "src/main/java/com/example/agent/execute/ConversationLoop.java",
+                    "// 对话主循环\npublic class ConversationLoop {\n    // 意图识别、规划、执行流程\n}",
                     0.80
+            ));
+
+            results.add(new SearchResult(
+                    "src/main/java/com/example/agent/tools/ReadFileTool.java",
+                    "// 文件读取工具\npublic class ReadFileTool {\n    // 带缓存和智能截断\n}",
+                    0.75
             ));
 
             // 限制结果数量

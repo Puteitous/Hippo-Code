@@ -214,37 +214,14 @@ public class ContextConfig {
     // WarmMemory 配置
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class WarmMemoryConfig {
-        public static final int DEFAULT_MAX_REFS_PER_MESSAGE = 5;
         public static final int DEFAULT_MAX_FILE_TOKENS = 4000;
         public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
-
-        @JsonProperty("at_reference_enabled")
-        private boolean atReferenceEnabled = true;
-
-        @JsonProperty("max_refs_per_message")
-        private int maxRefsPerMessage = DEFAULT_MAX_REFS_PER_MESSAGE;
 
         @JsonProperty("max_file_tokens")
         private int maxFileTokens = DEFAULT_MAX_FILE_TOKENS;
 
         @JsonProperty("cache_ttl_seconds")
         private int cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
-
-        public boolean isAtReferenceEnabled() {
-            return atReferenceEnabled;
-        }
-
-        public void setAtReferenceEnabled(boolean atReferenceEnabled) {
-            this.atReferenceEnabled = atReferenceEnabled;
-        }
-
-        public int getMaxRefsPerMessage() {
-            return maxRefsPerMessage;
-        }
-
-        public void setMaxRefsPerMessage(int maxRefsPerMessage) {
-            this.maxRefsPerMessage = maxRefsPerMessage;
-        }
 
         public int getMaxFileTokens() {
             return maxFileTokens;
@@ -265,9 +242,7 @@ public class ContextConfig {
         @Override
         public String toString() {
             return "WarmMemoryConfig{" +
-                    "atReferenceEnabled=" + atReferenceEnabled +
-                    ", maxRefsPerMessage=" + maxRefsPerMessage +
-                    ", maxFileTokens=" + maxFileTokens +
+                    "maxFileTokens=" + maxFileTokens +
                     ", cacheTtlSeconds=" + cacheTtlSeconds +
                     '}';
         }
