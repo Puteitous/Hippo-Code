@@ -61,11 +61,19 @@ public class WarmMemory {
     public String readFile(String filePath, int maxTokens) {
         long startTime = System.currentTimeMillis();
 
+        // 参数边界校验
+        if (filePath == null || filePath.trim().isEmpty()) {
+            logger.warn("文件路径为空或 null");
+            return null;
+        }
+        // token <= 0 时使用配置的默认值
+        int effectiveMaxTokens = maxTokens > 0 ? maxTokens : config.getMaxFileTokens();
+
         // 检查缓存
         CachedFile cached = fileCache.get(filePath);
         if (cached != null && !cached.isExpired()) {
             logger.debug("缓存命中: {} (耗时: {}ms)", filePath, System.currentTimeMillis() - startTime);
-            return applySmartTruncation(filePath, cached.content, maxTokens);
+            return applySmartTruncation(filePath, cached.content, effectiveMaxTokens);
         }
 
         // 读取文件
@@ -85,7 +93,7 @@ public class WarmMemory {
                     filePath, content.length(), System.currentTimeMillis() - startTime);
 
             // 应用智能截断
-            return applySmartTruncation(filePath, content, maxTokens);
+            return applySmartTruncation(filePath, content, effectiveMaxTokens);
 
         } catch (IOException e) {
             logger.error("读取文件失败: {} - {}", filePath, e.getMessage());
@@ -125,15 +133,20 @@ public class WarmMemory {
         StringBuilder result = new StringBuilder();
         int currentTokens = 0;
         String[] lines = content.split("\n");
+        boolean truncated = false;
 
         for (String line : lines) {
             int lineTokens = tokenEstimator.estimateTextTokens(line + "\n");
             if (currentTokens + lineTokens > maxTokens) {
-                result.append("\n// ... 文件内容过长，已截断 ...\n");
+                truncated = true;
                 break;
             }
             result.append(line).append("\n");
             currentTokens += lineTokens;
+        }
+
+        if (truncated) {
+            result.append("\n// ... 文件内容过长，已截断 ...\n");
         }
 
         return result.toString();

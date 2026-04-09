@@ -28,10 +28,10 @@ public class ContextManager {
 
     public ContextManager(TokenEstimator tokenEstimator, ContextConfig config) {
         this.tokenEstimator = tokenEstimator;
-        this.config = config;
-        this.hotMemory = new HotMemory(tokenEstimator, config.getHotMemory());
-        this.warmMemory = new WarmMemory(tokenEstimator, config.getWarmMemory());
-        this.coldMemory = new ColdMemory(tokenEstimator, config.getColdMemory());
+        this.config = config != null ? config : new ContextConfig();
+        this.hotMemory = new HotMemory(tokenEstimator, this.config.getHotMemory());
+        this.warmMemory = new WarmMemory(tokenEstimator, this.config.getWarmMemory());
+        this.coldMemory = new ColdMemory(tokenEstimator, this.config.getColdMemory());
     }
 
     /**

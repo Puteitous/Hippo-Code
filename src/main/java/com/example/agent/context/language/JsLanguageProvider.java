@@ -261,38 +261,46 @@ public class JsLanguageProvider implements LanguageProvider {
 
     /**
      * 提取函数定义
+     * 使用逐行文本匹配 - 彻底绕过 Java 正则引擎边界 Bug
+     * Bug 说明：正则 [^{]* 中的 { 被 JDK 正则引擎误识别为量词起始符
      */
     private List<FunctionInfo> extractFunctions(String content) {
         List<FunctionInfo> functions = new ArrayList<>();
+        String[] lines = content.split("\n");
+        int pos = 0;
 
-        // 匹配函数定义（多种格式）
-        Pattern pattern = Pattern.compile(
-            "^(\\s*)(?:export\\s+)?(?:async\\s+)?(?:function\\s+)?\\w+\\s*\\([^)]*\\)(?:\\s*:\\s*[^{]+)?\\s*{",
-            Pattern.MULTILINE
-        );
+        for (int lineNum = 0; lineNum < lines.length; lineNum++) {
+            String line = lines[lineNum];
+            pos += line.length() + 1;
 
-        Matcher matcher = pattern.matcher(content);
-        while (matcher.find()) {
-            String funcDef = matcher.group().trim();
-            // 去掉最后的 {
-            if (funcDef.endsWith("{")) {
-                funcDef = funcDef.substring(0, funcDef.length() - 1).trim();
+            // 简单可靠的函数定义识别
+            boolean isFunction = line.contains("function ")
+                    || (line.contains("=>") && line.trim().endsWith("{"))
+                    || (line.contains("class ") && line.trim().endsWith("{"));
+
+            if (isFunction && line.trim().endsWith("{")) {
+                int indent = 0;
+                while (indent < line.length() && line.charAt(indent) == ' ') indent++;
+
+                String funcDef = line.trim();
+                if (funcDef.endsWith("{")) {
+                    funcDef = funcDef.substring(0, funcDef.length() - 1).trim();
+                }
+
+                int start = pos;
+                int braceCount = 1;
+                int end = start;
+
+                while (end < content.length() && braceCount > 0) {
+                    char c = content.charAt(end);
+                    if (c == '{') braceCount++;
+                    else if (c == '}') braceCount--;
+                    end++;
+                }
+
+                String funcBody = content.substring(start, end - 1);
+                functions.add(new FunctionInfo(funcDef, funcBody));
             }
-
-            int start = matcher.end();
-
-            // 找到函数体
-            int braceCount = 1;
-            int end = start;
-            while (end < content.length() && braceCount > 0) {
-                char c = content.charAt(end);
-                if (c == '{') braceCount++;
-                else if (c == '}') braceCount--;
-                end++;
-            }
-
-            String funcBody = content.substring(start, end - 1);
-            functions.add(new FunctionInfo(funcDef, funcBody));
         }
 
         return functions;

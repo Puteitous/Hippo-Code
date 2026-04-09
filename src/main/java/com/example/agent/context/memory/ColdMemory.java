@@ -50,6 +50,16 @@ public class ColdMemory {
     public List<String> search(String query, int maxResults, int maxTokens) {
         List<String> formattedResults = new ArrayList<>();
 
+        // 参数边界校验
+        if (query == null) {
+            logger.debug("查询为 null，返回空结果");
+            return formattedResults;
+        }
+        if (maxResults <= 0 || maxTokens <= 0) {
+            logger.debug("参数无效 maxResults={}, maxTokens={}，返回空结果", maxResults, maxTokens);
+            return formattedResults;
+        }
+
         long startTime = System.currentTimeMillis();
 
         // 检查缓存
