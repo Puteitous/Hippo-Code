@@ -22,12 +22,16 @@ import com.example.agent.session.SessionStorage;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 public class AgentApplication {
+
+    private static final Logger logger = LoggerFactory.getLogger(AgentApplication.class);
 
     private boolean intentRecognitionEnabled = true;
     private boolean planningEnabled = true;
@@ -211,6 +215,13 @@ public class AgentApplication {
 
         HybridIntentRecognizer recognizer = new HybridIntentRecognizer(context.getLlmClient());
         recognizer.setPreferLlm(false);
+        
+        // Phase 2: 注入 ThinkingEngine，启用代码库探索能力
+        if (context.getThinkingEngine() != null) {
+            recognizer.setThinkingEngine(context.getThinkingEngine());
+            logger.info("意图识别器已装备 ThinkingEngine ✅");
+        }
+
         return recognizer;
     }
 
@@ -221,6 +232,12 @@ public class AgentApplication {
 
         SimpleTaskPlanner simplePlanner = new SimpleTaskPlanner();
         LlmTaskPlanner llmPlanner = new LlmTaskPlanner(context.getLlmClient());
+
+        // Phase 1: 注入 ThinkingEngine，启用规划前探索
+        if (context.getThinkingEngine() != null) {
+            llmPlanner.setThinkingEngine(context.getThinkingEngine());
+            logger.info("任务规划器已装备 ThinkingEngine ✅");
+        }
 
         CompositeTaskPlanner compositePlanner = new CompositeTaskPlanner(simplePlanner, llmPlanner);
         compositePlanner.setPreferLlm(false);

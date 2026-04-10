@@ -1,6 +1,7 @@
 package com.example.agent.intent;
 
 import com.example.agent.config.IntentConfig;
+import com.example.agent.core.ThinkingEngine;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import org.slf4j.Logger;
@@ -73,6 +74,14 @@ public class HybridIntentRecognizer implements IntentRecognizer {
     public void setLlmEnabled(boolean enabled) {
         this.llmRecognizer.setEnabled(enabled);
         this.config.setLlmEnabled(enabled);
+    }
+
+    public void setThinkingEngine(ThinkingEngine thinkingEngine) {
+        this.llmRecognizer.setThinkingEngine(thinkingEngine);
+    }
+
+    public void setUseThinkingEngine(boolean useThinkingEngine) {
+        this.llmRecognizer.setUseThinkingEngine(useThinkingEngine);
     }
 
     @Override

@@ -30,6 +30,10 @@ public class ToolRegistry {
         return executors.containsKey(name);
     }
 
+    public List<ToolExecutor> getAllTools() {
+        return new ArrayList<>(executors.values());
+    }
+
     public List<Tool> toTools() {
         List<Tool> tools = new ArrayList<>();
         for (ToolExecutor executor : executors.values()) {

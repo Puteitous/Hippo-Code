@@ -9,6 +9,7 @@ import com.example.agent.llm.client.DefaultLlmClient;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
+import com.example.agent.plan.LlmTaskPlanner;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
@@ -89,6 +90,7 @@ public class AgentContext {
     private HotMemory hotMemory;
     private WarmMemory warmMemory;
     private ColdMemory coldMemory;
+    private ThinkingEngine thinkingEngine;
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
@@ -137,6 +139,14 @@ public class AgentContext {
         }
         
         this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
+
+        // Phase 1: 初始化 ThinkingEngine - 统一思考引擎
+        this.thinkingEngine = new ThinkingEngine(
+                this.llmClient,
+                this.toolRegistry,
+                this.concurrentToolExecutor
+        );
+        logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
         
         // 增强系统提示词
         String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
@@ -214,6 +224,10 @@ public class AgentContext {
 
     public ColdMemory getColdMemory() {
         return coldMemory;
+    }
+
+    public ThinkingEngine getThinkingEngine() {
+        return thinkingEngine;
     }
 
     public void close() {

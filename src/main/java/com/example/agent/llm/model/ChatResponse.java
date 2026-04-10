@@ -95,6 +95,11 @@ public class ChatResponse {
         return message != null ? message.getContent() : null;
     }
 
+    public List<ToolCall> getToolCalls() {
+        Message message = getFirstMessage();
+        return message != null ? message.getToolCalls() : null;
+    }
+
     @Override
     public String toString() {
         return "ChatResponse{" +

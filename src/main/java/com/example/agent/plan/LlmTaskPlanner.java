@@ -1,5 +1,7 @@
 package com.example.agent.plan;
 
+import com.example.agent.core.ThinkingContext;
+import com.example.agent.core.ThinkingEngine;
 import com.example.agent.intent.IntentResult;
 import com.example.agent.intent.IntentType;
 import com.example.agent.llm.client.LlmClient;
@@ -14,19 +16,40 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LlmTaskPlanner implements TaskPlanner {
 
     private static final Logger logger = LoggerFactory.getLogger(LlmTaskPlanner.class);
     private static final int DEFAULT_PRIORITY = 10;
+    private static final Set<String> PLANNING_TOOLS = Set.of(
+            "glob", "grep", "list_directory", "read_file"
+    );
+    private static final int MAX_THINKING_ROUNDS = 3;
 
     private final LlmClient llmClient;
     private final ObjectMapper objectMapper;
+    private ThinkingEngine thinkingEngine;
     private boolean enabled = true;
+    private boolean useThinkingEngine = true;
 
     public LlmTaskPlanner(LlmClient llmClient) {
         this.llmClient = llmClient;
         this.objectMapper = new ObjectMapper();
+    }
+
+    public LlmTaskPlanner(LlmClient llmClient, ThinkingEngine thinkingEngine) {
+        this.llmClient = llmClient;
+        this.thinkingEngine = thinkingEngine;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    public void setThinkingEngine(ThinkingEngine thinkingEngine) {
+        this.thinkingEngine = thinkingEngine;
+    }
+
+    public void setUseThinkingEngine(boolean useThinkingEngine) {
+        this.useThinkingEngine = useThinkingEngine;
     }
 
     @Override
@@ -48,6 +71,34 @@ public class LlmTaskPlanner implements TaskPlanner {
     }
 
     private String generatePlanFromLlm(IntentResult intent, PlanningContext context) {
+        if (useThinkingEngine && thinkingEngine != null) {
+            return generatePlanWithThinkingEngine(intent, context);
+        }
+        return generatePlanLegacy(intent, context);
+    }
+
+    private String generatePlanWithThinkingEngine(IntentResult intent, PlanningContext context) {
+        logger.debug("使用 ThinkingEngine 进行任务规划，允许工具: {}", PLANNING_TOOLS);
+
+        String userPrompt = PlanningPrompts.buildPlanningPrompt(intent, context);
+
+        ThinkingContext<String> thinkingContext = ThinkingContext.<String>builder()
+                .systemPrompt(PlanningPrompts.getEnhancedSystemPrompt())
+                .userInput(userPrompt)
+                .allowedTools(PLANNING_TOOLS)
+                .maxRounds(MAX_THINKING_ROUNDS)
+                .resultParser(this::extractJson)
+                .build();
+
+        try {
+            return thinkingEngine.think(thinkingContext);
+        } catch (Exception e) {
+            logger.error("ThinkingEngine 规划失败，回退到传统模式: {}", e.getMessage());
+            return generatePlanLegacy(intent, context);
+        }
+    }
+
+    private String generatePlanLegacy(IntentResult intent, PlanningContext context) {
         List<Message> messages = new ArrayList<>();
 
         messages.add(Message.system(PlanningPrompts.getSystemPrompt()));
