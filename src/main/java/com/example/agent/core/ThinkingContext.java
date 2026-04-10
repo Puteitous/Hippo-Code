@@ -50,7 +50,7 @@ public class ThinkingContext<T> {
     }
 
     public T parseResult(String content) {
-        return resultParser.apply(content);
+        return resultParser.apply(content != null ? content : "");
     }
 
     public static <T> Builder<T> builder() {
@@ -101,6 +101,9 @@ public class ThinkingContext<T> {
             }
             if (resultParser == null) {
                 throw new IllegalArgumentException("resultParser cannot be null");
+            }
+            if (maxRounds <= 0) {
+                throw new IllegalArgumentException("maxRounds must be positive");
             }
             return new ThinkingContext<>(this);
         }

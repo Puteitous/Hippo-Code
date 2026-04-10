@@ -48,6 +48,10 @@ public class ThinkingEngine {
             List<com.example.agent.llm.model.Tool> availableTools = buildAvailableTools(context);
             ChatResponse response = llmClient.chat(messages, availableTools);
 
+            if (response == null) {
+                throw new LlmException("LLM 返回空响应");
+            }
+
             if (!response.hasToolCalls()) {
                 logger.debug("第 {} 轮无工具调用，思考完成", round);
                 String finalContent = response.getContent() != null ? response.getContent() : "";
@@ -75,6 +79,9 @@ public class ThinkingEngine {
 
         logger.debug("达到最大轮数，强制输出结论");
         ChatResponse finalResponse = llmClient.chat(messages);
+        if (finalResponse == null) {
+            throw new LlmException("LLM 返回空响应");
+        }
         String finalContent = finalResponse.getContent() != null ? finalResponse.getContent() : "";
         return context.parseResult(finalContent);
     }
