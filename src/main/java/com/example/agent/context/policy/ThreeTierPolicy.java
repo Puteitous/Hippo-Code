@@ -41,17 +41,6 @@ public class ThreeTierPolicy implements ContextPolicy {
         // 获取基础对话历史
         List<Message> context = new ArrayList<>(baseManager.getHistory());
 
-        // TODO: Phase 2 - 注入 HotMemory 内容 (已在 AgentContext 中实现)
-        // context = injectHotMemory(context);
-
-        // TODO: Phase 3 - 处理 WarmMemory (@引用) (已在 ConversationLoop 中实现)
-        // if (userInput != null) {
-        //     context = injectWarmMemory(context, userInput);
-        // }
-
-        // TODO: Phase 5 - 按需检索 ColdMemory
-        // context = injectColdMemory(context, userInput);
-
         // 添加用户输入（如果不在历史中）
         if (userInput != null && !userInput.isEmpty()) {
             boolean alreadyAdded = context.stream()
@@ -76,21 +65,4 @@ public class ThreeTierPolicy implements ContextPolicy {
         return "ThreeTierPolicy";
     }
 
-    // TODO: Phase 2 实现
-    // private List<Message> injectHotMemory(List<Message> context) {
-    //     // 注入 .hipporules 和 MEMORY.md 内容
-    //     return context;
-    // }
-
-    // TODO: Phase 3 实现
-    // private List<Message> injectWarmMemory(List<Message> context, String userInput) {
-    //     // 解析 @引用，注入文件内容
-    //     return context;
-    // }
-
-    // TODO: Phase 5 实现
-    // private List<Message> injectColdMemory(List<Message> context, String userInput) {
-    //     // 按需检索代码库
-    //     return context;
-    // }
 }

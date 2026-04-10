@@ -1,11 +1,11 @@
 package com.example.agent.core;
 
+import com.example.agent.context.memory.ColdMemory;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.ToolCall;
-import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
@@ -22,17 +22,28 @@ import java.util.stream.Collectors;
 public class ThinkingEngine {
 
     private static final Logger logger = LoggerFactory.getLogger(ThinkingEngine.class);
+    private static final int DEFAULT_RELEVANT_FILES = 3;
 
     private final LlmClient llmClient;
     private final ToolRegistry toolRegistry;
     private final ConcurrentToolExecutor toolExecutor;
     private final ObjectMapper objectMapper;
+    private ColdMemory coldMemory;
+    private boolean memoryBoostEnabled = true;
 
     public ThinkingEngine(LlmClient llmClient, ToolRegistry toolRegistry, ConcurrentToolExecutor toolExecutor) {
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry;
         this.toolExecutor = toolExecutor;
         this.objectMapper = new ObjectMapper();
+    }
+
+    public void setColdMemory(ColdMemory coldMemory) {
+        this.coldMemory = coldMemory;
+    }
+
+    public void setMemoryBoostEnabled(boolean enabled) {
+        this.memoryBoostEnabled = enabled;
     }
 
     public <T> T think(ThinkingContext<T> context) throws LlmException {
@@ -93,6 +104,14 @@ public class ThinkingEngine {
             messages.add(Message.system(context.getSystemPrompt()));
         }
 
+        if (memoryBoostEnabled && coldMemory != null && context.getUserInput() != null) {
+            List<Message> memoryContext = buildMemoryContext(context.getUserInput());
+            if (!memoryContext.isEmpty()) {
+                logger.debug("ColdMemory 检索到 {} 个相关文件注入上下文", memoryContext.size());
+                messages.addAll(memoryContext);
+            }
+        }
+
         messages.addAll(context.getHistory());
 
         if (context.getUserInput() != null && !context.getUserInput().isEmpty()) {
@@ -100,6 +119,28 @@ public class ThinkingEngine {
         }
 
         return messages;
+    }
+
+    private List<Message> buildMemoryContext(String userInput) {
+        List<Message> memoryMessages = new ArrayList<>();
+
+        List<String> relevantFiles = coldMemory.search(userInput, DEFAULT_RELEVANT_FILES, 1000);
+
+        if (!relevantFiles.isEmpty()) {
+            StringBuilder memoryPrompt = new StringBuilder("\n=== 代码库相关参考（来自记忆检索） ===\n");
+            memoryPrompt.append("在代码库中找到以下相关文件：\n");
+
+            for (String filePath : relevantFiles) {
+                memoryPrompt.append("  - ").append(filePath).append("\n");
+            }
+
+            memoryPrompt.append("\n提示：你可以直接引用这些文件，无需再次搜索。\n");
+            memoryPrompt.append("如果这些文件不够用，再调用工具继续探索。\n");
+
+            memoryMessages.add(Message.system(memoryPrompt.toString()));
+        }
+
+        return memoryMessages;
     }
 
     private <T> List<com.example.agent.llm.model.Tool> buildAvailableTools(ThinkingContext<T> context) {

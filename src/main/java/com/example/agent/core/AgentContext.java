@@ -146,7 +146,12 @@ public class AgentContext {
                 this.toolRegistry,
                 this.concurrentToolExecutor
         );
+
+        // Phase 4: 注入 ColdMemory，记忆增强减少工具调用
+        this.thinkingEngine.setColdMemory(this.coldMemory);
+
         logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
+        logger.info("  ↳ 已装备 ColdMemory 记忆增强 ✅");
         
         // 增强系统提示词
         String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);

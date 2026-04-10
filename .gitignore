@@ -27,3 +27,7 @@ logs/
 
 # Maven
 dependency-reduced-pom.xml
+
+# Hippo 配置与记忆文件
+.hipporules
+MEMORY.md
