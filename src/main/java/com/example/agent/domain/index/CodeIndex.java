@@ -1,6 +1,7 @@
 package com.example.agent.domain.index;
 
 import com.example.agent.config.IndexConfig;
+import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,12 +19,14 @@ public class CodeIndex {
     private final IndexConfig config;
     private CodeSearchStrategy searchEngine;
     private final Map<String, CachedSearchResult> searchCache;
+    private final TruncationService truncationService;
 
     public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
         this.searchCache = new ConcurrentHashMap<>();
+        this.truncationService = new TruncationService(tokenEstimator);
     }
 
     public CodeIndex(TokenEstimator tokenEstimator) {
@@ -70,13 +73,15 @@ public class CodeIndex {
         }
 
         int totalTokens = 0;
+        int tokensPerResult = Math.max(500, maxTokens / Math.max(1, results.size()));
+
         for (SearchResult result : results) {
             StringBuilder item = new StringBuilder();
             item.append("📄 ").append(result.filePath).append("\n");
             item.append("   相关性: ").append(String.format("%.0f%%", result.score * 100)).append("\n");
             item.append("   摘要:\n");
 
-            String preview = result.preview;
+            String preview = truncationService.truncateByExtension(result.preview, result.filePath, tokensPerResult);
             int resultTokens = tokenEstimator.estimateTextTokens(preview);
 
             if (totalTokens + resultTokens > maxTokens) {

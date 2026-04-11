@@ -1,8 +1,7 @@
 package com.example.agent.service;
 
 import com.example.agent.domain.cache.CacheManager;
-import com.example.agent.context.language.LanguageProvider;
-import com.example.agent.context.language.LanguageProviderFactory;
+import com.example.agent.domain.truncation.TruncationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +17,7 @@ public class FileContentService {
 
     private final TokenEstimator tokenEstimator;
     private final CacheManager cacheManager;
-    private final LanguageProviderFactory languageProviderFactory;
+    private final TruncationService truncationService;
     private final int defaultMaxTokens;
 
     public FileContentService(TokenEstimator tokenEstimator, CacheManager cacheManager) {
@@ -28,7 +27,7 @@ public class FileContentService {
     public FileContentService(TokenEstimator tokenEstimator, CacheManager cacheManager, int defaultMaxTokens) {
         this.tokenEstimator = tokenEstimator;
         this.cacheManager = cacheManager;
-        this.languageProviderFactory = new LanguageProviderFactory();
+        this.truncationService = new TruncationService(tokenEstimator);
         this.defaultMaxTokens = defaultMaxTokens;
     }
 
@@ -50,7 +49,7 @@ public class FileContentService {
         String cached = cacheManager.get(cacheKey);
         if (cached != null) {
             logger.debug("缓存命中: {} (耗时: {}ms)", filePath, System.currentTimeMillis() - startTime);
-            return applySmartTruncation(filePath, cached, effectiveMaxTokens);
+            return truncationService.truncateByExtension(cached, filePath, effectiveMaxTokens);
         }
 
         try {
@@ -71,7 +70,7 @@ public class FileContentService {
             logger.debug("读取文件: {} ({} 字符, 耗时: {}ms)",
                     filePath, content.length(), System.currentTimeMillis() - startTime);
 
-            return applySmartTruncation(filePath, content, effectiveMaxTokens);
+            return truncationService.truncateByExtension(content, filePath, effectiveMaxTokens);
 
         } catch (IOException e) {
             logger.error("读取文件失败: {} - {}", filePath, e.getMessage());
@@ -103,50 +102,11 @@ public class FileContentService {
         logger.debug("文件缓存已失效: {}", filePath);
     }
 
-    private String applySmartTruncation(String filePath, String content, int maxTokens) {
-        if (content == null || content.isEmpty()) {
-            return content;
-        }
-
-        int tokenCount = tokenEstimator.estimateTextTokens(content);
-        if (tokenCount <= maxTokens) {
-            return content;
-        }
-
-        LanguageProvider provider = languageProviderFactory.getProvider(filePath);
-        if (provider != null) {
-            logger.debug("对 {} 使用 {} 进行智能截断", filePath, provider.getLanguageName());
-            return provider.truncate(content, maxTokens);
-        }
-
-        logger.debug("对 {} 使用简单截断 ({} tokens -> {} tokens)", filePath, tokenCount, maxTokens);
-        return simpleTruncate(content, maxTokens);
-    }
-
-    private String simpleTruncate(String content, int maxTokens) {
-        StringBuilder result = new StringBuilder();
-        int currentTokens = 0;
-        String[] lines = content.split("\n");
-        boolean truncated = false;
-
-        for (String line : lines) {
-            int lineTokens = tokenEstimator.estimateTextTokens(line + "\n");
-            if (currentTokens + lineTokens > maxTokens) {
-                truncated = true;
-                break;
-            }
-            result.append(line).append("\n");
-            currentTokens += lineTokens;
-        }
-
-        if (truncated) {
-            result.append("\n// ... 文件内容过长，已截断 ...\n");
-        }
-
-        return result.toString();
-    }
-
     public int getCacheSize() {
         return cacheManager.size();
+    }
+
+    public TruncationService getTruncationService() {
+        return truncationService;
     }
 }
