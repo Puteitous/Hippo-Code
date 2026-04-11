@@ -1,6 +1,5 @@
-package com.example.agent.context.memory;
+package com.example.agent.context.index;
 
-import com.example.agent.context.memory.SearchResult;
 import java.util.List;
 
 public interface CodeSearchStrategy {

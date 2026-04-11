@@ -1,7 +1,7 @@
-package com.example.agent.context.memory.search;
+package com.example.agent.context.index.search;
 
-import com.example.agent.context.memory.CodeSearchStrategy;
-import com.example.agent.context.memory.SearchResult;
+import com.example.agent.context.index.CodeSearchStrategy;
+import com.example.agent.context.index.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.example.agent.context.memory.search.SearchEngineUtils.*;
+import static com.example.agent.context.index.search.SearchEngineUtils.*;
 
 public class SimpleKeywordSearch implements CodeSearchStrategy {
     private static final Logger logger = LoggerFactory.getLogger(SimpleKeywordSearch.class);
@@ -48,30 +48,20 @@ public class SimpleKeywordSearch implements CodeSearchStrategy {
         for (Map.Entry<String, String> entry : fileContents.entrySet()) {
             double score = calculateSimpleScore(entry.getValue(), entry.getKey(), keywords);
             if (score > 0.1) {
-                String preview = SearchEngineUtils.generatePreview(entry.getValue(), keywords);
-                results.add(new SearchResult(entry.getKey(), preview, score));
+                results.add(new SearchResult(
+                        entry.getKey(),
+                        generatePreview(entry.getValue(), keywords),
+                        score
+                ));
             }
         }
 
         results.sort((a, b) -> Double.compare(b.score, a.score));
-        return results.size() > maxResults ? results.subList(0, maxResults) : results;
+        return results.subList(0, Math.min(results.size(), maxResults));
     }
 
     @Override
     public int getIndexSize() {
         return fileContents.size();
-    }
-
-    private double calculateSimpleScore(String content, String path, String[] keywords) {
-        String contentLower = content.toLowerCase();
-        String pathLower = path.toLowerCase();
-        double score = 0.0;
-
-        for (String keyword : keywords) {
-            if (keyword.length() < 2) continue;
-            if (pathLower.contains(keyword)) score += 3.0;
-            if (contentLower.contains(keyword)) score += 1.0;
-        }
-        return Math.min(1.0, score / 10.0);
     }
 }

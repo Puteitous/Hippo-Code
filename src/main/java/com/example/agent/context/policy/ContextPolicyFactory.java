@@ -11,7 +11,6 @@ import com.example.agent.service.TokenEstimator;
 public class ContextPolicyFactory {
 
     public static final String POLICY_SIMPLE = "simple";
-    public static final String POLICY_THREE_TIER = "three-tier";
 
     private ContextPolicyFactory() {
         // 工具类，禁止实例化
@@ -33,7 +32,6 @@ public class ContextPolicyFactory {
 
         return switch (policyName.toLowerCase()) {
             case POLICY_SIMPLE -> new SimplePolicy(trimPolicy);
-            case POLICY_THREE_TIER -> new ThreeTierPolicy(trimPolicy);
             default -> {
                 // 默认使用 SimplePolicy
                 System.err.println("未知的策略: " + policyName + "，使用默认的 SimplePolicy");
@@ -63,7 +61,7 @@ public class ContextPolicyFactory {
             return false;
         }
         return switch (policyName.toLowerCase()) {
-            case POLICY_SIMPLE, POLICY_THREE_TIER -> true;
+            case POLICY_SIMPLE -> true;
             default -> false;
         };
     }
@@ -74,6 +72,6 @@ public class ContextPolicyFactory {
      * @return 支持的策略名称数组
      */
     public static String[] getSupportedPolicies() {
-        return new String[]{POLICY_SIMPLE, POLICY_THREE_TIER};
+        return new String[]{POLICY_SIMPLE};
     }
 }

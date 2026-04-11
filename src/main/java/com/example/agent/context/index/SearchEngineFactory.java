@@ -1,7 +1,7 @@
-package com.example.agent.context.memory;
+package com.example.agent.context.index;
 
-import com.example.agent.context.memory.search.InvertedIndexSearch;
-import com.example.agent.context.memory.search.SimpleKeywordSearch;
+import com.example.agent.context.index.search.InvertedIndexSearch;
+import com.example.agent.context.index.search.SimpleKeywordSearch;
 
 public class SearchEngineFactory {
     public static CodeSearchStrategy getDefault() {

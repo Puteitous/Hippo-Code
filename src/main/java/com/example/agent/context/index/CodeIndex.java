@@ -1,9 +1,9 @@
 package com.example.agent.context.index;
 
 import com.example.agent.context.config.ContextConfig;
-import com.example.agent.context.memory.CodeSearchStrategy;
-import com.example.agent.context.memory.SearchEngineFactory;
-import com.example.agent.context.memory.SearchResult;
+import com.example.agent.context.index.CodeSearchStrategy;
+import com.example.agent.context.index.SearchEngineFactory;
+import com.example.agent.context.index.SearchResult;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

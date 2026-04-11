@@ -1,4 +1,4 @@
-package com.example.agent.context.memory.search;
+package com.example.agent.context.index.search;
 
 import java.nio.file.Path;
 
@@ -48,23 +48,36 @@ public class SearchEngineUtils {
         }
 
         for (int i = 0; i < Math.min(lines.length, 100); i++) {
-            String lineLower = lines[i].toLowerCase();
-            for (String keyword : keywords) {
-                if (keyword.length() >= 2 && lineLower.contains(keyword)) {
-                    int start = Math.max(0, i - 1);
-                    int end = Math.min(lines.length, i + 4);
-                    for (int j = start; j < end; j++) {
-                        preview.append(lines[j]).append("\n");
-                    }
-                    preview.append("  ...\n");
-                    return preview.toString();
-                }
-            }
-        }
-
-        for (int i = 0; i < Math.min(lines.length, 5); i++) {
             preview.append(lines[i]).append("\n");
         }
+        if (lines.length > 100) {
+            preview.append("  ... (").append(lines.length - 100).append(" more lines) ...\n");
+        }
         return preview.toString();
+    }
+
+    public static double calculateSimpleScore(String content, String filePath, String[] keywords) {
+        double score = 0.0;
+        String contentLower = content.toLowerCase();
+        String fileLower = filePath.toLowerCase();
+
+        for (String keyword : keywords) {
+            if (keyword.length() < 2) continue;
+
+            String k = keyword.toLowerCase();
+            if (fileLower.contains(k)) {
+                score += 0.5;
+            }
+
+            int count = 0;
+            int idx = 0;
+            while ((idx = contentLower.indexOf(k, idx)) != -1) {
+                count++;
+                idx += k.length();
+            }
+            score += Math.min(count * 0.1, 0.5);
+        }
+
+        return score;
     }
 }

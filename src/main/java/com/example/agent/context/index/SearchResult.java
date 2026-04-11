@@ -1,4 +1,4 @@
-package com.example.agent.context.memory;
+package com.example.agent.context.index;
 
 public class SearchResult {
     public final String filePath;
