@@ -9,7 +9,6 @@
 - AgentContext: 核心上下文管理
 - ConversationManager: 对话历史管理
 - ToolRegistry: 工具注册中心
-- HotMemory: 项目规则和记忆管理
 
 ## 重要 API
 - read_file: 读取文件内容

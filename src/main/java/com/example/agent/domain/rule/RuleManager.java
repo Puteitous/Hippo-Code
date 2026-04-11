@@ -15,15 +15,15 @@ public class RuleManager {
     private static final Logger logger = LoggerFactory.getLogger(RuleManager.class);
 
     private final TokenEstimator tokenEstimator;
-    private final ContextConfig.HotMemoryConfig config;
+    private final ContextConfig.RuleConfig config;
 
     private String hippoRulesContent;
     private String memoryMdContent;
     private int totalTokens;
 
-    public RuleManager(TokenEstimator tokenEstimator, ContextConfig.HotMemoryConfig config) {
+    public RuleManager(TokenEstimator tokenEstimator, ContextConfig.RuleConfig config) {
         this.tokenEstimator = tokenEstimator;
-        this.config = config != null ? config : new ContextConfig.HotMemoryConfig();
+        this.config = config != null ? config : new ContextConfig.RuleConfig();
         this.hippoRulesContent = "";
         this.memoryMdContent = "";
         this.totalTokens = 0;

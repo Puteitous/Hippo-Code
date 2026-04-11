@@ -34,18 +34,6 @@ class ContextPolicyFactoryTest {
     }
 
     @Test
-    void testCreateThreeTierPolicy() {
-        ContextConfig config = new ContextConfig();
-        config.setPolicy("three-tier");
-
-        ContextPolicy policy = ContextPolicyFactory.create(config, dummyTrimPolicy);
-
-        assertNotNull(policy);
-        assertInstanceOf(ThreeTierPolicy.class, policy);
-        assertEquals("ThreeTierPolicy", policy.getName());
-    }
-
-    @Test
     void testCreateDefaultPolicy() {
         ContextPolicy policy = ContextPolicyFactory.createDefault(dummyTrimPolicy);
 
@@ -75,10 +63,9 @@ class ContextPolicyFactoryTest {
     @Test
     void testIsSupported() {
         assertTrue(ContextPolicyFactory.isSupported("simple"));
-        assertTrue(ContextPolicyFactory.isSupported("three-tier"));
         assertTrue(ContextPolicyFactory.isSupported("SIMPLE")); // 大小写不敏感
-        assertTrue(ContextPolicyFactory.isSupported("Three-Tier"));
 
+        assertFalse(ContextPolicyFactory.isSupported("three-tier"));
         assertFalse(ContextPolicyFactory.isSupported("unknown"));
         assertFalse(ContextPolicyFactory.isSupported(null));
     }
@@ -88,9 +75,8 @@ class ContextPolicyFactoryTest {
         String[] policies = ContextPolicyFactory.getSupportedPolicies();
 
         assertNotNull(policies);
-        assertEquals(2, policies.length);
+        assertEquals(1, policies.length);
         assertEquals("simple", policies[0]);
-        assertEquals("three-tier", policies[1]);
     }
 
     @Test

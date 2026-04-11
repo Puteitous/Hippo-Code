@@ -57,23 +57,23 @@ context:
     max_tokens: 2000
     truncate_strategy: tail
 
-  # HotMemory 配置（项目规则 + 持久化记忆）
-  hot_memory:
+  # Rule 配置（项目规则 + 持久化记忆）
+  rule:
     rules_file: .hipporules      # 项目规则文件
     memory_file: MEMORY.md       # 持久化记忆文件
-    max_tokens: 8000             # HotMemory 最大 token 数
+    max_tokens: 8000             # Rule 最大 token 数
     inject_at_startup: true      # 启动时注入
 
-  # WarmMemory 配置（@引用）
-  warm_memory:
+  # Cache 配置（@引用）
+  cache:
     at_reference_enabled: true   # 启用 @ 引用
     max_refs_per_message: 5      # 单条消息最多引用文件数
     max_file_tokens: 4000        # 单文件最大 token 数
     cache_ttl_seconds: 300       # 文件缓存时间（秒）
 
-  # ColdMemory 配置（代码库检索）
-  cold_memory:
-    enabled: true                # 启用 ColdMemory
+  # Index 配置（代码库检索）
+  index:
+    enabled: true                # 启用代码索引
     max_results: 3               # 最大检索结果数
     max_tokens: 5000             # 检索结果最大 token 数
 

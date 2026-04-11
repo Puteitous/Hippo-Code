@@ -28,14 +28,14 @@ public class ContextConfig {
     @JsonProperty("policy")
     private String policy = DEFAULT_POLICY;
 
-    @JsonProperty("hot_memory")
-    private HotMemoryConfig hotMemory = new HotMemoryConfig();
+    @JsonProperty("rule")
+    private RuleConfig rule = new RuleConfig();
 
-    @JsonProperty("warm_memory")
-    private WarmMemoryConfig warmMemory = new WarmMemoryConfig();
+    @JsonProperty("cache")
+    private CacheConfig cache = new CacheConfig();
 
-    @JsonProperty("cold_memory")
-    private ColdMemoryConfig coldMemory = new ColdMemoryConfig();
+    @JsonProperty("index")
+    private IndexConfig index = new IndexConfig();
 
     public ContextConfig() {
     }
@@ -80,28 +80,28 @@ public class ContextConfig {
         this.policy = policy;
     }
 
-    public HotMemoryConfig getHotMemory() {
-        return hotMemory;
+    public RuleConfig getRule() {
+        return rule;
     }
 
-    public void setHotMemory(HotMemoryConfig hotMemory) {
-        this.hotMemory = hotMemory;
+    public void setRule(RuleConfig rule) {
+        this.rule = rule;
     }
 
-    public WarmMemoryConfig getWarmMemory() {
-        return warmMemory;
+    public CacheConfig getCache() {
+        return cache;
     }
 
-    public void setWarmMemory(WarmMemoryConfig warmMemory) {
-        this.warmMemory = warmMemory;
+    public void setCache(CacheConfig cache) {
+        this.cache = cache;
     }
 
-    public ColdMemoryConfig getColdMemory() {
-        return coldMemory;
+    public IndexConfig getIndex() {
+        return index;
     }
 
-    public void setColdMemory(ColdMemoryConfig coldMemory) {
-        this.coldMemory = coldMemory;
+    public void setIndex(IndexConfig index) {
+        this.index = index;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -143,15 +143,15 @@ public class ContextConfig {
                 ", keepRecentTurns=" + keepRecentTurns +
                 ", toolResult=" + toolResult +
                 ", policy='" + policy + '\'' +
-                ", hotMemory=" + hotMemory +
-                ", warmMemory=" + warmMemory +
-                ", coldMemory=" + coldMemory +
+                ", rule=" + rule +
+                ", cache=" + cache +
+                ", index=" + index +
                 '}';
     }
 
-    // HotMemory 配置
+    // Rule 配置
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class HotMemoryConfig {
+    public static class RuleConfig {
         public static final String DEFAULT_RULES_FILE = ".hipporules";
         public static final String DEFAULT_MEMORY_FILE = "MEMORY.md";
         public static final int DEFAULT_MAX_TOKENS = 8000;
@@ -202,7 +202,7 @@ public class ContextConfig {
 
         @Override
         public String toString() {
-            return "HotMemoryConfig{" +
+            return "RuleConfig{" +
                     "rulesFile='" + rulesFile + '\'' +
                     ", memoryFile='" + memoryFile + '\'' +
                     ", maxTokens=" + maxTokens +
@@ -211,9 +211,9 @@ public class ContextConfig {
         }
     }
 
-    // WarmMemory 配置
+    // Cache 配置
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class WarmMemoryConfig {
+    public static class CacheConfig {
         public static final int DEFAULT_MAX_FILE_TOKENS = 4000;
         public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
 
@@ -241,16 +241,16 @@ public class ContextConfig {
 
         @Override
         public String toString() {
-            return "WarmMemoryConfig{" +
+            return "CacheConfig{" +
                     "maxFileTokens=" + maxFileTokens +
                     ", cacheTtlSeconds=" + cacheTtlSeconds +
                     '}';
         }
     }
 
-    // ColdMemory 配置
+    // Index 配置
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ColdMemoryConfig {
+    public static class IndexConfig {
         public static final boolean DEFAULT_ENABLED = true;
         public static final int DEFAULT_MAX_RESULTS = 3;
         public static final int DEFAULT_MAX_TOKENS = 5000;
@@ -264,7 +264,7 @@ public class ContextConfig {
         @JsonProperty("max_tokens")
         private int maxTokens = DEFAULT_MAX_TOKENS;
 
-        public ColdMemoryConfig() {
+        public IndexConfig() {
         }
 
         public boolean isEnabled() {
@@ -293,7 +293,7 @@ public class ContextConfig {
 
         @Override
         public String toString() {
-            return "ColdMemoryConfig{" +
+            return "IndexConfig{" +
                     "enabled=" + enabled +
                     ", maxResults=" + maxResults +
                     ", maxTokens=" + maxTokens +

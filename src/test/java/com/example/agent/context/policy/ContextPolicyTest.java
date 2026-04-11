@@ -43,13 +43,6 @@ class ContextPolicyTest {
     }
 
     @Test
-    void testThreeTierPolicyCreation() {
-        ThreeTierPolicy policy = new ThreeTierPolicy(trimPolicy);
-        assertNotNull(policy);
-        assertEquals("ThreeTierPolicy", policy.getName());
-    }
-
-    @Test
     void testSimplePolicyBuildContext() {
         SimplePolicy policy = new SimplePolicy(trimPolicy);
 
@@ -72,44 +65,6 @@ class ContextPolicyTest {
         boolean hasTestInput = context.stream()
                 .anyMatch(m -> "user".equals(m.getRole()) && "测试输入".equals(m.getContent()));
         assertTrue(hasTestInput, "用户输入应该被添加到上下文中");
-    }
-
-    @Test
-    void testThreeTierPolicyBuildContext() {
-        ThreeTierPolicy policy = new ThreeTierPolicy(trimPolicy);
-
-        // 添加一些历史消息
-        conversationManager.addUserMessage("你好");
-        conversationManager.addAssistantMessage(Message.assistant("你好！有什么可以帮你的？"));
-
-        // 构建上下文
-        List<Message> context = policy.buildContext("测试输入", conversationManager, 10000);
-
-        // 验证结果
-        assertNotNull(context);
-        assertTrue(context.size() >= 3);
-
-        // 验证系统消息存在
-        assertEquals("system", context.get(0).getRole());
-    }
-
-    @Test
-    void testPolicySwitching() {
-        // 测试策略切换
-        ContextPolicy simplePolicy = new SimplePolicy(trimPolicy);
-        ContextPolicy threeTierPolicy = new ThreeTierPolicy(trimPolicy);
-
-        // 验证两种策略都能正常工作
-        conversationManager.addUserMessage("消息1");
-
-        List<Message> simpleContext = simplePolicy.buildContext("输入", conversationManager, 10000);
-        List<Message> threeTierContext = threeTierPolicy.buildContext("输入", conversationManager, 10000);
-
-        assertNotNull(simpleContext);
-        assertNotNull(threeTierContext);
-
-        // 在当前阶段，两种策略的行为应该相同（ThreeTierPolicy还未实现各层功能）
-        assertEquals(simpleContext.size(), threeTierContext.size());
     }
 
     @Test
@@ -152,15 +107,6 @@ class ContextPolicyTest {
     }
 
     @Test
-    void testThreeTierPolicyWithNullBaseManager() {
-        ThreeTierPolicy policy = new ThreeTierPolicy(trimPolicy);
-
-        assertThrows(IllegalArgumentException.class, () -> {
-            policy.buildContext("输入", null, 10000);
-        });
-    }
-
-    @Test
     void testSimplePolicyWithDuplicateInput() {
         SimplePolicy policy = new SimplePolicy(trimPolicy);
 
@@ -191,24 +137,35 @@ class ContextPolicyTest {
     }
 
     @Test
-    void testHotMemoryConfig() {
+    void testRuleConfig() {
         ContextConfig config = new ContextConfig();
-        ContextConfig.HotMemoryConfig hotMemory = config.getHotMemory();
+        ContextConfig.RuleConfig rule = config.getRule();
 
-        assertNotNull(hotMemory);
-        assertEquals(".hipporules", hotMemory.getRulesFile());
-        assertEquals("MEMORY.md", hotMemory.getMemoryFile());
-        assertEquals(8000, hotMemory.getMaxTokens());
-        assertTrue(hotMemory.isInjectAtStartup());
+        assertNotNull(rule);
+        assertEquals(".hipporules", rule.getRulesFile());
+        assertEquals("MEMORY.md", rule.getMemoryFile());
+        assertEquals(8000, rule.getMaxTokens());
+        assertTrue(rule.isInjectAtStartup());
     }
 
     @Test
-    void testWarmMemoryConfig() {
+    void testCacheConfig() {
         ContextConfig config = new ContextConfig();
-        ContextConfig.WarmMemoryConfig warmMemory = config.getWarmMemory();
+        ContextConfig.CacheConfig cache = config.getCache();
 
-        assertNotNull(warmMemory);
-        assertEquals(4000, warmMemory.getMaxFileTokens());
-        assertEquals(300, warmMemory.getCacheTtlSeconds());
+        assertNotNull(cache);
+        assertEquals(4000, cache.getMaxFileTokens());
+        assertEquals(300, cache.getCacheTtlSeconds());
+    }
+
+    @Test
+    void testIndexConfig() {
+        ContextConfig config = new ContextConfig();
+        ContextConfig.IndexConfig index = config.getIndex();
+
+        assertNotNull(index);
+        assertTrue(index.isEnabled());
+        assertEquals(3, index.getMaxResults());
+        assertEquals(5000, index.getMaxTokens());
     }
 }

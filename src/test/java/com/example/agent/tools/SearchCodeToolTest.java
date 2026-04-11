@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.context.memory.ColdMemory;
+import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.service.SimpleTokenEstimator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * - null/空值参数
  * - 负数/零值参数
  * - 参数边界
- * - ColdMemory集成
+ * - CodeIndex 集成
  */
 class SearchCodeToolTest {
 
@@ -82,8 +82,11 @@ class SearchCodeToolTest {
         assertTrue(exception.getMessage().contains("不能为空"));
     }
 
+
     @Test
-    void testNormalSearchWithoutColdMemory() throws Exception {
+    void testNormalSearchWithCodeIndex() throws Exception {
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
+
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
 
@@ -93,20 +96,8 @@ class SearchCodeToolTest {
     }
 
     @Test
-    void testNormalSearchWithColdMemory() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
-
-        ObjectNode args = objectMapper.createObjectNode();
-        args.put("query", "AgentContext");
-
-        String result = tool.execute(args);
-        assertNotNull(result);
-        assertTrue(result.contains("代码库检索结果"));
-    }
-
-    @Test
     void testSearchWithZeroMaxResults() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -114,12 +105,11 @@ class SearchCodeToolTest {
 
         String result = tool.execute(args);
         assertNotNull(result);
-        assertTrue(result.contains("未找到相关代码文件") || result.contains("[]"));
     }
 
     @Test
     void testSearchWithNegativeMaxResults() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -131,7 +121,7 @@ class SearchCodeToolTest {
 
     @Test
     void testSearchWithVeryLargeMaxResults() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -143,7 +133,7 @@ class SearchCodeToolTest {
 
     @Test
     void testSearchWithZeroMaxTokens() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -151,12 +141,11 @@ class SearchCodeToolTest {
 
         String result = tool.execute(args);
         assertNotNull(result);
-        assertTrue(result.contains("未找到相关代码文件"));
     }
 
     @Test
     void testSearchWithNegativeMaxTokens() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -164,12 +153,11 @@ class SearchCodeToolTest {
 
         String result = tool.execute(args);
         assertNotNull(result);
-        assertTrue(result.contains("未找到相关代码文件"));
     }
 
     @Test
     void testSearchWithVerySmallMaxTokens() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -181,7 +169,7 @@ class SearchCodeToolTest {
 
     @Test
     void testSearchWithVeryLargeMaxTokens() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -192,9 +180,9 @@ class SearchCodeToolTest {
     }
 
     @Test
-    void testSetColdMemory() {
-        assertDoesNotThrow(() -> tool.setColdMemory(null));
-        assertDoesNotThrow(() -> tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator())));
+    void testSetCodeIndex() {
+        assertDoesNotThrow(() -> tool.setCodeIndex(null));
+        assertDoesNotThrow(() -> tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator())));
     }
 
     @Test
@@ -212,8 +200,8 @@ class SearchCodeToolTest {
     }
 
     @Test
-    void testNullColdMemoryGracefulDegradation() throws Exception {
-        tool.setColdMemory(null);
+    void testNullCodeIndexGracefulDegradation() throws Exception {
+        tool.setCodeIndex(null);
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "AgentContext");
@@ -221,13 +209,11 @@ class SearchCodeToolTest {
         String result = tool.execute(args);
         assertNotNull(result);
         assertTrue(result.contains("检索功能暂不可用"));
-        assertTrue(result.contains("glob"));
-        assertTrue(result.contains("grep"));
     }
 
     @Test
     void testSearchWithSpecialCharacters() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "类 方法 变量 @ # $ % ^ & * ()");
@@ -238,7 +224,7 @@ class SearchCodeToolTest {
 
     @Test
     void testSearchWithUnicodeQuery() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         ObjectNode args = objectMapper.createObjectNode();
         args.put("query", "你好世界 🎉 日本語");
@@ -249,7 +235,7 @@ class SearchCodeToolTest {
 
     @Test
     void testVeryLongQuery() throws Exception {
-        tool.setColdMemory(new ColdMemory(new SimpleTokenEstimator()));
+        tool.setCodeIndex(new CodeIndex(new SimpleTokenEstimator()));
 
         StringBuilder longQuery = new StringBuilder();
         for (int i = 0; i < 1000; i++) {

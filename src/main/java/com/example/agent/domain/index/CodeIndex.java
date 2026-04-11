@@ -15,13 +15,13 @@ public class CodeIndex {
     private static final Logger logger = LoggerFactory.getLogger(CodeIndex.class);
 
     private final TokenEstimator tokenEstimator;
-    private final ContextConfig.ColdMemoryConfig config;
+    private final ContextConfig.IndexConfig config;
     private CodeSearchStrategy searchEngine;
     private final Map<String, CachedSearchResult> searchCache;
 
-    public CodeIndex(TokenEstimator tokenEstimator, ContextConfig.ColdMemoryConfig config) {
+    public CodeIndex(TokenEstimator tokenEstimator, ContextConfig.IndexConfig config) {
         this.tokenEstimator = tokenEstimator;
-        this.config = config != null ? config : new ContextConfig.ColdMemoryConfig();
+        this.config = config != null ? config : new ContextConfig.IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
         this.searchCache = new ConcurrentHashMap<>();
     }
