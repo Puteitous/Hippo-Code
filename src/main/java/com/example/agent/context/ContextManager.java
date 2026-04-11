@@ -43,6 +43,9 @@ public class ContextManager {
         // 加载 HotMemory（仅增强系统提示词）
         hotMemory.loadHippoRules();
         hotMemory.loadMemoryMd();
+        
+        // 🔍 构建代码库倒排索引（一次性）
+        coldMemory.buildIndex();
 
         logger.info("记忆架构初始化完成: HotMemory ✅, WarmMemory ✅, ColdMemory ✅");
         logger.info("设计理念：LLM 自主决策，按需调用工具获取上下文");

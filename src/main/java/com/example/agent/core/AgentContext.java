@@ -122,6 +122,8 @@ public class AgentContext {
         
         // 初始化 ColdMemory
         this.coldMemory = new ColdMemory(tokenEstimator, config.getContext().getColdMemory());
+        // 🔍 构建代码库倒排索引
+        this.coldMemory.buildIndex();
         
         // 创建工具注册表并注入依赖
         this.toolRegistry = createToolRegistry();
