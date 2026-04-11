@@ -1,39 +1,30 @@
 package com.example.agent.tools;
 
-import com.example.agent.context.memory.WarmMemory;
+import com.example.agent.service.FileContentService;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * ReadFileTool 文件读取工具
- * 
- * 新设计：集成 WarmMemory 缓存和语言感知智能截断
- * - 自动缓存读取过的文件内容
- * - 根据文件类型自动应用智能截断（Java/Python/JS/TS）
- */
 public class ReadFileTool implements ToolExecutor {
 
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
     private static final int DEFAULT_MAX_TOKENS = 4000;
 
-    private WarmMemory warmMemory;
+    private FileContentService fileContentService;
 
     public ReadFileTool() {
         this(null);
     }
 
-    public ReadFileTool(WarmMemory warmMemory) {
-        this.warmMemory = warmMemory;
+    public ReadFileTool(FileContentService fileContentService) {
+        this.fileContentService = fileContentService;
     }
 
-    public void setWarmMemory(WarmMemory warmMemory) {
-        this.warmMemory = warmMemory;
+    public void setFileContentService(FileContentService fileContentService) {
+        this.fileContentService = fileContentService;
     }
 
     @Override
@@ -109,26 +100,11 @@ public class ReadFileTool implements ToolExecutor {
         }
 
         try {
-            long fileSize = Files.size(path);
-            if (fileSize > MAX_FILE_SIZE) {
-                throw new ToolExecutionException(
-                    String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
-            }
-
             String content;
-            boolean fromCache = false;
-
-            // 使用 WarmMemory 读取（带缓存 + 智能截断）
-            if (warmMemory != null) {
-                content = warmMemory.readFile(filePath, maxTokens);
-                fromCache = warmMemory.getCacheSize() > 0;
+            if (fileContentService != null) {
+                content = fileContentService.readFile(filePath, maxTokens);
             } else {
-                // 降级：直接读取文件
-                content = Files.readString(path, StandardCharsets.UTF_8);
-                // 简单截断
-                if (content.length() > maxTokens * 4) {
-                    content = content.substring(0, maxTokens * 4) + "\n\n... 文件内容过长，已截断 ...";
-                }
+                content = Files.readString(path);
             }
 
             if (content == null) {
@@ -139,9 +115,6 @@ public class ReadFileTool implements ToolExecutor {
 
             StringBuilder result = new StringBuilder();
             result.append("文件内容 (").append(relativePath);
-            if (fromCache) {
-                result.append(" - 来自缓存");
-            }
             result.append("):\n");
             result.append("────────────────────────────────────────\n");
             result.append(content);
@@ -150,7 +123,7 @@ public class ReadFileTool implements ToolExecutor {
             }
             result.append("────────────────────────────────────────\n");
             result.append("(").append(content.length()).append(" 字符");
-            if (warmMemory != null) {
+            if (fileContentService != null) {
                 result.append(", 智能截断已启用");
             }
             result.append(")\n");

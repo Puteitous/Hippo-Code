@@ -1,36 +1,28 @@
 package com.example.agent.tools;
 
-import com.example.agent.context.memory.ColdMemory;
+import com.example.agent.context.index.CodeIndex;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.Collections;
 import java.util.List;
 
-/**
- * SearchCodeTool 代码库检索工具
- * 
- * 新设计：ColdMemory 职责下沉到工具层
- * - LLM 自主决定何时检索代码库
- * - 支持自定义检索关键词和结果数量
- * - 自动缓存检索结果
- */
 public class SearchCodeTool implements ToolExecutor {
 
     private static final int DEFAULT_MAX_RESULTS = 3;
     private static final int DEFAULT_MAX_TOKENS = 5000;
 
-    private ColdMemory coldMemory;
+    private CodeIndex codeIndex;
 
     public SearchCodeTool() {
         this(null);
     }
 
-    public SearchCodeTool(ColdMemory coldMemory) {
-        this.coldMemory = coldMemory;
+    public SearchCodeTool(CodeIndex codeIndex) {
+        this.codeIndex = codeIndex;
     }
 
-    public void setColdMemory(ColdMemory coldMemory) {
-        this.coldMemory = coldMemory;
+    public void setCodeIndex(CodeIndex codeIndex) {
+        this.codeIndex = codeIndex;
     }
 
     @Override
@@ -103,12 +95,8 @@ public class SearchCodeTool implements ToolExecutor {
         result.append("代码库检索结果 (查询: '").append(query).append("'):\n");
         result.append("────────────────────────────────────────\n");
 
-        boolean fromCache = false;
-
-        // 使用 ColdMemory 检索（带缓存）
-        if (coldMemory != null) {
-            List<String> results = coldMemory.search(query, maxResults, maxTokens);
-            fromCache = coldMemory.getCacheSize() > 0;
+        if (codeIndex != null) {
+            List<String> results = codeIndex.search(query, maxResults, maxTokens);
 
             if (results.isEmpty()) {
                 result.append("未找到相关代码文件\n");
@@ -123,7 +111,6 @@ public class SearchCodeTool implements ToolExecutor {
                 }
             }
         } else {
-            // 降级：返回使用建议
             result.append("检索功能暂不可用\n");
             result.append("\n请尝试：\n");
             result.append("  - 使用 glob 工具查找文件\n");
@@ -132,9 +119,6 @@ public class SearchCodeTool implements ToolExecutor {
         }
 
         result.append("────────────────────────────────────────\n");
-        if (fromCache) {
-            result.append("(来自缓存)\n");
-        }
         result.append("\n💡 提示：找到感兴趣的文件后，使用 read_file 读取详细内容\n");
 
         return result.toString();

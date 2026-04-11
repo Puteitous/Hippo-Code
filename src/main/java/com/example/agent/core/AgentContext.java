@@ -2,9 +2,10 @@ package com.example.agent.core;
 
 import com.example.agent.config.Config;
 import com.example.agent.context.config.ContextConfig;
-import com.example.agent.context.memory.HotMemory;
-import com.example.agent.context.memory.WarmMemory;
-import com.example.agent.context.memory.ColdMemory;
+import com.example.agent.context.rule.RuleManager;
+import com.example.agent.context.cache.CacheManager;
+import com.example.agent.context.index.CodeIndex;
+import com.example.agent.service.FileContentService;
 import com.example.agent.llm.client.DefaultLlmClient;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.LogDirectoryManager;
@@ -87,9 +88,10 @@ public class AgentContext {
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
     private TokenMetricsCollector tokenMetricsCollector;
-    private HotMemory hotMemory;
-    private WarmMemory warmMemory;
-    private ColdMemory coldMemory;
+    private RuleManager ruleManager;
+    private CacheManager cacheManager;
+    private FileContentService fileContentService;
+    private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
 
     public AgentContext() throws IOException {
@@ -112,32 +114,36 @@ public class AgentContext {
         this.llmClient = new DefaultLlmClient(config);
         this.tokenEstimator = TokenEstimatorFactory.create(config);
         
-        // 初始化 HotMemory
-        this.hotMemory = new HotMemory(tokenEstimator, config.getContext().getHotMemory());
-        this.hotMemory.loadHippoRules();
-        this.hotMemory.loadMemoryMd();
+        // 初始化 RuleManager - 加载规则文件
+        this.ruleManager = new RuleManager(tokenEstimator, config.getContext().getHotMemory());
+        this.ruleManager.loadHippoRules();
+        this.ruleManager.loadMemoryMd();
+        logger.info("RuleManager 初始化完成");
         
-        // 初始化 WarmMemory
-        this.warmMemory = new WarmMemory(tokenEstimator, config.getContext().getWarmMemory());
+        // 初始化 CacheManager - 通用缓存
+        this.cacheManager = new CacheManager();
         
-        // 初始化 ColdMemory
-        this.coldMemory = new ColdMemory(tokenEstimator, config.getContext().getColdMemory());
-        // 🔍 构建代码库倒排索引
-        this.coldMemory.buildIndex();
+        // 初始化 FileContentService - 文件服务（带缓存和智能截断）
+        this.fileContentService = new FileContentService(tokenEstimator, cacheManager);
+        
+        // 初始化 CodeIndex - 代码检索引擎
+        this.codeIndex = new CodeIndex(tokenEstimator, config.getContext().getColdMemory());
+        this.codeIndex.buildIndex();
+        logger.info("代码索引构建完成");
         
         // 创建工具注册表并注入依赖
         this.toolRegistry = createToolRegistry();
         
-        // 注入 WarmMemory 到 ReadFileTool
+        // 注入 FileContentService 到 ReadFileTool
         ToolExecutor readFileTool = toolRegistry.getExecutor("read_file");
         if (readFileTool instanceof ReadFileTool) {
-            ((ReadFileTool) readFileTool).setWarmMemory(this.warmMemory);
+            ((ReadFileTool) readFileTool).setFileContentService(this.fileContentService);
         }
         
-        // 注入 ColdMemory 到 SearchCodeTool
+        // 注入 CodeIndex 到 SearchCodeTool
         ToolExecutor searchCodeTool = toolRegistry.getExecutor("search_code");
         if (searchCodeTool instanceof SearchCodeTool) {
-            ((SearchCodeTool) searchCodeTool).setColdMemory(this.coldMemory);
+            ((SearchCodeTool) searchCodeTool).setCodeIndex(this.codeIndex);
         }
         
         this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
@@ -149,14 +155,10 @@ public class AgentContext {
                 this.concurrentToolExecutor
         );
 
-        // Phase 4: 注入 ColdMemory，记忆增强减少工具调用
-        this.thinkingEngine.setColdMemory(this.coldMemory);
-
         logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
-        logger.info("  ↳ 已装备 ColdMemory 记忆增强 ✅");
         
         // 增强系统提示词
-        String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
+        String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(SYSTEM_PROMPT);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
     }
 
@@ -175,10 +177,10 @@ public class AgentContext {
     }
 
     public void resetConversation() {
-        // 重新加载 HotMemory（确保文件有更新时能重新加载）
-        if (this.hotMemory != null) {
-            this.hotMemory.reload();
-            String enhancedSystemPrompt = this.hotMemory.enhanceSystemPrompt(SYSTEM_PROMPT);
+        // 重新加载规则（确保文件有更新时能重新加载）
+        if (this.ruleManager != null) {
+            this.ruleManager.reload();
+            String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(SYSTEM_PROMPT);
             this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
         } else {
             this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
@@ -221,16 +223,20 @@ public class AgentContext {
         return tokenMetricsCollector;
     }
 
-    public HotMemory getHotMemory() {
-        return hotMemory;
+    public RuleManager getRuleManager() {
+        return ruleManager;
     }
 
-    public WarmMemory getWarmMemory() {
-        return warmMemory;
+    public CacheManager getCacheManager() {
+        return cacheManager;
     }
 
-    public ColdMemory getColdMemory() {
-        return coldMemory;
+    public FileContentService getFileContentService() {
+        return fileContentService;
+    }
+
+    public CodeIndex getCodeIndex() {
+        return codeIndex;
     }
 
     public ThinkingEngine getThinkingEngine() {

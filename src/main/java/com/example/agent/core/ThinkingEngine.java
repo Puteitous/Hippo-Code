@@ -1,6 +1,6 @@
 package com.example.agent.core;
 
-import com.example.agent.context.memory.ColdMemory;
+import com.example.agent.context.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;
@@ -28,7 +28,7 @@ public class ThinkingEngine {
     private final ToolRegistry toolRegistry;
     private final ConcurrentToolExecutor toolExecutor;
     private final ObjectMapper objectMapper;
-    private ColdMemory coldMemory;
+    private CodeIndex codeIndex;
     private boolean memoryBoostEnabled = true;
 
     public ThinkingEngine(LlmClient llmClient, ToolRegistry toolRegistry, ConcurrentToolExecutor toolExecutor) {
@@ -38,8 +38,8 @@ public class ThinkingEngine {
         this.objectMapper = new ObjectMapper();
     }
 
-    public void setColdMemory(ColdMemory coldMemory) {
-        this.coldMemory = coldMemory;
+    public void setCodeIndex(CodeIndex codeIndex) {
+        this.codeIndex = codeIndex;
     }
 
     public void setMemoryBoostEnabled(boolean enabled) {
@@ -104,10 +104,10 @@ public class ThinkingEngine {
             messages.add(Message.system(context.getSystemPrompt()));
         }
 
-        if (memoryBoostEnabled && coldMemory != null && context.getUserInput() != null) {
+        if (memoryBoostEnabled && codeIndex != null && context.getUserInput() != null) {
             List<Message> memoryContext = buildMemoryContext(context.getUserInput());
             if (!memoryContext.isEmpty()) {
-                logger.debug("ColdMemory 检索到 {} 个相关文件注入上下文", memoryContext.size());
+                logger.debug("CodeIndex 检索到 {} 个相关文件注入上下文", memoryContext.size());
                 messages.addAll(memoryContext);
             }
         }
@@ -124,7 +124,7 @@ public class ThinkingEngine {
     private List<Message> buildMemoryContext(String userInput) {
         List<Message> memoryMessages = new ArrayList<>();
 
-        List<String> relevantFiles = coldMemory.search(userInput, DEFAULT_RELEVANT_FILES, 1000);
+        List<String> relevantFiles = codeIndex.search(userInput, DEFAULT_RELEVANT_FILES, 1000);
 
         if (!relevantFiles.isEmpty()) {
             StringBuilder memoryPrompt = new StringBuilder("\n=== 代码库相关参考（来自记忆检索） ===\n");
