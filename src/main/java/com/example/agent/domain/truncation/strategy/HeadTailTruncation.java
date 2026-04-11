@@ -1,5 +1,6 @@
-package com.example.agent.domain.truncation;
+package com.example.agent.domain.truncation.strategy;
 
+import com.example.agent.domain.truncation.TruncationStrategy;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

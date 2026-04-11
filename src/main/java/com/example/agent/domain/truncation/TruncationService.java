@@ -1,5 +1,11 @@
 package com.example.agent.domain.truncation;
 
+import com.example.agent.domain.truncation.strategy.CodeTruncation;
+import com.example.agent.domain.truncation.strategy.DiffTruncation;
+import com.example.agent.domain.truncation.strategy.HeadTailTruncation;
+import com.example.agent.domain.truncation.strategy.ListTruncation;
+import com.example.agent.domain.truncation.strategy.LogTruncation;
+import com.example.agent.domain.truncation.strategy.TreeTruncation;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +17,7 @@ public class TruncationService {
 
     private static final Logger logger = LoggerFactory.getLogger(TruncationService.class);
     public static final int GLOBAL_HARD_LIMIT = 4096;
+    public static final int PER_TOOL_SAFE_LIMIT = 2048;
 
     private final TokenEstimator tokenEstimator;
     private final Map<ContentType, TruncationStrategy> strategies;
@@ -21,6 +28,10 @@ public class TruncationService {
         this.strategies = new HashMap<>();
         this.defaultStrategy = new CodeTruncation(tokenEstimator);
         registerStrategy(ContentType.CODE, new CodeTruncation(tokenEstimator));
+        registerStrategy(ContentType.LOG, new LogTruncation(tokenEstimator));
+        registerStrategy(ContentType.DIFF, new DiffTruncation(tokenEstimator));
+        registerStrategy(ContentType.LIST, new ListTruncation(tokenEstimator));
+        registerStrategy(ContentType.TREE, new TreeTruncation(tokenEstimator));
         registerStrategy(ContentType.PLAIN_TEXT, new HeadTailTruncation(tokenEstimator));
     }
 
@@ -59,6 +70,25 @@ public class TruncationService {
                 originalTokens,
                 effectiveMax);
         return result;
+    }
+
+    public String truncateToolOutput(String toolName, String content) {
+        return truncateToolOutput(toolName, content, PER_TOOL_SAFE_LIMIT);
+    }
+
+    public String truncateToolOutput(String toolName, String content, int maxTokens) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+        int effectiveMax = Math.min(maxTokens, GLOBAL_HARD_LIMIT);
+        int originalTokens = tokenEstimator.estimateTextTokens(content);
+        if (originalTokens <= effectiveMax) {
+            return content;
+        }
+        ContentType type = ContentClassifier.detect(toolName, content);
+        logger.warn("工具输出超限，自动截断: tool={}, 类型={}, 原={}tokens, 限制={}",
+                toolName, type, originalTokens, effectiveMax);
+        return forceTruncate(content, type, effectiveMax);
     }
 
     public String forceTruncate(String content, ContentType type, int maxTokens) {

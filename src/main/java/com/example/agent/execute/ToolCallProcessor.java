@@ -2,9 +2,11 @@ package com.example.agent.execute;
 
 import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
+import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.service.ConversationManager;
+import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
 
@@ -18,6 +20,7 @@ public class ToolCallProcessor {
     private final ConcurrentToolExecutor concurrentToolExecutor;
     private final ConversationManager conversationManager;
     private final AgentUi ui;
+    private final TruncationService truncationService;
 
     public ToolCallProcessor(ConcurrentToolExecutor concurrentToolExecutor,
                              ConversationManager conversationManager,
@@ -25,6 +28,7 @@ public class ToolCallProcessor {
         this.concurrentToolExecutor = concurrentToolExecutor;
         this.conversationManager = conversationManager;
         this.ui = ui;
+        this.truncationService = new TruncationService(TokenEstimatorFactory.getDefault());
     }
 
     public void processToolCallsConcurrently(List<ToolCall> toolCalls, ConversationLogger conversationLogger) {
@@ -60,20 +64,22 @@ public class ToolCallProcessor {
 
             if (result.isSuccess()) {
                 ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "成功"));
-                String displayResult = ui.truncate(result.getResult() != null ? result.getResult() : "", 100);
+                String rawResult = result.getResult() != null ? result.getResult() : "";
+                String truncatedResult = truncationService.truncateToolOutput(result.getToolName(), rawResult);
+                String displayResult = ui.truncate(truncatedResult, 100);
                 ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.dim(displayResult));
 
                 if (conversationLogger != null) {
                     conversationLogger.logToolCall(
                             result.getToolName(),
                             arguments != null ? arguments : "{}",
-                            result.getResult() != null ? result.getResult() : "",
+                            truncatedResult,
                             result.getExecutionTimeMs(),
                             true
                     );
                 }
 
-                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), result.getResult() != null ? result.getResult() : "");
+                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), truncatedResult);
             } else {
                 ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "失败"));
                 String errorMsg = result.getErrorMessage() != null ? result.getErrorMessage() : "未知错误";

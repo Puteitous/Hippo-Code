@@ -9,6 +9,10 @@ public class TokenEstimatorFactory {
 
     private static final Logger logger = LoggerFactory.getLogger(TokenEstimatorFactory.class);
 
+    public static TokenEstimator getDefault() {
+        return create(null);
+    }
+
     public static TokenEstimator create(Config config) {
         TokenEstimatorConfig tokenizerConfig = config != null ? config.getTokenizer() : null;
         
