@@ -1,6 +1,6 @@
 package com.example.agent.service;
 
-import com.example.agent.context.cache.CacheManager;
+import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.context.language.LanguageProvider;
 import com.example.agent.context.language.LanguageProviderFactory;
 import org.slf4j.Logger;

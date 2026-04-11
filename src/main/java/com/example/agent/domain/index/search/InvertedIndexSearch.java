@@ -1,7 +1,7 @@
-package com.example.agent.context.index.search;
+package com.example.agent.domain.index.search;
 
-import com.example.agent.context.index.CodeSearchStrategy;
-import com.example.agent.context.index.SearchResult;
+import com.example.agent.domain.index.CodeSearchStrategy;
+import com.example.agent.domain.index.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.example.agent.context.index.search.SearchEngineUtils.*;
+import static com.example.agent.domain.index.search.SearchEngineUtils.*;
 
 public class InvertedIndexSearch implements CodeSearchStrategy {
     private static final Logger logger = LoggerFactory.getLogger(InvertedIndexSearch.class);

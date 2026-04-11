@@ -1,4 +1,4 @@
-package com.example.agent.context.rule;
+package com.example.agent.domain.rule;
 
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.service.TokenEstimator;
@@ -99,10 +99,10 @@ public class RuleManager {
             enhanced.append(memoryMdContent).append("\n\n");
         }
 
-        totalTokens = tokenEstimator.estimateTextTokens(enhanced.toString());
-        logger.debug("注入规则到系统提示词，约 {} tokens", totalTokens);
-
-        return enhanced.toString();
+        String result = enhanced.toString();
+        totalTokens = tokenEstimator.estimateTextTokens(result);
+        logger.debug("RuleManager 增强系统提示词，共 {} tokens", totalTokens);
+        return result;
     }
 
     public String getHippoRulesContent() {
@@ -118,8 +118,8 @@ public class RuleManager {
     }
 
     public void reload() {
+        logger.info("重新加载规则文件...");
         loadHippoRules();
         loadMemoryMd();
-        logger.info("规则文件已重新加载");
     }
 }

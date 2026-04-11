@@ -2,9 +2,9 @@ package com.example.agent.core;
 
 import com.example.agent.config.Config;
 import com.example.agent.context.config.ContextConfig;
-import com.example.agent.context.rule.RuleManager;
-import com.example.agent.context.cache.CacheManager;
-import com.example.agent.context.index.CodeIndex;
+import com.example.agent.domain.rule.RuleManager;
+import com.example.agent.domain.cache.CacheManager;
+import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.service.FileContentService;
 import com.example.agent.llm.client.DefaultLlmClient;
 import com.example.agent.llm.client.LlmClient;

@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.context.index.CodeIndex;
+import com.example.agent.domain.index.CodeIndex;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.Collections;

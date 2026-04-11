@@ -1,6 +1,6 @@
 package com.example.agent.core;
 
-import com.example.agent.context.index.CodeIndex;
+import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;

@@ -1,4 +1,4 @@
-package com.example.agent.context.index;
+package com.example.agent.domain.index;
 
 public class SearchResult {
     public final String filePath;

@@ -1,4 +1,4 @@
-package com.example.agent.context.index.search;
+package com.example.agent.domain.index.search;
 
 import java.nio.file.Path;
 
