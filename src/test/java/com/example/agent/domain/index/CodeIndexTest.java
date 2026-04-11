@@ -1,6 +1,6 @@
 package com.example.agent.domain.index;
 
-import com.example.agent.context.config.ContextConfig;
+import com.example.agent.config.IndexConfig;
 import com.example.agent.service.SimpleTokenEstimator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +41,7 @@ class CodeIndexTest {
     @Test
     @DisplayName("构造函数 - null tokenEstimator")
     void testConstructorWithNullTokenEstimator() {
-        ContextConfig.IndexConfig config = new ContextConfig.IndexConfig();
+        IndexConfig config = new IndexConfig();
         assertDoesNotThrow(() -> new CodeIndex(null, config));
     }
 

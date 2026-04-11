@@ -24,6 +24,9 @@ public class Config {
     private ContextConfig context = new ContextConfig();
     private IntentConfig intent = new IntentConfig();
     private TokenEstimatorConfig tokenizer = new TokenEstimatorConfig();
+    private RuleConfig rule = new RuleConfig();
+    private CacheConfig cache = new CacheConfig();
+    private IndexConfig index = new IndexConfig();
 
     private transient ConfigLoader configLoader;
 
@@ -112,6 +115,9 @@ public class Config {
                 this.context = reloaded.context;
                 this.intent = reloaded.intent;
                 this.tokenizer = reloaded.tokenizer;
+                this.rule = reloaded.rule;
+                this.cache = reloaded.cache;
+                this.index = reloaded.index;
                 this.loadFromEnvironment();
                 System.out.println("Configuration reloaded from: " + configFile.getAbsolutePath());
             } catch (IOException e) {
@@ -235,6 +241,30 @@ public class Config {
         this.tokenizer = tokenizer;
     }
 
+    public RuleConfig getRule() {
+        return rule;
+    }
+
+    public void setRule(RuleConfig rule) {
+        this.rule = rule;
+    }
+
+    public CacheConfig getCache() {
+        return cache;
+    }
+
+    public void setCache(CacheConfig cache) {
+        this.cache = cache;
+    }
+
+    public IndexConfig getIndex() {
+        return index;
+    }
+
+    public void setIndex(IndexConfig index) {
+        this.index = index;
+    }
+
     @Deprecated
     public String getApiKey() {
         return llm != null ? llm.getApiKey() : null;
@@ -273,18 +303,14 @@ public class Config {
 
     @Deprecated
     public int getMaxTokens() {
-        return llm != null ? llm.getMaxTokens() : 2048;
-    }
-
-    @Deprecated
-    public void setMaxTokens(int maxTokens) {
-        if (llm != null) {
-            llm.setMaxTokens(maxTokens);
-        }
+        return llm != null ? llm.getMaxTokens() : 0;
     }
 
     public String getConfigFilePath() {
-        return configLoader != null ? configLoader.getConfigFilePath() : "config.yaml";
+        if (configLoader == null) {
+            configLoader = new ConfigLoader();
+        }
+        return configLoader.getConfigFilePath();
     }
 
     @Override
@@ -296,6 +322,10 @@ public class Config {
                 ", ui=" + ui +
                 ", context=" + context +
                 ", intent=" + intent +
+                ", tokenizer=" + tokenizer +
+                ", rule=" + rule +
+                ", cache=" + cache +
+                ", index=" + index +
                 '}';
     }
 }

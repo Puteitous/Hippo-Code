@@ -1,6 +1,6 @@
 package com.example.agent.domain.rule;
 
-import com.example.agent.context.config.ContextConfig;
+import com.example.agent.config.RuleConfig;
 import com.example.agent.service.SimpleTokenEstimator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("构造函数 - null tokenEstimator")
     void testConstructorWithNullTokenEstimator() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         assertDoesNotThrow(() -> new RuleManager(null, config));
     }
 

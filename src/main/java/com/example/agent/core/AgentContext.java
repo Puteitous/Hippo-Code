@@ -115,7 +115,7 @@ public class AgentContext {
         this.tokenEstimator = TokenEstimatorFactory.create(config);
         
         // 初始化 RuleManager - 加载规则文件
-        this.ruleManager = new RuleManager(tokenEstimator, config.getContext().getRule());
+        this.ruleManager = new RuleManager(tokenEstimator, config.getRule());
         this.ruleManager.loadHippoRules();
         this.ruleManager.loadMemoryMd();
         logger.info("RuleManager 初始化完成");
@@ -127,7 +127,7 @@ public class AgentContext {
         this.fileContentService = new FileContentService(tokenEstimator, cacheManager);
         
         // 初始化 CodeIndex - 代码检索引擎
-        this.codeIndex = new CodeIndex(tokenEstimator, config.getContext().getIndex());
+        this.codeIndex = new CodeIndex(tokenEstimator, config.getIndex());
         this.codeIndex.buildIndex();
         logger.info("代码索引构建完成");
         

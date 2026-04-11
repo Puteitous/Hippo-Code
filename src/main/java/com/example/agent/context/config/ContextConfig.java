@@ -24,18 +24,8 @@ public class ContextConfig {
     @JsonProperty("tool_result")
     private ToolResultConfig toolResult = new ToolResultConfig();
 
-    // 策略配置
     @JsonProperty("policy")
     private String policy = DEFAULT_POLICY;
-
-    @JsonProperty("rule")
-    private RuleConfig rule = new RuleConfig();
-
-    @JsonProperty("cache")
-    private CacheConfig cache = new CacheConfig();
-
-    @JsonProperty("index")
-    private IndexConfig index = new IndexConfig();
 
     public ContextConfig() {
     }
@@ -80,30 +70,6 @@ public class ContextConfig {
         this.policy = policy;
     }
 
-    public RuleConfig getRule() {
-        return rule;
-    }
-
-    public void setRule(RuleConfig rule) {
-        this.rule = rule;
-    }
-
-    public CacheConfig getCache() {
-        return cache;
-    }
-
-    public void setCache(CacheConfig cache) {
-        this.cache = cache;
-    }
-
-    public IndexConfig getIndex() {
-        return index;
-    }
-
-    public void setIndex(IndexConfig index) {
-        this.index = index;
-    }
-
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ToolResultConfig {
         
@@ -143,161 +109,6 @@ public class ContextConfig {
                 ", keepRecentTurns=" + keepRecentTurns +
                 ", toolResult=" + toolResult +
                 ", policy='" + policy + '\'' +
-                ", rule=" + rule +
-                ", cache=" + cache +
-                ", index=" + index +
                 '}';
-    }
-
-    // Rule 配置
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class RuleConfig {
-        public static final String DEFAULT_RULES_FILE = ".hipporules";
-        public static final String DEFAULT_MEMORY_FILE = "MEMORY.md";
-        public static final int DEFAULT_MAX_TOKENS = 8000;
-
-        @JsonProperty("rules_file")
-        private String rulesFile = DEFAULT_RULES_FILE;
-
-        @JsonProperty("memory_file")
-        private String memoryFile = DEFAULT_MEMORY_FILE;
-
-        @JsonProperty("max_tokens")
-        private int maxTokens = DEFAULT_MAX_TOKENS;
-
-        @JsonProperty("inject_at_startup")
-        private boolean injectAtStartup = true;
-
-        public String getRulesFile() {
-            return rulesFile;
-        }
-
-        public void setRulesFile(String rulesFile) {
-            this.rulesFile = rulesFile;
-        }
-
-        public String getMemoryFile() {
-            return memoryFile;
-        }
-
-        public void setMemoryFile(String memoryFile) {
-            this.memoryFile = memoryFile;
-        }
-
-        public int getMaxTokens() {
-            return maxTokens;
-        }
-
-        public void setMaxTokens(int maxTokens) {
-            this.maxTokens = maxTokens;
-        }
-
-        public boolean isInjectAtStartup() {
-            return injectAtStartup;
-        }
-
-        public void setInjectAtStartup(boolean injectAtStartup) {
-            this.injectAtStartup = injectAtStartup;
-        }
-
-        @Override
-        public String toString() {
-            return "RuleConfig{" +
-                    "rulesFile='" + rulesFile + '\'' +
-                    ", memoryFile='" + memoryFile + '\'' +
-                    ", maxTokens=" + maxTokens +
-                    ", injectAtStartup=" + injectAtStartup +
-                    '}';
-        }
-    }
-
-    // Cache 配置
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class CacheConfig {
-        public static final int DEFAULT_MAX_FILE_TOKENS = 4000;
-        public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
-
-        @JsonProperty("max_file_tokens")
-        private int maxFileTokens = DEFAULT_MAX_FILE_TOKENS;
-
-        @JsonProperty("cache_ttl_seconds")
-        private int cacheTtlSeconds = DEFAULT_CACHE_TTL_SECONDS;
-
-        public int getMaxFileTokens() {
-            return maxFileTokens;
-        }
-
-        public void setMaxFileTokens(int maxFileTokens) {
-            this.maxFileTokens = maxFileTokens;
-        }
-
-        public int getCacheTtlSeconds() {
-            return cacheTtlSeconds;
-        }
-
-        public void setCacheTtlSeconds(int cacheTtlSeconds) {
-            this.cacheTtlSeconds = cacheTtlSeconds;
-        }
-
-        @Override
-        public String toString() {
-            return "CacheConfig{" +
-                    "maxFileTokens=" + maxFileTokens +
-                    ", cacheTtlSeconds=" + cacheTtlSeconds +
-                    '}';
-        }
-    }
-
-    // Index 配置
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class IndexConfig {
-        public static final boolean DEFAULT_ENABLED = true;
-        public static final int DEFAULT_MAX_RESULTS = 3;
-        public static final int DEFAULT_MAX_TOKENS = 5000;
-
-        @JsonProperty("enabled")
-        private boolean enabled = DEFAULT_ENABLED;
-
-        @JsonProperty("max_results")
-        private int maxResults = DEFAULT_MAX_RESULTS;
-
-        @JsonProperty("max_tokens")
-        private int maxTokens = DEFAULT_MAX_TOKENS;
-
-        public IndexConfig() {
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public int getMaxResults() {
-            return maxResults;
-        }
-
-        public void setMaxResults(int maxResults) {
-            this.maxResults = maxResults;
-        }
-
-        public int getMaxTokens() {
-            return maxTokens;
-        }
-
-        public void setMaxTokens(int maxTokens) {
-            this.maxTokens = maxTokens;
-        }
-
-        @Override
-        public String toString() {
-            return "IndexConfig{" +
-                    "enabled=" + enabled +
-                    ", maxResults=" + maxResults +
-                    ", maxTokens=" + maxTokens +
-                    '}';
-        }
     }
 }

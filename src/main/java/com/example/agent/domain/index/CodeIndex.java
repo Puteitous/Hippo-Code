@@ -1,6 +1,6 @@
 package com.example.agent.domain.index;
 
-import com.example.agent.context.config.ContextConfig;
+import com.example.agent.config.IndexConfig;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,13 +15,13 @@ public class CodeIndex {
     private static final Logger logger = LoggerFactory.getLogger(CodeIndex.class);
 
     private final TokenEstimator tokenEstimator;
-    private final ContextConfig.IndexConfig config;
+    private final IndexConfig config;
     private CodeSearchStrategy searchEngine;
     private final Map<String, CachedSearchResult> searchCache;
 
-    public CodeIndex(TokenEstimator tokenEstimator, ContextConfig.IndexConfig config) {
+    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
         this.tokenEstimator = tokenEstimator;
-        this.config = config != null ? config : new ContextConfig.IndexConfig();
+        this.config = config != null ? config : new IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
         this.searchCache = new ConcurrentHashMap<>();
     }

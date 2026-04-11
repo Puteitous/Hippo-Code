@@ -1,6 +1,6 @@
 package com.example.agent.domain.rule;
 
-import com.example.agent.context.config.ContextConfig;
+import com.example.agent.config.RuleConfig;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,15 +15,15 @@ public class RuleManager {
     private static final Logger logger = LoggerFactory.getLogger(RuleManager.class);
 
     private final TokenEstimator tokenEstimator;
-    private final ContextConfig.RuleConfig config;
+    private final RuleConfig config;
 
     private String hippoRulesContent;
     private String memoryMdContent;
     private int totalTokens;
 
-    public RuleManager(TokenEstimator tokenEstimator, ContextConfig.RuleConfig config) {
+    public RuleManager(TokenEstimator tokenEstimator, RuleConfig config) {
         this.tokenEstimator = tokenEstimator;
-        this.config = config != null ? config : new ContextConfig.RuleConfig();
+        this.config = config != null ? config : new RuleConfig();
         this.hippoRulesContent = "";
         this.memoryMdContent = "";
         this.totalTokens = 0;
