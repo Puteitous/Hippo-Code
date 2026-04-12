@@ -66,7 +66,7 @@ public class CodeIndex {
         long startTime = System.currentTimeMillis();
 
         if (cacheManager != null) {
-            List<String> cached = cacheManager.getSearch(query);
+            List<String> cached = cacheManager.getSearch("global", query);
             if (cached != null) {
                 logger.debug("检索缓存命中: '{}' (耗时: {}ms)", query, System.currentTimeMillis() - startTime);
                 return cached;
@@ -102,7 +102,7 @@ public class CodeIndex {
         }
 
         if (cacheManager != null) {
-            cacheManager.putSearch(query, formattedResults);
+            cacheManager.putSearch("global", query, formattedResults);
         }
 
         logger.debug("检索完成: '{}' 返回 {} 个结果，约 {} tokens (耗时: {}ms)",

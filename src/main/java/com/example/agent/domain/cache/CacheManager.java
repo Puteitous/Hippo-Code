@@ -6,7 +6,12 @@ import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -15,9 +20,40 @@ public class CacheManager {
 
     private static final Logger logger = LoggerFactory.getLogger(CacheManager.class);
 
-    private final Cache<String, String> fileCache;
-    private final Cache<String, List<String>> searchCache;
-    private final Cache<String, Object> commonCache;
+    public enum CacheCost {
+        SEARCH(10, "检索结果"),
+        COMMON(30, "通用对象"),
+        FILE(100, "文件内容");
+
+        final int weight;
+        final String desc;
+
+        CacheCost(int weight, String desc) {
+            this.weight = weight;
+            this.desc = desc;
+        }
+
+        public int getWeight() {
+            return weight;
+        }
+    }
+
+    private static class CachePartition<K, V> {
+        final Cache<K, V> cache;
+        final CacheCost cost;
+        final String name;
+
+        CachePartition(String name, CacheCost cost, Cache<K, V> cache) {
+            this.name = name;
+            this.cost = cost;
+            this.cache = cache;
+        }
+    }
+
+    private final CachePartition<String, String> fileCache;
+    private final CachePartition<String, Map<String, List<String>>> searchCache;
+    private final CachePartition<String, Object> commonCache;
+    private final List<CachePartition<?, ?>> allPartitions;
     private final long defaultTtlMillis;
     private final ScheduledExecutorService monitorExecutor;
     private volatile double lastMemoryUsage;
@@ -28,25 +64,33 @@ public class CacheManager {
 
     public CacheManager(long defaultTtlMillis) {
         this.defaultTtlMillis = defaultTtlMillis;
-        long ttlMinutes = Math.max(1, defaultTtlMillis / 60 / 1000);
 
-        this.fileCache = Caffeine.newBuilder()
+        this.fileCache = new CachePartition<>("file", CacheCost.FILE,
+            Caffeine.newBuilder()
                 .maximumSize(500)
                 .expireAfterWrite(1, TimeUnit.HOURS)
                 .recordStats()
-                .build();
+                .build());
 
-        this.searchCache = Caffeine.newBuilder()
-                .maximumSize(200)
+        this.searchCache = new CachePartition<>("search", CacheCost.SEARCH,
+            Caffeine.newBuilder()
+                .maximumSize(100)
                 .expireAfterWrite(30, TimeUnit.MINUTES)
                 .recordStats()
-                .build();
+                .build());
 
-        this.commonCache = Caffeine.newBuilder()
+        this.commonCache = new CachePartition<>("common", CacheCost.COMMON,
+            Caffeine.newBuilder()
                 .maximumSize(1000)
                 .expireAfterWrite(30, TimeUnit.MINUTES)
                 .recordStats()
-                .build();
+                .build());
+
+        this.allPartitions = new ArrayList<>();
+        allPartitions.add(searchCache);
+        allPartitions.add(commonCache);
+        allPartitions.add(fileCache);
+        allPartitions.sort(Comparator.comparingInt(p -> p.cost.getWeight()));
 
         this.monitorExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "cache-monitor");
@@ -56,7 +100,8 @@ public class CacheManager {
 
         this.lastMemoryUsage = 0.0;
 
-        logger.debug("CacheManager 初始化完成，3个缓存分区已就绪");
+        logger.debug("CacheManager 初始化完成，3分区按成本排序: {}",
+            allPartitions.stream().map(p -> p.name + "(" + p.cost.getWeight() + ")").toList());
     }
 
     public void startMemoryMonitor() {
@@ -77,18 +122,23 @@ public class CacheManager {
         double usage = (double) used / runtime.maxMemory();
         lastMemoryUsage = usage;
 
-        if (usage > 0.92) {
-            logger.warn("内存压力极高 ({:.0f}%)，执行二级清理", usage * 100);
-            searchCache.invalidateAll();
-            fileCache.invalidateAll();
-            logger.warn("已清理全部文件缓存和检索缓存");
+        int cleared = 0;
+        if (usage > 0.95) {
+            logger.warn("内存压力极高 ({:.0f}%)，执行三级清理", usage * 100);
+            cleared = clearPartitionsUpTo(CacheCost.FILE);
+        } else if (usage > 0.90) {
+            logger.info("内存压力很高 ({:.0f}%)，执行二级清理", usage * 100);
+            cleared = clearPartitionsUpTo(CacheCost.COMMON);
         } else if (usage > 0.85) {
             logger.info("内存压力较高 ({:.0f}%)，执行一级清理", usage * 100);
-            searchCache.invalidateAll();
-            logger.info("已清理全部检索缓存");
-        } else if (usage > 0.7) {
+            cleared = clearPartitionsUpTo(CacheCost.SEARCH);
+        } else if (usage > 0.70) {
             logger.debug("内存使用率: {:.0f}%，清理所有过期项", usage * 100);
             cleanup();
+        }
+
+        if (cleared > 0) {
+            logger.info("已清理 {} 个缓存分区，当前缓存统计: {}", cleared, getStats());
         }
 
         if (logger.isDebugEnabled()) {
@@ -96,18 +146,30 @@ public class CacheManager {
         }
     }
 
+    private int clearPartitionsUpTo(CacheCost maxCost) {
+        int count = 0;
+        for (CachePartition<?, ?> partition : allPartitions) {
+            if (partition.cost.getWeight() <= maxCost.getWeight()) {
+                partition.cache.invalidateAll();
+                logger.info("已清理 {} 缓存 (成本权重: {})", partition.name, partition.cost.getWeight());
+                count++;
+            }
+        }
+        return count;
+    }
+
     public double getLastMemoryUsage() {
         return lastMemoryUsage;
     }
 
     public String getFile(String key) {
-        String value = fileCache.getIfPresent(key);
+        String value = fileCache.cache.getIfPresent(key);
         logCacheHit("file", key, value != null);
         return value;
     }
 
     public void putFile(String key, String value) {
-        fileCache.put(key, value);
+        fileCache.cache.put(key, value);
         logger.debug("文件缓存存入: {} (大小: {} 字符)", key, value != null ? value.length() : 0);
     }
 
@@ -115,26 +177,35 @@ public class CacheManager {
         putFile(key, value);
     }
 
-    public List<String> getSearch(String key) {
-        List<String> value = searchCache.getIfPresent(key);
-        logCacheHit("search", key, value != null);
-        return value;
+    public List<String> getSearch(String packageName, String query) {
+        Map<String, List<String>> packageMap = searchCache.cache.getIfPresent(packageName);
+        if (packageMap != null) {
+            List<String> result = packageMap.get(query);
+            logCacheHit("search", packageName + ":" + query, result != null);
+            return result;
+        }
+        return null;
     }
 
-    public void putSearch(String key, List<String> value) {
-        searchCache.put(key, value);
-        logger.debug("检索缓存存入: {} ({} 个结果)", key, value != null ? value.size() : 0);
+    public void putSearch(String packageName, String query, List<String> value) {
+        Map<String, List<String>> packageMap = searchCache.cache.getIfPresent(packageName);
+        if (packageMap == null) {
+            packageMap = new java.util.concurrent.ConcurrentHashMap<>();
+            searchCache.cache.put(packageName, packageMap);
+        }
+        packageMap.put(query, value);
+        logger.debug("检索缓存存入: {}:{} ({} 个结果)", packageName, query, value != null ? value.size() : 0);
     }
 
     @SuppressWarnings("unchecked")
     public <T> T get(String key) {
-        T value = (T) commonCache.getIfPresent(key);
+        T value = (T) commonCache.cache.getIfPresent(key);
         logCacheHit("common", key, value != null);
         return value;
     }
 
     public <T> void put(String key, T value) {
-        commonCache.put(key, value);
+        commonCache.cache.put(key, value);
         logger.debug("通用缓存存入: {}", key);
     }
 
@@ -143,58 +214,98 @@ public class CacheManager {
     }
 
     public void invalidateFile(String key) {
-        fileCache.invalidate(key);
+        fileCache.cache.invalidate(key);
         logger.debug("文件缓存失效: {}", key);
     }
 
-    public void invalidateSearch(String key) {
-        if (key == null) {
-            searchCache.invalidateAll();
+    public void invalidateSearch(String packageName) {
+        if (packageName == null) {
+            searchCache.cache.invalidateAll();
             logger.debug("所有检索缓存已清空");
         } else {
-            searchCache.invalidate(key);
-            logger.debug("检索缓存失效: {}", key);
+            searchCache.cache.invalidate(packageName);
+            logger.debug("检索缓存按包失效: {}", packageName);
         }
     }
 
     public void invalidate(String key) {
-        commonCache.invalidate(key);
+        commonCache.cache.invalidate(key);
         logger.debug("通用缓存失效: {}", key);
     }
 
     public void onFileChanged(String filePath) {
-        fileCache.invalidate(filePath);
-        searchCache.invalidateAll();
-        logger.debug("文件变更，级联清理缓存: {}", filePath);
+        fileCache.cache.invalidate(filePath);
+
+        String packageName = extractPackageName(filePath);
+        if (packageName != null) {
+            searchCache.cache.invalidate(packageName);
+            logger.debug("文件变更，级联清理缓存: {} (包: {})", filePath, packageName);
+        } else {
+            searchCache.cache.invalidateAll();
+            logger.debug("文件变更，级联清理所有检索缓存: {}", filePath);
+        }
+    }
+
+    private String extractPackageName(String filePath) {
+        try {
+            Path path = Paths.get(filePath);
+            String fileName = path.getFileName().toString();
+
+            if (!fileName.endsWith(".java")) {
+                return null;
+            }
+
+            Path javaPath = path;
+            while (javaPath != null) {
+                if (javaPath.getFileName() != null &&
+                    javaPath.getFileName().toString().equals("java") &&
+                    javaPath.getParent() != null &&
+                    javaPath.getParent().getFileName() != null &&
+                    javaPath.getParent().getFileName().toString().equals("src")) {
+                    break;
+                }
+                javaPath = javaPath.getParent();
+            }
+
+            if (javaPath != null && path.startsWith(javaPath)) {
+                Path relative = javaPath.relativize(path.getParent());
+                return relative.toString().replace(javaPath.getFileSystem().getSeparator(), ".");
+            }
+        } catch (Exception e) {
+            logger.debug("提取包名失败: {} - {}", filePath, e.getMessage());
+        }
+        return null;
     }
 
     public void cleanup() {
-        fileCache.cleanUp();
-        searchCache.cleanUp();
-        commonCache.cleanUp();
+        fileCache.cache.cleanUp();
+        searchCache.cache.cleanUp();
+        commonCache.cache.cleanUp();
     }
 
     public void clear() {
-        fileCache.invalidateAll();
-        searchCache.invalidateAll();
-        commonCache.invalidateAll();
+        fileCache.cache.invalidateAll();
+        searchCache.cache.invalidateAll();
+        commonCache.cache.invalidateAll();
         logger.debug("所有缓存分区已清空");
     }
 
     public int size() {
-        return (int) (fileCache.estimatedSize() + searchCache.estimatedSize() + commonCache.estimatedSize());
+        return (int) (fileCache.cache.estimatedSize() +
+            searchCache.cache.estimatedSize() +
+            commonCache.cache.estimatedSize());
     }
 
     public String getStats() {
-        CacheStats fileStats = fileCache.stats();
-        CacheStats searchStats = searchCache.stats();
-        CacheStats commonStats = commonCache.stats();
+        CacheStats fileStats = fileCache.cache.stats();
+        CacheStats searchStats = searchCache.cache.stats();
+        CacheStats commonStats = commonCache.cache.stats();
 
         return String.format(
-            "文件[%d, %.1f%%], 检索[%d, %.1f%%], 通用[%d, %.1f%%]",
-            fileCache.estimatedSize(), fileStats.hitRate() * 100,
-            searchCache.estimatedSize(), searchStats.hitRate() * 100,
-            commonCache.estimatedSize(), commonStats.hitRate() * 100
+            "文件[%d, %.1f%%], 检索[%d包, %.1f%%], 通用[%d, %.1f%%]",
+            fileCache.cache.estimatedSize(), fileStats.hitRate() * 100,
+            searchCache.cache.estimatedSize(), searchStats.hitRate() * 100,
+            commonCache.cache.estimatedSize(), commonStats.hitRate() * 100
         );
     }
 
