@@ -1,6 +1,7 @@
 package com.example.agent.domain.index;
 
 import com.example.agent.config.IndexConfig;
+import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
@@ -8,8 +9,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class CodeIndex {
 
@@ -18,24 +17,30 @@ public class CodeIndex {
     private final TokenEstimator tokenEstimator;
     private final IndexConfig config;
     private CodeSearchStrategy searchEngine;
-    private final Map<String, CachedSearchResult> searchCache;
+    private final CacheManager cacheManager;
     private final TruncationService truncationService;
 
-    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
+    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config, CacheManager cacheManager) {
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
-        this.searchCache = new ConcurrentHashMap<>();
+        this.cacheManager = cacheManager;
         this.truncationService = new TruncationService(tokenEstimator);
     }
 
+    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
+        this(tokenEstimator, config, null);
+    }
+
     public CodeIndex(TokenEstimator tokenEstimator) {
-        this(tokenEstimator, null);
+        this(tokenEstimator, null, null);
     }
 
     public void setSearchEngine(CodeSearchStrategy searchEngine) {
         this.searchEngine = searchEngine;
-        searchCache.clear();
+        if (cacheManager != null) {
+            cacheManager.invalidateSearch(null);
+        }
         logger.info("检索引擎已切换为: {}", searchEngine.getClass().getSimpleName());
     }
 
@@ -60,10 +65,12 @@ public class CodeIndex {
 
         long startTime = System.currentTimeMillis();
 
-        CachedSearchResult cached = searchCache.get(query);
-        if (cached != null && !cached.isExpired()) {
-            logger.debug("检索缓存命中: '{}' (耗时: {}ms)", query, System.currentTimeMillis() - startTime);
-            return cached.results;
+        if (cacheManager != null) {
+            List<String> cached = cacheManager.getSearch(query);
+            if (cached != null) {
+                logger.debug("检索缓存命中: '{}' (耗时: {}ms)", query, System.currentTimeMillis() - startTime);
+                return cached;
+            }
         }
 
         List<SearchResult> results = searchEngine.search(query, maxResults);
@@ -94,7 +101,10 @@ public class CodeIndex {
             totalTokens += resultTokens;
         }
 
-        searchCache.put(query, new CachedSearchResult(formattedResults, 30 * 60 * 1000L));
+        if (cacheManager != null) {
+            cacheManager.putSearch(query, formattedResults);
+        }
+
         logger.debug("检索完成: '{}' 返回 {} 个结果，约 {} tokens (耗时: {}ms)",
                 query, formattedResults.size(), totalTokens, System.currentTimeMillis() - startTime);
 
@@ -102,38 +112,20 @@ public class CodeIndex {
     }
 
     public void cleanupCache() {
-        int removed = 0;
-        for (Map.Entry<String, CachedSearchResult> entry : searchCache.entrySet()) {
-            if (entry.getValue().isExpired()) {
-                searchCache.remove(entry.getKey());
-                removed++;
-            }
-        }
-        if (removed > 0) {
-            logger.debug("清理了 {} 个过期的检索缓存", removed);
+        if (cacheManager != null) {
+            cacheManager.cleanup();
+            logger.debug("检索缓存已清理");
         }
     }
 
     public void clearCache() {
-        searchCache.clear();
-        logger.debug("清空所有检索缓存");
+        if (cacheManager != null) {
+            cacheManager.invalidateSearch(null);
+            logger.debug("清空所有检索缓存");
+        }
     }
 
     public int getCacheSize() {
-        return searchCache.size();
-    }
-
-    private static class CachedSearchResult {
-        final List<String> results;
-        final long expireTime;
-
-        CachedSearchResult(List<String> results, long ttlMillis) {
-            this.results = results;
-            this.expireTime = System.currentTimeMillis() + ttlMillis;
-        }
-
-        boolean isExpired() {
-            return System.currentTimeMillis() > expireTime;
-        }
+        return cacheManager != null ? cacheManager.size() : 0;
     }
 }

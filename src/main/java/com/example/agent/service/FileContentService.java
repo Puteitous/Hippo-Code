@@ -32,9 +32,7 @@ public class FileContentService {
             return null;
         }
 
-        String cacheKey = "file:" + filePath;
-
-        String cached = cacheManager.get(cacheKey);
+        String cached = cacheManager.getFile(filePath);
         if (cached != null) {
             logger.debug("缓存命中: {} (耗时: {}ms)", filePath, System.currentTimeMillis() - startTime);
             return cached;
@@ -53,7 +51,7 @@ public class FileContentService {
             }
 
             String content = Files.readString(path);
-            cacheManager.put(cacheKey, content, 30 * 60);
+            cacheManager.putFile(filePath, content);
 
             logger.debug("读取文件: {} ({} 字符, 耗时: {}ms)",
                     filePath, content.length(), System.currentTimeMillis() - startTime);
@@ -86,7 +84,7 @@ public class FileContentService {
     }
 
     public void invalidateCache(String filePath) {
-        cacheManager.invalidate("file:" + filePath);
+        cacheManager.invalidateFile(filePath);
         logger.debug("文件缓存已失效: {}", filePath);
     }
 

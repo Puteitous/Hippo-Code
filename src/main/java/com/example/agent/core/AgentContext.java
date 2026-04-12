@@ -126,8 +126,8 @@ public class AgentContext {
         // 初始化 FileContentService - 文件服务（带缓存）
         this.fileContentService = new FileContentService(cacheManager);
         
-        // 初始化 CodeIndex - 代码检索引擎
-        this.codeIndex = new CodeIndex(tokenEstimator, config.getIndex());
+        // 初始化 CodeIndex - 代码检索引擎（复用缓存管理器）
+        this.codeIndex = new CodeIndex(tokenEstimator, config.getIndex(), this.cacheManager);
         this.codeIndex.buildIndex();
         logger.info("代码索引构建完成");
         
