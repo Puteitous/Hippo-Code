@@ -123,8 +123,8 @@ public class AgentContext {
         // 初始化 CacheManager - 通用缓存
         this.cacheManager = new CacheManager();
         
-        // 初始化 FileContentService - 文件服务（带缓存和智能截断）
-        this.fileContentService = new FileContentService(tokenEstimator, cacheManager);
+        // 初始化 FileContentService - 文件服务（带缓存）
+        this.fileContentService = new FileContentService(cacheManager);
         
         // 初始化 CodeIndex - 代码检索引擎
         this.codeIndex = new CodeIndex(tokenEstimator, config.getIndex());

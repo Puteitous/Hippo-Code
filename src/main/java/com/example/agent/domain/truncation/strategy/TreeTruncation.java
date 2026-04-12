@@ -85,7 +85,7 @@ public class TreeTruncation implements TruncationStrategy {
     private int calculateDepth(String line) {
         int depth = 0;
         for (char c : line.toCharArray()) {
-            if (c == '│' || c == '├' || c == '└' || c == ' ' || c == ' ') {
+            if (c == '│' || c == '├' || c == '└' || c == ' ') {
                 depth++;
             } else {
                 break;

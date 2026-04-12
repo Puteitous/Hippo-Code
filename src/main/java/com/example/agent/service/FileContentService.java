@@ -1,7 +1,6 @@
 package com.example.agent.service;
 
 import com.example.agent.domain.cache.CacheManager;
-import com.example.agent.domain.truncation.TruncationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,24 +14,14 @@ public class FileContentService {
     private static final Logger logger = LoggerFactory.getLogger(FileContentService.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-    private final TokenEstimator tokenEstimator;
     private final CacheManager cacheManager;
-    private final TruncationService truncationService;
-    private final int defaultMaxTokens;
 
-    public FileContentService(TokenEstimator tokenEstimator, CacheManager cacheManager) {
-        this(tokenEstimator, cacheManager, 4000);
-    }
-
-    public FileContentService(TokenEstimator tokenEstimator, CacheManager cacheManager, int defaultMaxTokens) {
-        this.tokenEstimator = tokenEstimator;
+    public FileContentService(CacheManager cacheManager) {
         this.cacheManager = cacheManager;
-        this.truncationService = new TruncationService(tokenEstimator);
-        this.defaultMaxTokens = defaultMaxTokens;
     }
 
     public String readFile(String filePath) {
-        return readFile(filePath, defaultMaxTokens);
+        return readFile(filePath, -1);
     }
 
     public String readFile(String filePath, int maxTokens) {
@@ -43,13 +32,12 @@ public class FileContentService {
             return null;
         }
 
-        int effectiveMaxTokens = maxTokens > 0 ? maxTokens : defaultMaxTokens;
         String cacheKey = "file:" + filePath;
 
         String cached = cacheManager.get(cacheKey);
         if (cached != null) {
             logger.debug("缓存命中: {} (耗时: {}ms)", filePath, System.currentTimeMillis() - startTime);
-            return truncationService.truncateByExtension(cached, filePath, effectiveMaxTokens);
+            return cached;
         }
 
         try {
@@ -70,7 +58,7 @@ public class FileContentService {
             logger.debug("读取文件: {} ({} 字符, 耗时: {}ms)",
                     filePath, content.length(), System.currentTimeMillis() - startTime);
 
-            return truncationService.truncateByExtension(content, filePath, effectiveMaxTokens);
+            return content;
 
         } catch (IOException e) {
             logger.error("读取文件失败: {} - {}", filePath, e.getMessage());
@@ -106,7 +94,4 @@ public class FileContentService {
         return cacheManager.size();
     }
 
-    public TruncationService getTruncationService() {
-        return truncationService;
-    }
 }
