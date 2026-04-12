@@ -1,13 +1,14 @@
 package com.example.agent.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import java.util.Locale;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LlmConfig {
 
-    private static final String DEFAULT_MODEL = "qwen3.5-plus";
-    private static final String DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com";
     private static final int DEFAULT_MAX_TOKENS = 2048;
     private static final double DEFAULT_TEMPERATURE = 0.7;
     private static final int DEFAULT_TIMEOUT = 60000;
@@ -17,10 +18,10 @@ public class LlmConfig {
     @JsonProperty("api_key")
     private String apiKey;
     
-    private String model = DEFAULT_MODEL;
+    private String model;
     
     @JsonProperty("base_url")
-    private String baseUrl = DEFAULT_BASE_URL;
+    private String baseUrl;
     
     @JsonProperty("max_tokens")
     private int maxTokens = DEFAULT_MAX_TOKENS;
@@ -94,9 +95,21 @@ public class LlmConfig {
     }
 
     public boolean isValid() {
+        if (isLocalProvider()) {
+            return true;
+        }
         return apiKey != null 
             && !apiKey.isEmpty() 
             && !apiKey.equals("your-api-key-here");
+    }
+
+    @JsonIgnore
+    public boolean isLocalProvider() {
+        if (provider == null) {
+            return false;
+        }
+        String normalized = provider.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("ollama") || normalized.equals("local");
     }
 
     public String maskApiKey() {

@@ -6,8 +6,8 @@ import com.example.agent.domain.rule.RuleManager;
 import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.service.FileContentService;
-import com.example.agent.llm.client.DefaultLlmClient;
 import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.client.LlmClientFactory;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.plan.LlmTaskPlanner;
@@ -111,7 +111,7 @@ public class AgentContext {
         this.tokenMetricsCollector = new TokenMetricsCollector(LocalDate.now());
         logger.info("日志系统已初始化");
         
-        this.llmClient = new DefaultLlmClient(config);
+        this.llmClient = LlmClientFactory.create(config);
         this.tokenEstimator = TokenEstimatorFactory.create(config);
         
         // 初始化 RuleManager - 加载规则文件

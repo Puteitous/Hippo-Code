@@ -138,10 +138,12 @@ public class Config {
             return result;
         }
         
-        if (llm.getApiKey() == null || llm.getApiKey().isEmpty()) {
-            result.addError("apiKey", "API Key 不能为空");
-        } else if (llm.getApiKey().equals("your-api-key-here")) {
-            result.addError("apiKey", "请设置有效的 API Key");
+        if (!llm.isLocalProvider()) {
+            if (llm.getApiKey() == null || llm.getApiKey().isEmpty()) {
+                result.addError("apiKey", "API Key 不能为空");
+            } else if (llm.getApiKey().equals("your-api-key-here")) {
+                result.addError("apiKey", "请设置有效的 API Key");
+            }
         }
         
         if (llm.getBaseUrl() == null || llm.getBaseUrl().isEmpty()) {
