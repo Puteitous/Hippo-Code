@@ -139,12 +139,28 @@ public class AgentContext {
         if (readFileTool instanceof ReadFileTool) {
             ((ReadFileTool) readFileTool).setFileContentService(this.fileContentService);
         }
+
+        // 注入 CacheManager 到 WriteFileTool
+        ToolExecutor writeFileTool = toolRegistry.getExecutor("write_file");
+        if (writeFileTool instanceof WriteFileTool) {
+            ((WriteFileTool) writeFileTool).setCacheManager(this.cacheManager);
+        }
+
+        // 注入 CacheManager 到 EditFileTool
+        ToolExecutor editFileTool = toolRegistry.getExecutor("edit_file");
+        if (editFileTool instanceof EditFileTool) {
+            ((EditFileTool) editFileTool).setCacheManager(this.cacheManager);
+        }
         
         // 注入 CodeIndex 到 SearchCodeTool
         ToolExecutor searchCodeTool = toolRegistry.getExecutor("search_code");
         if (searchCodeTool instanceof SearchCodeTool) {
             ((SearchCodeTool) searchCodeTool).setCodeIndex(this.codeIndex);
         }
+
+        // 启动缓存内存监控线程
+        this.cacheManager.startMemoryMonitor();
+        logger.info("缓存监控线程已启动");
         
         this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
 

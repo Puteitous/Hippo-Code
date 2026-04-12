@@ -1,6 +1,9 @@
 package com.example.agent.tools;
 
+import com.example.agent.domain.cache.CacheManager;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +15,14 @@ import java.util.List;
 
 public class WriteFileTool implements ToolExecutor {
 
+    private static final Logger logger = LoggerFactory.getLogger(WriteFileTool.class);
     private static final long MAX_CONTENT_SIZE = 10 * 1024 * 1024;
+
+    private CacheManager cacheManager;
+
+    public void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
+    }
 
     @Override
     public String getName() {
@@ -96,9 +106,15 @@ public class WriteFileTool implements ToolExecutor {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
 
+            String absolutePath = path.toAbsolutePath().toString();
             String relativePath = PathSecurityUtils.getRelativePath(path);
             String action = fileExisted ? "覆盖" : "创建";
-            
+
+            if (cacheManager != null) {
+                cacheManager.onFileChanged(absolutePath);
+                logger.debug("写入文件后触发缓存失效: {}", absolutePath);
+            }
+
             return String.format("文件%s成功: %s (%d 字符)", action, relativePath, content.length());
         } catch (IOException e) {
             throw new ToolExecutionException("写入文件失败: " + e.getMessage(), e);

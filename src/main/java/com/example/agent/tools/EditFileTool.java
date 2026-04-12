@@ -1,6 +1,9 @@
 package com.example.agent.tools;
 
+import com.example.agent.domain.cache.CacheManager;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +15,14 @@ import java.util.List;
 
 public class EditFileTool implements ToolExecutor {
 
+    private static final Logger logger = LoggerFactory.getLogger(EditFileTool.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+    private CacheManager cacheManager;
+
+    public void setCacheManager(CacheManager cacheManager) {
+        this.cacheManager = cacheManager;
+    }
 
     @Override
     public String getName() {
@@ -141,7 +151,13 @@ public class EditFileTool implements ToolExecutor {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
 
+            String absolutePath = path.toAbsolutePath().toString();
             String relativePath = PathSecurityUtils.getRelativePath(path);
+
+            if (cacheManager != null) {
+                cacheManager.onFileChanged(absolutePath);
+                logger.debug("编辑文件后触发缓存失效: {}", absolutePath);
+            }
             
             return formatResult(relativePath, oldText, newText, content, newContent);
             

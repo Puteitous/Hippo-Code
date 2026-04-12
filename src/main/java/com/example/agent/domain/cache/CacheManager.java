@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class CacheManager {
@@ -16,8 +18,18 @@ public class CacheManager {
     private final Cache<String, String> fileCache;
     private final Cache<String, List<String>> searchCache;
     private final Cache<String, Object> commonCache;
+    private final long defaultTtlMillis;
+    private final ScheduledExecutorService monitorExecutor;
+    private volatile double lastMemoryUsage;
 
     public CacheManager() {
+        this(30 * 60 * 1000L);
+    }
+
+    public CacheManager(long defaultTtlMillis) {
+        this.defaultTtlMillis = defaultTtlMillis;
+        long ttlMinutes = Math.max(1, defaultTtlMillis / 60 / 1000);
+
         this.fileCache = Caffeine.newBuilder()
                 .maximumSize(500)
                 .expireAfterWrite(1, TimeUnit.HOURS)
@@ -36,7 +48,56 @@ public class CacheManager {
                 .recordStats()
                 .build();
 
+        this.monitorExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "cache-monitor");
+            t.setDaemon(true);
+            return t;
+        });
+
+        this.lastMemoryUsage = 0.0;
+
         logger.debug("CacheManager 初始化完成，3个缓存分区已就绪");
+    }
+
+    public void startMemoryMonitor() {
+        monitorExecutor.scheduleAtFixedRate(() -> {
+            try {
+                checkMemoryPressure();
+            } catch (Exception e) {
+                logger.warn("缓存监控线程异常: {}", e.getMessage());
+            }
+        }, 30, 30, TimeUnit.SECONDS);
+
+        logger.debug("内存监控线程已启动，每30秒检查一次");
+    }
+
+    private void checkMemoryPressure() {
+        Runtime runtime = Runtime.getRuntime();
+        long used = runtime.totalMemory() - runtime.freeMemory();
+        double usage = (double) used / runtime.maxMemory();
+        lastMemoryUsage = usage;
+
+        if (usage > 0.92) {
+            logger.warn("内存压力极高 ({:.0f}%)，执行二级清理", usage * 100);
+            searchCache.invalidateAll();
+            fileCache.invalidateAll();
+            logger.warn("已清理全部文件缓存和检索缓存");
+        } else if (usage > 0.85) {
+            logger.info("内存压力较高 ({:.0f}%)，执行一级清理", usage * 100);
+            searchCache.invalidateAll();
+            logger.info("已清理全部检索缓存");
+        } else if (usage > 0.7) {
+            logger.debug("内存使用率: {:.0f}%，清理所有过期项", usage * 100);
+            cleanup();
+        }
+
+        if (logger.isDebugEnabled()) {
+            logger.debug("缓存统计: {}", getStats());
+        }
+    }
+
+    public double getLastMemoryUsage() {
+        return lastMemoryUsage;
     }
 
     public String getFile(String key) {
@@ -104,14 +165,13 @@ public class CacheManager {
     public void onFileChanged(String filePath) {
         fileCache.invalidate(filePath);
         searchCache.invalidateAll();
-        logger.debug("文件变更，级联清理相关缓存: {}", filePath);
+        logger.debug("文件变更，级联清理缓存: {}", filePath);
     }
 
     public void cleanup() {
         fileCache.cleanUp();
         searchCache.cleanUp();
         commonCache.cleanUp();
-        logger.debug("所有缓存分区清理完成");
     }
 
     public void clear() {
@@ -131,11 +191,16 @@ public class CacheManager {
         CacheStats commonStats = commonCache.stats();
 
         return String.format(
-            "缓存统计 - 文件[数量: %d, 命中率: %.1f%%], 检索[数量: %d, 命中率: %.1f%%], 通用[数量: %d, 命中率: %.1f%%]",
+            "文件[%d, %.1f%%], 检索[%d, %.1f%%], 通用[%d, %.1f%%]",
             fileCache.estimatedSize(), fileStats.hitRate() * 100,
             searchCache.estimatedSize(), searchStats.hitRate() * 100,
             commonCache.estimatedSize(), commonStats.hitRate() * 100
         );
+    }
+
+    public void stopMonitor() {
+        monitorExecutor.shutdown();
+        logger.debug("缓存监控线程已停止");
     }
 
     private void logCacheHit(String partition, String key, boolean hit) {
