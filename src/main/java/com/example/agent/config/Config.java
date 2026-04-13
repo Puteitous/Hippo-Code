@@ -1,6 +1,7 @@
 package com.example.agent.config;
 
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.mcp.config.McpConfig;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,6 +28,7 @@ public class Config {
     private RuleConfig rule = new RuleConfig();
     private CacheConfig cache = new CacheConfig();
     private IndexConfig index = new IndexConfig();
+    private McpConfig mcp = new McpConfig();
 
     private transient ConfigLoader configLoader;
 
@@ -265,6 +267,14 @@ public class Config {
 
     public void setIndex(IndexConfig index) {
         this.index = index;
+    }
+
+    public McpConfig getMcp() {
+        return mcp;
+    }
+
+    public void setMcp(McpConfig mcp) {
+        this.mcp = mcp;
     }
 
     @Deprecated
