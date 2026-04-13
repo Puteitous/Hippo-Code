@@ -72,6 +72,13 @@ public abstract class AbstractLlmClient implements LlmClient {
     
     protected void enrichRequestHeaders(HttpRequest.Builder builder) {
     }
+    
+    protected List<Message> applyCacheStrategy(List<Message> messages) {
+        if (config.getLlm().isServerCache()) {
+            logger.warn("⚠️ 当前Provider暂不支持服务端缓存，已忽略该配置");
+        }
+        return messages;
+    }
 
     @Override
     public ChatResponse chat(List<Message> messages) throws LlmException {
@@ -84,7 +91,9 @@ public abstract class AbstractLlmClient implements LlmClient {
             throw new IllegalArgumentException("消息列表不能为null或空");
         }
         
-        ChatRequest request = ChatRequest.of(config.getModel(), messages)
+        List<Message> processedMessages = applyCacheStrategy(messages);
+        
+        ChatRequest request = ChatRequest.of(config.getModel(), processedMessages)
                 .maxTokens(config.getMaxTokens());
         
         if (tools != null && !tools.isEmpty()) {
@@ -110,7 +119,9 @@ public abstract class AbstractLlmClient implements LlmClient {
             throw new IllegalArgumentException("消息列表不能为null或空");
         }
         
-        ChatRequest request = ChatRequest.of(config.getModel(), messages)
+        List<Message> processedMessages = applyCacheStrategy(messages);
+        
+        ChatRequest request = ChatRequest.of(config.getModel(), processedMessages)
                 .stream(true)
                 .maxTokens(config.getMaxTokens());
         

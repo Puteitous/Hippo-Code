@@ -17,6 +17,9 @@ public class Message {
     @JsonProperty("tool_calls")
     private List<ToolCall> toolCalls;
     
+    @JsonProperty("cache_control")
+    private CacheControl cacheControl;
+    
     @JsonProperty("tool_call_id")
     private String toolCallId;
     
@@ -81,6 +84,18 @@ public class Message {
         this.content = content != null ? content : "";
     }
 
+    public CacheControl getCacheControl() {
+        return cacheControl;
+    }
+
+    public void setCacheControl(CacheControl cacheControl) {
+        this.cacheControl = cacheControl;
+    }
+
+    public void enableEphemeralCache() {
+        this.cacheControl = CacheControl.ephemeral();
+    }
+
     public List<ToolCall> getToolCalls() {
         return toolCalls;
     }
@@ -127,6 +142,37 @@ public class Message {
                 ", toolCalls=" + toolCalls +
                 ", toolCallId='" + toolCallId + '\'' +
                 ", name='" + name + '\'' +
+                ", cacheControl=" + cacheControl +
                 '}';
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CacheControl {
+        private String type = "ephemeral";
+
+        public CacheControl() {
+        }
+
+        public CacheControl(String type) {
+            this.type = type;
+        }
+
+        public static CacheControl ephemeral() {
+            return new CacheControl("ephemeral");
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            return type;
+        }
     }
 }

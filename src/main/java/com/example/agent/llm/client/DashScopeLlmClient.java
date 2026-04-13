@@ -34,9 +34,38 @@ public class DashScopeLlmClient extends AbstractLlmClient {
     @Override
     protected void enrichRequestHeaders(HttpRequest.Builder builder) {
         if (config.getLlm().isServerCache()) {
-            logger.info("✨ 已启用 DashScope 服务端 Prompt 缓存");
             builder.header("X-DashScope-Enable-Prompt-Cache", "true");
         }
+    }
+
+    @Override
+    protected List<Message> applyCacheStrategy(List<Message> messages) {
+        if (!config.getLlm().isServerCache()) {
+            return messages;
+        }
+        
+        logger.info("✨ 已启用 DashScope 服务端 Prompt 缓存（消息级标记）");
+        
+        int cachedCount = 0;
+        for (Message msg : messages) {
+            if (isEligibleForCache(msg)) {
+                msg.enableEphemeralCache();
+                cachedCount++;
+            }
+        }
+        
+        if (cachedCount > 0) {
+            logger.debug("已标记 {} 条消息用于服务端缓存", cachedCount);
+        }
+        
+        return messages;
+    }
+
+    private boolean isEligibleForCache(Message msg) {
+        String role = msg.getRole();
+        return ("system".equals(role) || "user".equals(role))
+                && msg.getContent() != null
+                && !msg.getContent().isEmpty();
     }
 
     public static String getDefaultBaseUrl() {
