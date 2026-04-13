@@ -77,8 +77,18 @@ public class AgentApplication {
                     context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor, sessionStorage
             );
 
+            final AgentContext finalContext = context;
+            final AgentUi finalUi = ui;
+            final ConversationLoop finalLoop = conversationLoop;
+
             context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
-                conversationLoop.interrupt();
+                if (!finalLoop.isProcessing()) {
+                    finalUi.printCtrlC();
+                    finalUi.printGoodbye();
+                    System.exit(0);
+                } else {
+                    finalLoop.interrupt();
+                }
             });
 
             ui.printWelcome();

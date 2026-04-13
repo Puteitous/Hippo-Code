@@ -55,7 +55,11 @@ public class SseMcpClient extends AbstractMcpClient {
                         .build();
 
                 this.endpointUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
-                this.executor = Executors.newCachedThreadPool();
+                this.executor = Executors.newCachedThreadPool(r -> {
+                    Thread t = new Thread(r, "sse-mcp-" + getServerId());
+                    t.setDaemon(true);
+                    return t;
+                });
 
                 Request sseRequest = new Request.Builder()
                         .url(endpointUrl + "sse")

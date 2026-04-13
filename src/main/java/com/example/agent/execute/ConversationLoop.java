@@ -53,6 +53,7 @@ public class ConversationLoop {
     private IntentResult lastIntentResult;
     private ExecutionPlan lastExecutionPlan;
     private PlanResult lastPlanResult;
+    private volatile boolean processing = false;
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui) {
@@ -103,6 +104,7 @@ public class ConversationLoop {
             return;
         }
 
+        processing = true;
         turnExecutor.setInterrupted(false);
         conversationRound++;
 
@@ -143,7 +145,15 @@ public class ConversationLoop {
         ui.println(ConsoleStyle.userLabel() + ": " + ConsoleStyle.white(userInput));
         ui.println();
 
-        processAgentLoop();
+        try {
+            processAgentLoop();
+        } finally {
+            processing = false;
+        }
+    }
+
+    public boolean isProcessing() {
+        return processing;
     }
 
     private IntentResult recognizeIntent(String userInput) {

@@ -46,7 +46,11 @@ public class McpServiceManager {
                     config.getMcp().getMaxReconnectAttempts(),
                     config.getMcp().getReconnectDelaySeconds());
 
-            this.reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
+            this.reconnectExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "mcp-reconnect");
+                t.setDaemon(true);
+                return t;
+            });
             
             Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 

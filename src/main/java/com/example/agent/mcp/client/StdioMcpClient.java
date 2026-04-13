@@ -57,7 +57,11 @@ public class StdioMcpClient extends AbstractMcpClient {
                 stderrReader = new BufferedReader(
                         new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8));
 
-                executor = Executors.newCachedThreadPool();
+                executor = Executors.newCachedThreadPool(r -> {
+                    Thread t = new Thread(r, "stdio-mcp-" + getServerId());
+                    t.setDaemon(true);
+                    return t;
+                });
                 executor.submit(this::readStdoutLoop);
                 executor.submit(this::readStderrLoop);
                 executor.submit(this::monitorProcessExit);
