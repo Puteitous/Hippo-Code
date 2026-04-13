@@ -22,7 +22,10 @@ public class JsonRpcHandler {
     private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
 
     public String createRequest(String method, Object params) {
-        int id = requestIdCounter.getAndIncrement();
+        return createRequest(nextId(), method, params);
+    }
+
+    public String createRequest(int id, String method, Object params) {
         ObjectNode request = objectMapper.createObjectNode();
         request.put("jsonrpc", "2.0");
         request.put("id", id);
@@ -35,6 +38,24 @@ public class JsonRpcHandler {
         } catch (Exception e) {
             throw new McpProtocolException(-32603, "创建JSON-RPC请求失败", e);
         }
+    }
+
+    public String createNotification(String method, Object params) {
+        ObjectNode request = objectMapper.createObjectNode();
+        request.put("jsonrpc", "2.0");
+        request.put("method", method);
+        if (params != null) {
+            request.set("params", objectMapper.valueToTree(params));
+        }
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (Exception e) {
+            throw new McpProtocolException(-32603, "创建JSON-RPC通知失败", e);
+        }
+    }
+
+    public int nextId() {
+        return requestIdCounter.getAndIncrement();
     }
 
     public CompletableFuture<JsonNode> registerPendingRequest(int id) {

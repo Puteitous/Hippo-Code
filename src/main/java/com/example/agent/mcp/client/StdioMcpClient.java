@@ -29,7 +29,7 @@ public class StdioMcpClient extends AbstractMcpClient {
     private BufferedWriter stdinWriter;
     private BufferedReader stderrReader;
     private ExecutorService executor;
-    private final AtomicInteger requestId = new AtomicInteger(1);
+
 
     public StdioMcpClient(McpConfig.McpServerConfig config) {
         super(config);
@@ -59,7 +59,7 @@ public class StdioMcpClient extends AbstractMcpClient {
                 stderrReader = new BufferedReader(
                         new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8));
 
-                executor = Executors.newFixedThreadPool(2);
+                executor = Executors.newCachedThreadPool();
                 executor.submit(this::readStdoutLoop);
                 executor.submit(this::readStderrLoop);
 
@@ -73,21 +73,28 @@ public class StdioMcpClient extends AbstractMcpClient {
     }
 
     @Override
+    protected void doSendMessage(String messageJson) {
+        try {
+            synchronized (stdinWriter) {
+                stdinWriter.write(messageJson);
+                stdinWriter.newLine();
+                stdinWriter.flush();
+            }
+        } catch (Exception e) {
+            throw new McpException("发送消息失败", e);
+        }
+    }
+
+    @Override
     protected CompletableFuture<JsonNode> sendRequestInternal(String method, Object params) {
-        int id = requestId.getAndIncrement();
+        int id = jsonRpcHandler.nextId();
         CompletableFuture<JsonNode> future = jsonRpcHandler.registerPendingRequest(id);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String requestJson = jsonRpcHandler.createRequest(method, params);
-                logger.debug("发送MCP请求: {}", requestJson);
-
-                synchronized (stdinWriter) {
-                    stdinWriter.write(requestJson);
-                    stdinWriter.newLine();
-                    stdinWriter.flush();
-                }
-
+                String requestJson = jsonRpcHandler.createRequest(id, method, params);
+                logger.debug("发送MCP请求: {} id={}", requestJson, id);
+                doSendMessage(requestJson);
                 return future.get();
             } catch (Exception e) {
                 throw new McpException("发送请求失败: " + method, e);

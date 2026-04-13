@@ -33,7 +33,7 @@ public class SseMcpClient extends AbstractMcpClient {
     private EventSource eventSource;
     private String endpointUrl;
     private ExecutorService executor;
-    private final AtomicInteger requestId = new AtomicInteger(1);
+
 
     public SseMcpClient(McpConfig.McpServerConfig config) {
         super(config);
@@ -57,7 +57,7 @@ public class SseMcpClient extends AbstractMcpClient {
                         .build();
 
                 this.endpointUrl = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
-                this.executor = Executors.newFixedThreadPool(2);
+                this.executor = Executors.newCachedThreadPool();
 
                 Request sseRequest = new Request.Builder()
                         .url(endpointUrl + "sse")
@@ -97,32 +97,39 @@ public class SseMcpClient extends AbstractMcpClient {
     }
 
     @Override
+    protected void doSendMessage(String messageJson) {
+        try {
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(30))
+                    .build();
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(endpointUrl + "message"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(messageJson))
+                    .timeout(Duration.ofMillis(requestTimeoutMs))
+                    .build();
+
+            HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+
+            if (response.statusCode() >= 400) {
+                throw new IOException("HTTP error: " + response.statusCode());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("发送消息失败", e);
+        }
+    }
+
+    @Override
     protected CompletableFuture<JsonNode> sendRequestInternal(String method, Object params) {
-        int id = requestId.getAndIncrement();
+        int id = jsonRpcHandler.nextId();
         CompletableFuture<JsonNode> future = jsonRpcHandler.registerPendingRequest(id);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String requestJson = jsonRpcHandler.createRequest(method, params);
-                logger.debug("发送MCP请求: {}", requestJson);
-
-                HttpClient httpClient = HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofSeconds(30))
-                        .build();
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(endpointUrl + "message"))
-                        .header("Content-Type", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(requestJson))
-                        .timeout(Duration.ofMillis(requestTimeoutMs))
-                        .build();
-
-                HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
-
-                if (response.statusCode() >= 400) {
-                    throw new IOException("HTTP error: " + response.statusCode());
-                }
-
+                String requestJson = jsonRpcHandler.createRequest(id, method, params);
+                logger.debug("发送MCP请求: {} id={}", requestJson, id);
+                doSendMessage(requestJson);
                 return future.get();
             } catch (Exception e) {
                 throw new RuntimeException("发送请求失败: " + method, e);

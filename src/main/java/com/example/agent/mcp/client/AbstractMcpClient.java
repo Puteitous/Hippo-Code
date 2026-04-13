@@ -90,11 +90,14 @@ public abstract class AbstractMcpClient implements McpClient {
                 .thenCompose(v -> sendNotification("initialized", null));
     }
 
+    protected abstract void doSendMessage(String messageJson);
+
     protected CompletableFuture<Void> sendNotification(String method, Object params) {
         return CompletableFuture.runAsync(() -> {
             try {
-                String requestJson = jsonRpcHandler.createRequest(method, params);
+                String requestJson = jsonRpcHandler.createNotification(method, params);
                 logger.debug("发送通知: {}", requestJson);
+                doSendMessage(requestJson);
             } catch (Exception e) {
                 logger.warn("发送通知失败", e);
             }
