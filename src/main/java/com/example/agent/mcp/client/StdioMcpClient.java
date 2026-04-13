@@ -171,6 +171,11 @@ public class StdioMcpClient extends AbstractMcpClient {
             if (connected) {
                 logger.error("读取stdout失败", e);
             }
+        } finally {
+            if (connected) {
+                logger.warn("stdout读取线程已退出，触发连接丢失");
+                onConnectionLost();
+            }
         }
     }
 
@@ -185,6 +190,11 @@ public class StdioMcpClient extends AbstractMcpClient {
         } catch (Exception e) {
             if (connected) {
                 logger.error("读取stderr失败", e);
+            }
+        } finally {
+            if (connected) {
+                logger.warn("stderr读取线程已退出，触发连接丢失");
+                onConnectionLost();
             }
         }
     }

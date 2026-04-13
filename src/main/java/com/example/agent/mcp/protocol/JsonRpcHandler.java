@@ -91,7 +91,14 @@ public class JsonRpcHandler {
     }
 
     public int nextId() {
-        return requestIdCounter.getAndIncrement();
+        int id;
+        do {
+            id = requestIdCounter.getAndIncrement();
+            if (id <= 0) {
+                requestIdCounter.compareAndSet(Integer.MIN_VALUE, 1);
+            }
+        } while (id <= 0);
+        return id;
     }
 
     public CompletableFuture<JsonNode> registerPendingRequest(int id) {

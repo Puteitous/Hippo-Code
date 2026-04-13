@@ -50,7 +50,17 @@ public abstract class AbstractMcpClient implements McpClient {
         this.serverConfig = config;
         this.globalConfig = Config.getInstance().getMcp();
         this.jsonRpcHandler = new JsonRpcHandler();
-        this.requestTimeoutMs = globalConfig.getRequestTimeout();
+
+        int timeout = globalConfig.getRequestTimeout();
+        this.requestTimeoutMs = timeout > 0 ? timeout : 60000;
+
+        if (globalConfig.getMaxReconnectAttempts() < 0) {
+            globalConfig.setMaxReconnectAttempts(5);
+        }
+        if (globalConfig.getReconnectDelaySeconds() <= 0) {
+            globalConfig.setReconnectDelaySeconds(5);
+        }
+
         this.serverName = config.getName() != null ? config.getName() : config.getId();
     }
 
@@ -92,8 +102,16 @@ public abstract class AbstractMcpClient implements McpClient {
         if (reconnectExecutor != null) {
             reconnectExecutor.schedule(this::attemptReconnect, delay, TimeUnit.SECONDS);
         } else {
-            CompletableFuture.delayedExecutor(delay, TimeUnit.SECONDS)
-                    .execute(this::attemptReconnect);
+            Thread reconnectThread = new Thread(() -> {
+                try {
+                    Thread.sleep(delay * 1000L);
+                    attemptReconnect();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "mcp-reconnect-fallback-" + getServerId());
+            reconnectThread.setDaemon(true);
+            reconnectThread.start();
         }
     }
 
@@ -177,12 +195,16 @@ public abstract class AbstractMcpClient implements McpClient {
         return sendRequest("initialize", params, InitializeResult.class)
                 .thenAccept(result -> {
                     this.serverInfo = result.getServerInfo();
-                    if (serverInfo != null && serverInfo.getName() != null) {
-                        this.serverName = serverInfo.getName();
+                    if (serverInfo != null) {
+                        if (serverInfo.getName() != null) {
+                            this.serverName = serverInfo.getName();
+                        }
+                        logger.info("MCP服务器初始化成功: {} v{}",
+                                serverInfo.getName() != null ? serverInfo.getName() : getServerId(),
+                                serverInfo.getVersion() != null ? serverInfo.getVersion() : "unknown");
+                    } else {
+                        logger.info("MCP服务器初始化成功: {}", getServerId());
                     }
-                    logger.info("MCP服务器初始化成功: {} v{}",
-                            result.getServerInfo().getName(),
-                            result.getServerInfo().getVersion());
                 })
                 .thenCompose(v -> sendNotification("initialized", null));
     }
