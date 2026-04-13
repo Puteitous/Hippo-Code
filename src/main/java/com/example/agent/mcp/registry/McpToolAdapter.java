@@ -45,8 +45,11 @@ public class McpToolAdapter implements ToolExecutor {
     public String execute(JsonNode arguments) throws com.example.agent.tools.ToolExecutionException {
         try {
             Map<String, Object> args = objectMapper.convertValue(arguments, Map.class);
-            Object result = client.callTool(tool.getName(), args).get();
+            Object result = client.callTool(tool.getName(), args)
+                    .get(60, java.util.concurrent.TimeUnit.SECONDS);
             return objectMapper.writeValueAsString(result);
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new com.example.agent.tools.ToolExecutionException("MCP工具执行超时: " + tool.getName(), e);
         } catch (Exception e) {
             throw new com.example.agent.tools.ToolExecutionException("MCP工具执行失败: " + tool.getName(), e);
         }

@@ -1,6 +1,7 @@
 package com.example.agent.mcp.protocol;
 
 import com.example.agent.mcp.exception.McpProtocolException;
+import com.example.agent.mcp.exception.McpTimeoutException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -8,9 +9,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class JsonRpcHandler {
@@ -20,6 +25,37 @@ public class JsonRpcHandler {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicInteger requestIdCounter = new AtomicInteger(1);
     private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
+    private final Map<Integer, Long> requestTimestamps = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService cleanupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "jsonrpc-cleanup");
+        t.setDaemon(true);
+        return t;
+    });
+
+    public JsonRpcHandler() {
+        cleanupExecutor.scheduleAtFixedRate(this::cleanupTimeoutRequests, 30, 30, TimeUnit.SECONDS);
+    }
+
+    private void cleanupTimeoutRequests() {
+        long now = System.currentTimeMillis();
+        long timeoutMs = 120000;
+
+        Iterator<Map.Entry<Integer, Long>> iterator = requestTimestamps.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Integer, Long> entry = iterator.next();
+            Integer id = entry.getKey();
+            Long timestamp = entry.getValue();
+
+            if (now - timestamp > timeoutMs) {
+                iterator.remove();
+                CompletableFuture<JsonNode> future = pendingRequests.remove(id);
+                if (future != null && !future.isDone()) {
+                    future.completeExceptionally(new McpTimeoutException("请求超时已清理: id=" + id));
+                    logger.debug("清理超时请求: id={}", id);
+                }
+            }
+        }
+    }
 
     public String createRequest(String method, Object params) {
         return createRequest(nextId(), method, params);
@@ -61,6 +97,7 @@ public class JsonRpcHandler {
     public CompletableFuture<JsonNode> registerPendingRequest(int id) {
         CompletableFuture<JsonNode> future = new CompletableFuture<>();
         pendingRequests.put(id, future);
+        requestTimestamps.put(id, System.currentTimeMillis());
         return future;
     }
 
@@ -75,6 +112,7 @@ public class JsonRpcHandler {
             if (json.has("id") && json.get("id").isNumber()) {
                 int id = json.get("id").asInt();
                 CompletableFuture<JsonNode> future = pendingRequests.remove(id);
+                requestTimestamps.remove(id);
 
                 if (future != null) {
                     if (json.has("error")) {
@@ -113,5 +151,7 @@ public class JsonRpcHandler {
             future.completeExceptionally(new McpProtocolException("请求已取消"));
         });
         pendingRequests.clear();
+        requestTimestamps.clear();
+        cleanupExecutor.shutdownNow();
     }
 }

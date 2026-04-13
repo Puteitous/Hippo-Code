@@ -2,6 +2,7 @@ package com.example.agent.mcp.client;
 
 import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.mcp.exception.McpConnectionException;
+import com.example.agent.mcp.exception.McpException;
 import com.fasterxml.jackson.databind.JsonNode;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -22,15 +23,18 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class SseMcpClient extends AbstractMcpClient {
 
     private static final Logger logger = LoggerFactory.getLogger(SseMcpClient.class);
 
     private OkHttpClient okHttpClient;
+    private HttpClient httpClient;
     private EventSource eventSource;
     private String endpointUrl;
     private ExecutorService executor;
+    private final CompletableFuture<Void> connectionReady = new CompletableFuture<>();
 
 
     public SseMcpClient(McpConfig.McpServerConfig config) {
@@ -66,8 +70,17 @@ public class SseMcpClient extends AbstractMcpClient {
                         .addHeader("Accept", "text/event-stream")
                         .build();
 
+                this.httpClient = HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(30))
+                        .build();
+
                 EventSource.Factory factory = EventSources.createFactory(okHttpClient);
                 this.eventSource = factory.newEventSource(sseRequest, new EventSourceListener() {
+                    @Override
+                    public void onOpen(@NotNull EventSource eventSource, @NotNull Response response) {
+                        connectionReady.complete(null);
+                    }
+
                     @Override
                     public void onEvent(@NotNull EventSource eventSource, String id, String type, @NotNull String data) {
                         logger.debug("收到SSE事件: type={}, data={}", type, data);
@@ -76,6 +89,7 @@ public class SseMcpClient extends AbstractMcpClient {
 
                     @Override
                     public void onFailure(@NotNull EventSource eventSource, Throwable t, Response response) {
+                        connectionReady.completeExceptionally(new McpConnectionException("SSE连接失败", t));
                         if (connected) {
                             logger.error("SSE连接错误", t);
                             onConnectionLost();
@@ -91,7 +105,7 @@ public class SseMcpClient extends AbstractMcpClient {
                     }
                 });
 
-                Thread.sleep(1000);
+                connectionReady.get(30, TimeUnit.SECONDS);
                 connected = true;
                 resetReconnectState();
                 logger.info("SSE MCP服务器连接成功");
@@ -105,10 +119,6 @@ public class SseMcpClient extends AbstractMcpClient {
     @Override
     protected void doSendMessage(String messageJson) {
         try {
-            HttpClient httpClient = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(30))
-                    .build();
-
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpointUrl + "message"))
                     .header("Content-Type", "application/json")
@@ -122,7 +132,7 @@ public class SseMcpClient extends AbstractMcpClient {
                 throw new IOException("HTTP error: " + response.statusCode());
             }
         } catch (Exception e) {
-            throw new RuntimeException("发送消息失败", e);
+            throw new McpException("发送消息失败", e);
         }
     }
 
@@ -148,6 +158,7 @@ public class SseMcpClient extends AbstractMcpClient {
         return CompletableFuture.runAsync(() -> {
             markUserInitiatedDisconnect();
             connected = false;
+            connectionReady.completeExceptionally(new McpException("连接已断开"));
             jsonRpcHandler.cancelAllPending();
 
             if (executor != null) {
@@ -160,6 +171,10 @@ public class SseMcpClient extends AbstractMcpClient {
 
             if (okHttpClient != null) {
                 okHttpClient.dispatcher().cancelAll();
+            }
+
+            if (httpClient != null) {
+                httpClient.close();
             }
 
             logger.info("SSE MCP连接已关闭: {}", getServerId());

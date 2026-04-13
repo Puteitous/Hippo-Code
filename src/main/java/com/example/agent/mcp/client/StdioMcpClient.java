@@ -36,32 +36,52 @@ public class StdioMcpClient extends AbstractMcpClient {
     @Override
     public CompletableFuture<Void> connect() {
         return CompletableFuture.supplyAsync(() -> {
+            Process tempProcess = null;
+            BufferedReader tempStdout = null;
+            BufferedWriter tempStdin = null;
+            BufferedReader tempStderr = null;
+            ExecutorService tempExecutor = null;
+
             try {
-                logger.info("启动MCP子进程: {} {}", serverConfig.getCommand(), serverConfig.getArgs());
+                String command = serverConfig.getCommand();
+                if (command == null || command.trim().isEmpty()) {
+                    throw new McpConnectionException("MCP服务器命令不能为空");
+                }
 
-                List<String> command = new ArrayList<>();
-                command.add(serverConfig.getCommand());
-                command.addAll(serverConfig.getArgs());
+                logger.info("启动MCP子进程: {} {}", command, serverConfig.getArgs());
 
-                ProcessBuilder pb = new ProcessBuilder(command);
-                if (!serverConfig.getEnv().isEmpty()) {
+                List<String> commandList = new ArrayList<>();
+                commandList.add(command);
+                if (serverConfig.getArgs() != null) {
+                    commandList.addAll(serverConfig.getArgs());
+                }
+
+                ProcessBuilder pb = new ProcessBuilder(commandList);
+                if (serverConfig.getEnv() != null && !serverConfig.getEnv().isEmpty()) {
                     pb.environment().putAll(serverConfig.getEnv());
                 }
 
-                process = pb.start();
+                tempProcess = pb.start();
 
-                stdoutReader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-                stdinWriter = new BufferedWriter(
-                        new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
-                stderrReader = new BufferedReader(
-                        new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8));
+                tempStdout = new BufferedReader(
+                        new InputStreamReader(tempProcess.getInputStream(), StandardCharsets.UTF_8));
+                tempStdin = new BufferedWriter(
+                        new OutputStreamWriter(tempProcess.getOutputStream(), StandardCharsets.UTF_8));
+                tempStderr = new BufferedReader(
+                        new InputStreamReader(tempProcess.getErrorStream(), StandardCharsets.UTF_8));
 
-                executor = Executors.newCachedThreadPool(r -> {
+                tempExecutor = Executors.newCachedThreadPool(r -> {
                     Thread t = new Thread(r, "stdio-mcp-" + getServerId());
                     t.setDaemon(true);
                     return t;
                 });
+
+                process = tempProcess;
+                stdoutReader = tempStdout;
+                stdinWriter = tempStdin;
+                stderrReader = tempStderr;
+                executor = tempExecutor;
+
                 executor.submit(this::readStdoutLoop);
                 executor.submit(this::readStderrLoop);
                 executor.submit(this::monitorProcessExit);
@@ -71,9 +91,28 @@ public class StdioMcpClient extends AbstractMcpClient {
                 logger.info("MCP子进程启动成功");
                 return null;
             } catch (Exception e) {
+                cleanupResources(tempProcess, tempStdout, tempStdin, tempStderr, tempExecutor);
                 throw new McpConnectionException("启动MCP子进程失败: " + e.getMessage(), e);
             }
         });
+    }
+
+    private void cleanupResources(Process p, BufferedReader out, BufferedWriter in, BufferedReader err, ExecutorService exec) {
+        if (exec != null) {
+            exec.shutdownNow();
+        }
+        try {
+            if (in != null) in.close();
+        } catch (Exception ignored) {}
+        try {
+            if (out != null) out.close();
+        } catch (Exception ignored) {}
+        try {
+            if (err != null) err.close();
+        } catch (Exception ignored) {}
+        if (p != null) {
+            p.destroyForcibly();
+        }
     }
 
     private void monitorProcessExit() {
