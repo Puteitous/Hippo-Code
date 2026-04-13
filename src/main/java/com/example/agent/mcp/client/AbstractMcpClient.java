@@ -52,7 +52,7 @@ public abstract class AbstractMcpClient implements McpClient {
         return connected;
     }
 
-    protected abstract CompletableFuture<String> sendRequestInternal(String method, Object params);
+    protected abstract CompletableFuture<JsonNode> sendRequestInternal(String method, Object params);
 
     protected <T> CompletableFuture<T> sendRequest(String method, Object params, Class<T> resultType) {
         return sendRequestInternal(method, params)

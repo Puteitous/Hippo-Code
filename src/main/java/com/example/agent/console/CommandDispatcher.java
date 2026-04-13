@@ -88,6 +88,7 @@ public class CommandDispatcher {
         this.conversationManager = context.getConversationManager();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
         this.sessionStorage = new SessionStorage();
+        this.mcpServiceManager = context.getMcpServiceManager();
     }
 
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler, SessionStorage sessionStorage) {

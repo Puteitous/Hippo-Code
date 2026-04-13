@@ -42,9 +42,13 @@ public class McpToolAdapter implements ToolExecutor {
 
     @Override
     @SuppressWarnings("unchecked")
-    public String execute(JsonNode arguments) throws Exception {
-        Map<String, Object> args = objectMapper.convertValue(arguments, Map.class);
-        Object result = client.callTool(tool.getName(), args).get();
-        return objectMapper.writeValueAsString(result);
+    public String execute(JsonNode arguments) throws com.example.agent.tools.ToolExecutionException {
+        try {
+            Map<String, Object> args = objectMapper.convertValue(arguments, Map.class);
+            Object result = client.callTool(tool.getName(), args).get();
+            return objectMapper.writeValueAsString(result);
+        } catch (Exception e) {
+            throw new com.example.agent.tools.ToolExecutionException("MCP工具执行失败: " + tool.getName(), e);
+        }
     }
 }

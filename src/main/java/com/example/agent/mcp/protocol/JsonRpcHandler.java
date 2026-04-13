@@ -33,7 +33,7 @@ public class JsonRpcHandler {
         try {
             return objectMapper.writeValueAsString(request);
         } catch (Exception e) {
-            throw new McpProtocolException("创建JSON-RPC请求失败", e);
+            throw new McpProtocolException(-32603, "创建JSON-RPC请求失败", e);
         }
     }
 
@@ -83,7 +83,7 @@ public class JsonRpcHandler {
         try {
             return objectMapper.treeToValue(result, clazz);
         } catch (Exception e) {
-            throw new McpProtocolException("解析响应结果失败", e);
+            throw new McpProtocolException(-32603, "解析响应结果失败", e);
         }
     }
 

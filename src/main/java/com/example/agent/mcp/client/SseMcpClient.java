@@ -97,7 +97,7 @@ public class SseMcpClient extends AbstractMcpClient {
     }
 
     @Override
-    protected CompletableFuture<String> sendRequestInternal(String method, Object params) {
+    protected CompletableFuture<JsonNode> sendRequestInternal(String method, Object params) {
         int id = requestId.getAndIncrement();
         CompletableFuture<JsonNode> future = jsonRpcHandler.registerPendingRequest(id);
 
