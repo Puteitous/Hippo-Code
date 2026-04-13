@@ -14,6 +14,7 @@ import com.example.agent.plan.LlmTaskPlanner;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
+import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.*;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import org.jline.reader.LineReader;
@@ -133,6 +134,10 @@ public class AgentContext {
         
         // 创建工具注册表并注入依赖
         this.toolRegistry = createToolRegistry();
+        
+        // 初始化 MCP 服务管理器（自动注册 MCP 工具）
+        McpServiceManager mcpManager = new McpServiceManager(config, toolRegistry);
+        mcpManager.initialize();
         
         // 注入 FileContentService 到 ReadFileTool
         ToolExecutor readFileTool = toolRegistry.getExecutor("read_file");
