@@ -318,6 +318,13 @@ public class Config {
         return llm != null ? llm.getMaxTokens() : 0;
     }
 
+    @Deprecated
+    public void setMaxTokens(int maxTokens) {
+        if (llm != null) {
+            llm.setMaxTokens(maxTokens);
+        }
+    }
+
     public String getConfigFilePath() {
         if (configLoader == null) {
             configLoader = new ConfigLoader();

@@ -191,18 +191,19 @@ public abstract class AbstractLlmClient implements LlmClient {
 
     protected String buildUrl(String baseUrl, String path) {
         if (baseUrl == null || baseUrl.isEmpty()) {
-            return path;
+            return (path != null) ? path : "";
         }
         if (path == null || path.isEmpty()) {
             return baseUrl;
         }
-        if (baseUrl.endsWith("/") && path.startsWith("/")) {
-            return baseUrl + path.substring(1);
+
+        String normalizedBaseUrl = baseUrl.replaceAll("/+$", "");
+        String normalizedPath = path.replaceAll("^/+", "");
+
+        if (normalizedPath.isEmpty()) {
+            return normalizedBaseUrl;
         }
-        if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
-            return baseUrl + "/" + path;
-        }
-        return baseUrl + path;
+        return normalizedBaseUrl + "/" + normalizedPath;
     }
 
     protected ChatResponse processStreamResponse(
@@ -452,7 +453,7 @@ public abstract class AbstractLlmClient implements LlmClient {
     protected ChatResponse doExecuteRequest(ChatRequest request) throws LlmException {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
-            String url = buildUrl(config.getBaseUrl(), getChatCompletionsPath());
+            String url = buildUrl(getBaseUrl(), getChatCompletionsPath());
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))

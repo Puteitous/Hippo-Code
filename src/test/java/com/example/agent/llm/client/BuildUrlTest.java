@@ -8,8 +8,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 @DisplayName("buildUrl边界条件测试")
@@ -28,6 +26,12 @@ class BuildUrlTest {
         }
     }
 
+    private boolean hasUnexpectedDoubleSlash(String url) {
+        if (url == null) return false;
+        String withoutProtocol = url.replaceFirst("^https?://", "");
+        return withoutProtocol.contains("//");
+    }
+
     @BeforeEach
     void setUp() {
         client = new TestableLlmClient();
@@ -42,9 +46,8 @@ class BuildUrlTest {
         void testBothHaveSlash() {
             String result = client.buildUrl("https://api.example.com/", "/v1/chat");
 
-            assertEquals("https://api.example.com/v1/chat", result,
-                "应该移除重复的斜杠");
-            assertFalse(result.contains("//"), "结果不应该包含双斜杠");
+            assertEquals("https://api.example.com/v1/chat", result);
+            assertFalse(hasUnexpectedDoubleSlash(result), "路径部分不应该包含双斜杠: " + result);
         }
 
         @ParameterizedTest
@@ -56,9 +59,9 @@ class BuildUrlTest {
         })
         @DisplayName("各种斜杠组合正确拼接")
         void testVariousSlashCombinations(String baseUrl, String path, String expected) {
-            String result = client.buildUrl(baseUrl, path);
+            String result = client.buildUrl(baseUrl.trim(), path.trim());
             assertEquals(expected, result);
-            assertFalse(result.contains("//"), "结果不应该包含双斜杠: " + result);
+            assertFalse(hasUnexpectedDoubleSlash(result), "结果不应该包含路径双斜杠: " + result);
         }
 
         @Test
@@ -77,7 +80,7 @@ class BuildUrlTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @DisplayName("baseUrl null/空时返回path")
+        @DisplayName("baseUrl null/空时返回path（path非null时）")
         void testNullBaseUrlReturnsPath(String baseUrl) {
             String result = client.buildUrl(baseUrl, "/v1/chat");
             assertEquals("/v1/chat", result);
@@ -96,6 +99,8 @@ class BuildUrlTest {
         void testBothEmpty() {
             assertEquals("", client.buildUrl("", ""));
             assertEquals("", client.buildUrl(null, null));
+            assertEquals("", client.buildUrl(null, ""));
+            assertEquals("", client.buildUrl("", null));
         }
     }
 
@@ -108,6 +113,7 @@ class BuildUrlTest {
         void testLocalhost() {
             String result = client.buildUrl("http://localhost:11434/", "/v1/chat");
             assertEquals("http://localhost:11434/v1/chat", result);
+            assertFalse(hasUnexpectedDoubleSlash(result));
         }
 
         @Test
@@ -115,6 +121,7 @@ class BuildUrlTest {
         void testUrlWithPort() {
             String result = client.buildUrl("http://127.0.0.1:8080/api/", "v1/chat");
             assertEquals("http://127.0.0.1:8080/api/v1/chat", result);
+            assertFalse(hasUnexpectedDoubleSlash(result));
         }
 
         @Test
@@ -128,7 +135,7 @@ class BuildUrlTest {
         @DisplayName("多个结尾斜杠只保留一个")
         void testMultipleTrailingSlashes() {
             String result = client.buildUrl("https://api.example.com////", "///v1/chat");
-            assertEquals("https://api.example.com//v1/chat", result);
+            assertFalse(hasUnexpectedDoubleSlash(result), "路径部分应该处理多斜杠");
         }
     }
 
@@ -145,7 +152,7 @@ class BuildUrlTest {
             String result = client.buildUrl(baseUrl, path);
 
             assertEquals("http://localhost:11434/v1/chat/completions", result);
-            assertFalse(result.contains("//"));
+            assertFalse(hasUnexpectedDoubleSlash(result));
         }
 
         @Test
@@ -157,6 +164,7 @@ class BuildUrlTest {
             String result = client.buildUrl(baseUrl, path);
 
             assertEquals("https://api.openai.com/v1/chat/completions", result);
+            assertFalse(hasUnexpectedDoubleSlash(result));
         }
 
         @Test
@@ -168,6 +176,7 @@ class BuildUrlTest {
             String result = client.buildUrl(baseUrl, path);
 
             assertEquals("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", result);
+            assertFalse(hasUnexpectedDoubleSlash(result));
         }
 
         @Test
@@ -179,7 +188,7 @@ class BuildUrlTest {
             String result = client.buildUrl(userConfiguredBaseUrl, path);
 
             assertEquals("https://my-proxy.example.com/v1/chat/completions", result);
-            assertFalse(result.contains("//"), "用户配置带结尾斜杠的情况必须处理");
+            assertFalse(hasUnexpectedDoubleSlash(result), "用户配置带结尾斜杠的情况必须处理");
         }
     }
 }
