@@ -43,6 +43,7 @@ public abstract class AbstractMcpClient implements McpClient {
 
     private final AtomicBoolean userInitiatedDisconnect = new AtomicBoolean(false);
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    private final AtomicBoolean connectionLossHandling = new AtomicBoolean(false);
     private Consumer<McpClient> disconnectListener;
     protected ScheduledExecutorService reconnectExecutor;
 
@@ -75,6 +76,10 @@ public abstract class AbstractMcpClient implements McpClient {
     public void onConnectionLost() {
         if (userInitiatedDisconnect.get()) {
             logger.info("MCP服务器 {} 已主动断开，不进行重连", getServerId());
+            return;
+        }
+
+        if (!connectionLossHandling.compareAndSet(false, true)) {
             return;
         }
 
@@ -124,6 +129,7 @@ public abstract class AbstractMcpClient implements McpClient {
                     .thenAccept(v -> {
                         logger.info("✅ MCP服务器 {} 重连成功！", getServerId());
                         reconnectAttempts.set(0);
+                        connectionLossHandling.set(false);
                     })
                     .exceptionally(e -> {
                         logger.warn("MCP服务器 {} 重连失败: {}", getServerId(), e.getMessage());

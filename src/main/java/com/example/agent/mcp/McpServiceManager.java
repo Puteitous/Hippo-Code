@@ -31,6 +31,7 @@ public class McpServiceManager {
     private final McpPromptRegistry promptRegistry = new McpPromptRegistry();
     private final ConcurrentHashMap<String, McpClient> activeClients = new ConcurrentHashMap<>();
     private final AtomicBoolean initialized = new AtomicBoolean(false);
+    private final AtomicBoolean shutdownHookRegistered = new AtomicBoolean(false);
     private final List<Runnable> shutdownHooks = new ArrayList<>();
     private ScheduledExecutorService reconnectExecutor;
 
@@ -66,7 +67,9 @@ public class McpServiceManager {
                 return t;
             });
             
-            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+            if (shutdownHookRegistered.compareAndSet(false, true)) {
+                Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+            }
 
             if (config.getMcp().isAutoConnect()) {
                 connectAllConfiguredServers();
@@ -99,6 +102,8 @@ public class McpServiceManager {
         try {
             McpClient client = McpClientFactory.create(serverConfig);
 
+            activeClients.put(serverId, client);
+
             if (client instanceof AbstractMcpClient) {
                 AbstractMcpClient abstractClient = (AbstractMcpClient) client;
                 abstractClient.setReconnectExecutor(reconnectExecutor);
@@ -118,8 +123,6 @@ public class McpServiceManager {
                         return client.listTools();
                     })
                     .thenAccept(tools -> {
-                        activeClients.put(serverId, client);
-
                         if (serverConfig.isAutoRegisterTools()) {
                             tools.forEach(tool -> {
                                 McpToolAdapter adapter = new McpToolAdapter(client, tool);
@@ -169,14 +172,17 @@ public class McpServiceManager {
                                 serverId,
                                 e.getMessage(),
                                 e);
-                        if (client instanceof AbstractMcpClient) {
-                            ((AbstractMcpClient) client).onConnectionLost();
+                        activeClients.remove(serverId);
+                        try {
+                            client.disconnect().get(5, java.util.concurrent.TimeUnit.SECONDS);
+                        } catch (Exception ignored) {
                         }
                         return null;
                     });
 
         } catch (Exception e) {
             logger.error("创建MCP客户端失败: {} - {}", serverId, e.getMessage(), e);
+            activeClients.remove(serverId);
         }
     }
 
@@ -224,6 +230,7 @@ public class McpServiceManager {
             }
 
             initialized.set(false);
+            shutdownHookRegistered.set(false);
             logger.info("MCP服务管理器已关闭");
         }
     }

@@ -148,7 +148,7 @@ public class SseMcpClient extends AbstractMcpClient {
                 doSendMessage(requestJson);
                 return future.get();
             } catch (Exception e) {
-                throw new RuntimeException("发送请求失败: " + method, e);
+                throw new McpException("发送请求失败: " + method, e);
             }
         }, executor);
     }

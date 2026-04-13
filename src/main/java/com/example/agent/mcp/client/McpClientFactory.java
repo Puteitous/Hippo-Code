@@ -19,9 +19,19 @@ public class McpClientFactory {
             throw new IllegalArgumentException("MCP服务器ID不能为空");
         }
 
-        String type = config.getType() != null ? config.getType() : "stdio";
+        String type = config.getType() != null ? config.getType().trim().toLowerCase() : "stdio";
 
-        switch (type.toLowerCase()) {
+        if ("sse".equals(type) || "http".equals(type)) {
+            if (config.getUrl() == null || config.getUrl().trim().isEmpty()) {
+                throw new IllegalArgumentException("SSE类型服务器必须配置URL");
+            }
+        } else {
+            if (config.getCommand() == null || config.getCommand().trim().isEmpty()) {
+                throw new IllegalArgumentException("Stdio类型服务器必须配置启动命令");
+            }
+        }
+
+        switch (type) {
             case "stdio":
                 logger.debug("创建Stdio类型MCP客户端: {}", config.getId());
                 return new StdioMcpClient(config);
