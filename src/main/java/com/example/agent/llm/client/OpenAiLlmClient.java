@@ -31,6 +31,13 @@ public class OpenAiLlmClient extends AbstractLlmClient {
         return "Bearer " + config.getApiKey();
     }
 
+    @Override
+    protected void enrichRequestHeaders(HttpRequest.Builder builder) {
+        if (config.getLlm().isServerCache()) {
+            logger.warn("⚠️ OpenAI 提供商暂不支持服务端缓存，已忽略该配置");
+        }
+    }
+
     public static String getDefaultBaseUrl() {
         return DEFAULT_BASE_URL;
     }

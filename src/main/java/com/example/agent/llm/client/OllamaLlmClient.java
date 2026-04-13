@@ -31,6 +31,13 @@ public class OllamaLlmClient extends AbstractLlmClient {
         return null;
     }
 
+    @Override
+    protected void enrichRequestHeaders(HttpRequest.Builder builder) {
+        if (config.getLlm().isServerCache()) {
+            logger.warn("⚠️ Ollama 本地模型暂不支持服务端缓存，已忽略该配置");
+        }
+    }
+
     public static String getDefaultBaseUrl() {
         return DEFAULT_BASE_URL;
     }

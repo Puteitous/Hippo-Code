@@ -18,6 +18,9 @@ public class LlmConfig {
     @JsonProperty("api_key")
     private String apiKey;
     
+    @JsonProperty("server_cache")
+    private boolean serverCache = false;
+    
     private String model;
     
     @JsonProperty("base_url")
@@ -30,6 +33,14 @@ public class LlmConfig {
     private int timeout = DEFAULT_TIMEOUT;
 
     public LlmConfig() {
+    }
+
+    public boolean isServerCache() {
+        return serverCache;
+    }
+
+    public void setServerCache(boolean serverCache) {
+        this.serverCache = serverCache;
     }
 
     public String getProvider() {

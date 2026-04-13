@@ -31,6 +31,14 @@ public class DashScopeLlmClient extends AbstractLlmClient {
         return "Bearer " + config.getApiKey();
     }
 
+    @Override
+    protected void enrichRequestHeaders(HttpRequest.Builder builder) {
+        if (config.getLlm().isServerCache()) {
+            logger.info("✨ 已启用 DashScope 服务端 Prompt 缓存");
+            builder.header("X-DashScope-Enable-Prompt-Cache", "true");
+        }
+    }
+
     public static String getDefaultBaseUrl() {
         return DEFAULT_BASE_URL;
     }

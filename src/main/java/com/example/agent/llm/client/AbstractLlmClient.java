@@ -69,6 +69,9 @@ public abstract class AbstractLlmClient implements LlmClient {
     protected abstract String getChatCompletionsPath();
     
     protected abstract String getAuthorizationHeader();
+    
+    protected void enrichRequestHeaders(HttpRequest.Builder builder) {
+    }
 
     @Override
     public ChatResponse chat(List<Message> messages) throws LlmException {
@@ -134,6 +137,8 @@ public abstract class AbstractLlmClient implements LlmClient {
             if (authHeader != null && !authHeader.isEmpty()) {
                 requestBuilder.header("Authorization", authHeader);
             }
+            
+            enrichRequestHeaders(requestBuilder);
             
             HttpRequest httpRequest = requestBuilder.build();
 
@@ -410,6 +415,8 @@ public abstract class AbstractLlmClient implements LlmClient {
             if (authHeader != null && !authHeader.isEmpty()) {
                 requestBuilder.header("Authorization", authHeader);
             }
+            
+            enrichRequestHeaders(requestBuilder);
             
             HttpRequest httpRequest = requestBuilder.build();
 
