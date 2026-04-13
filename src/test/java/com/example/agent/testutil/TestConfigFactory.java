@@ -22,10 +22,10 @@ public final class TestConfigFactory {
 
         public static Config createTestConfig() {
             Config config = Config.getInstance();
-            config.setApiKey(TEST_API_KEY);
-            config.setModel(TEST_MODEL);
-            config.setBaseUrl(TEST_BASE_URL);
-            config.setMaxTokens(TEST_MAX_TOKENS);
+            config.getLlm().setApiKey(TEST_API_KEY);
+            config.getLlm().setModel(TEST_MODEL);
+            config.getLlm().setBaseUrl(TEST_BASE_URL);
+            config.getLlm().setMaxTokens(TEST_MAX_TOKENS);
             config.getLlm().setTemperature(TEST_TEMPERATURE);
             return config;
         }

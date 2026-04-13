@@ -58,7 +58,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("边界 - 加载不存在的规则文件")
     void testLoadNonExistentRulesFile() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         config.setRulesFile("nonexistent_rules.txt");
         RuleManager manager = new RuleManager(tokenEstimator, config);
 
@@ -69,7 +69,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("边界 - 加载不存在的记忆文件")
     void testLoadNonExistentMemoryFile() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         config.setMemoryFile("nonexistent_memory.md");
         RuleManager manager = new RuleManager(tokenEstimator, config);
 
@@ -80,7 +80,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("边界 - null 文件路径配置")
     void testNullFilePaths() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         config.setRulesFile(null);
         config.setMemoryFile(null);
         RuleManager manager = new RuleManager(tokenEstimator, config);
@@ -94,7 +94,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("边界 - 空字符串文件路径")
     void testEmptyFilePaths() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         config.setRulesFile("");
         config.setMemoryFile("");
         RuleManager manager = new RuleManager(tokenEstimator, config);
@@ -128,7 +128,7 @@ class RuleManagerTest {
     @Test
     @DisplayName("边界 - 禁用注入时返回原始提示词")
     void testInjectDisabled() {
-        ContextConfig.RuleConfig config = new ContextConfig.RuleConfig();
+        RuleConfig config = new RuleConfig();
         config.setInjectAtStartup(false);
         RuleManager manager = new RuleManager(tokenEstimator, config);
 

@@ -63,7 +63,7 @@ class CacheManagerTest {
     @DisplayName("边界 - null key 存入")
     void testPutNullKey() {
         cacheManager.put(null, "value");
-        assertEquals(1L, cacheManager.size());
+        assertEquals(1, cacheManager.size());
     }
 
     @Test
@@ -71,7 +71,7 @@ class CacheManagerTest {
     void testPutAndGet() {
         cacheManager.put("key1", "value1");
         assertEquals("value1", cacheManager.get("key1"));
-        assertEquals(1L, cacheManager.size());
+        assertEquals(1, cacheManager.size());
     }
 
     @Test
@@ -80,7 +80,7 @@ class CacheManagerTest {
         cacheManager.put("key1", "value1");
         cacheManager.put("key1", "value2");
         assertEquals("value2", cacheManager.get("key1"));
-        assertEquals(1L, cacheManager.size());
+        assertEquals(1, cacheManager.size());
     }
 
     @Test
@@ -89,7 +89,7 @@ class CacheManagerTest {
         cacheManager.put("key1", "value1");
         cacheManager.invalidate("key1");
         assertNull(cacheManager.get("key1"));
-        assertEquals(0L, cacheManager.size());
+        assertEquals(0, cacheManager.size());
     }
 
     @Test
@@ -109,10 +109,10 @@ class CacheManagerTest {
     void testClear() {
         cacheManager.put("key1", "value1");
         cacheManager.put("key2", "value2");
-        assertEquals(2L, cacheManager.size());
+        assertEquals(2, cacheManager.size());
 
         cacheManager.clear();
-        assertEquals(0L, cacheManager.size());
+        assertEquals(0, cacheManager.size());
         assertNull(cacheManager.get("key1"));
         assertNull(cacheManager.get("key2"));
     }
@@ -122,7 +122,7 @@ class CacheManagerTest {
     void testCleanup() {
         CacheManager shortTtlCache = new CacheManager(1);
         shortTtlCache.put("key1", "value1");
-        assertEquals(1L, shortTtlCache.size());
+        assertEquals(1, shortTtlCache.size());
 
         assertDoesNotThrow(() -> shortTtlCache.cleanup());
     }
@@ -135,9 +135,9 @@ class CacheManagerTest {
         cacheManager.put("bool", true);
 
         assertEquals("hello", cacheManager.get("string"));
-        assertEquals(42, cacheManager.get("int"));
-        assertEquals(true, cacheManager.get("bool"));
-        assertEquals(3L, cacheManager.size());
+        assertEquals(Integer.valueOf(42), cacheManager.get("int"));
+        assertEquals(Boolean.valueOf(true), cacheManager.get("bool"));
+        assertEquals(3, cacheManager.size());
     }
 
     @Test
@@ -145,7 +145,7 @@ class CacheManagerTest {
     void testEmptyStringKey() {
         cacheManager.put("", "emptyKey");
         assertEquals("emptyKey", cacheManager.get(""));
-        assertEquals(1L, cacheManager.size());
+        assertEquals(1, cacheManager.size());
     }
 
     @Test
@@ -163,6 +163,6 @@ class CacheManagerTest {
     void testEmptyCacheOperations() {
         assertDoesNotThrow(() -> cacheManager.clear());
         assertDoesNotThrow(() -> cacheManager.cleanup());
-        assertEquals(0L, cacheManager.size());
+        assertEquals(0, cacheManager.size());
     }
 }

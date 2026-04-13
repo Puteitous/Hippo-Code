@@ -1,5 +1,8 @@
 package com.example.agent.context.policy;
 
+import com.example.agent.config.CacheConfig;
+import com.example.agent.config.IndexConfig;
+import com.example.agent.config.RuleConfig;
 import com.example.agent.context.TrimPolicy;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.llm.model.Message;
@@ -138,8 +141,7 @@ class ContextPolicyTest {
 
     @Test
     void testRuleConfig() {
-        ContextConfig config = new ContextConfig();
-        ContextConfig.RuleConfig rule = config.getRule();
+        RuleConfig rule = new RuleConfig();
 
         assertNotNull(rule);
         assertEquals(".hipporules", rule.getRulesFile());
@@ -150,8 +152,7 @@ class ContextPolicyTest {
 
     @Test
     void testCacheConfig() {
-        ContextConfig config = new ContextConfig();
-        ContextConfig.CacheConfig cache = config.getCache();
+        CacheConfig cache = new CacheConfig();
 
         assertNotNull(cache);
         assertEquals(4000, cache.getMaxFileTokens());
@@ -160,8 +161,7 @@ class ContextPolicyTest {
 
     @Test
     void testIndexConfig() {
-        ContextConfig config = new ContextConfig();
-        ContextConfig.IndexConfig index = config.getIndex();
+        IndexConfig index = new IndexConfig();
 
         assertNotNull(index);
         assertTrue(index.isEnabled());
