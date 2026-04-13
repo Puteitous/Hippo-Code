@@ -6,7 +6,10 @@ import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.mcp.client.McpClient;
 import com.example.agent.mcp.config.McpConfig;
+import com.example.agent.mcp.model.McpTool;
 import com.example.agent.service.ConversationManager;
+
+import java.util.concurrent.TimeUnit;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
 import org.jline.reader.EndOfFileException;
@@ -366,6 +369,19 @@ public class CommandDispatcher {
             case "list":
                 printMcpServerList();
                 break;
+            case "tools":
+                printMcpTools();
+                break;
+            case "resources":
+                printMcpResources();
+                break;
+            case "read":
+                if (parts.length < 3) {
+                    ui.println(ConsoleStyle.yellow("用法: /mcp read <资源URI>"));
+                } else {
+                    readMcpResource(parts[2].trim());
+                }
+                break;
             case "connect":
                 if (parts.length < 3) {
                     ui.println(ConsoleStyle.yellow("用法: /mcp connect <serverId>"));
@@ -401,11 +417,96 @@ public class CommandDispatcher {
         ui.println(ConsoleStyle.cyan("║                  📡 MCP 服务命令                       ║"));
         ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════╣"));
         ui.println(ConsoleStyle.cyan("║  /mcp list          - 列出所有MCP服务器状态            ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp tools         - 列出所有已注册的MCP工具           ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp resources     - 列出所有可用的MCP资源            ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp read <uri>    - 读取指定资源内容                 ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp connect <id>  - 连接指定的MCP服务器              ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp disconnect <id> - 断开指定的MCP服务器            ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp reconnect <id> - 重新连接指定的MCP服务器         ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp help          - 显示此帮助信息                   ║"));
         ui.println(ConsoleStyle.cyan("╚═══════════════════════════════════════════════════════╝"));
+    }
+
+    private void printMcpTools() {
+        List<McpClient> clients = mcpServiceManager.getActiveClients();
+
+        ui.println(ConsoleStyle.cyan("╔══════════════════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                           🔧 MCP 工具列表                                 ║"));
+        ui.println(ConsoleStyle.cyan("╠══════════════════════════════════════════════════════════════════════════╣"));
+
+        int count = 0;
+        for (McpClient client : clients) {
+            try {
+                List<McpTool> tools = client.listTools().get(10, TimeUnit.SECONDS);
+                if (!tools.isEmpty()) {
+                    ui.println(ConsoleStyle.cyan("║ ") + ConsoleStyle.bold("[" + client.getServerId() + "]") + " " + client.getServerName());
+                    for (McpTool tool : tools) {
+                        String name = tool.getName();
+                        String desc = tool.getDescription();
+                        if (desc.length() > 45) desc = desc.substring(0, 45) + "...";
+                        ui.println(String.format("║     %-20s %s", name, desc));
+                        count++;
+                    }
+                    ui.println(ConsoleStyle.cyan("║                                                                      ║"));
+                }
+            } catch (Exception e) {
+                ui.println(ConsoleStyle.yellow("║  获取工具列表失败: " + e.getMessage()));
+            }
+        }
+
+        if (count == 0) {
+            ui.println(ConsoleStyle.yellow("║  暂无可用工具，请先连接MCP服务器                                      ║"));
+        } else {
+            ui.println(String.format("║  总计: %d 个工具                                                     ║", count));
+        }
+        ui.println(ConsoleStyle.cyan("╚══════════════════════════════════════════════════════════════════════════╝"));
+    }
+
+    private void printMcpResources() {
+        var resourceRegistry = mcpServiceManager.getResourceRegistry();
+        var allResources = resourceRegistry.getAllResources();
+
+        ui.println(ConsoleStyle.cyan("╔═══════════════════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                           📄 MCP 资源列表                                  ║"));
+        ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════════════════════════╣"));
+
+        if (allResources.isEmpty()) {
+            ui.println(ConsoleStyle.yellow("║  暂无可用资源，请先连接支持Resources的MCP服务器                          ║"));
+        } else {
+            for (var entry : allResources) {
+                String serverId = entry.client().getServerId();
+                String uri = entry.getFullUri();
+                String name = entry.resource().getName();
+                String desc = entry.resource().getDescription();
+                if (desc == null) desc = "";
+                if (desc.length() > 35) desc = desc.substring(0, 35) + "...";
+
+                ui.println(String.format("║  [%s] %s",
+                        ConsoleStyle.green(serverId),
+                        uri));
+                if (!desc.isEmpty()) {
+                    ui.println(String.format("║        %s", desc));
+                }
+                ui.println(ConsoleStyle.cyan("║                                                                       ║"));
+            }
+            ui.println(String.format("║  总计: %d 个资源                                                      ║", allResources.size()));
+        }
+        ui.println(ConsoleStyle.cyan("╚═══════════════════════════════════════════════════════════════════════════╝"));
+    }
+
+    private void readMcpResource(String uri) {
+        var resourceRegistry = mcpServiceManager.getResourceRegistry();
+
+        try {
+            ui.println(ConsoleStyle.cyan("读取资源: ") + uri);
+            ui.println();
+            String content = resourceRegistry.readResourceContent(uri);
+            ui.println(ConsoleStyle.gray("────────────────────────────────────────────────────────"));
+            ui.println(content);
+            ui.println(ConsoleStyle.gray("────────────────────────────────────────────────────────"));
+        } catch (Exception e) {
+            ui.println(ConsoleStyle.red("读取资源失败: " + e.getMessage()));
+        }
     }
 
     private void printMcpServerList() {

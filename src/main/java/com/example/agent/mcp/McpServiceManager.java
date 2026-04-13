@@ -5,6 +5,8 @@ import com.example.agent.mcp.client.AbstractMcpClient;
 import com.example.agent.mcp.client.McpClient;
 import com.example.agent.mcp.client.McpClientFactory;
 import com.example.agent.mcp.config.McpConfig;
+import com.example.agent.mcp.model.McpResource;
+import com.example.agent.mcp.registry.McpResourceRegistry;
 import com.example.agent.mcp.registry.McpToolAdapter;
 import com.example.agent.tools.ToolRegistry;
 import org.slf4j.Logger;
@@ -23,6 +25,7 @@ public class McpServiceManager {
 
     private final Config config;
     private final ToolRegistry toolRegistry;
+    private final McpResourceRegistry resourceRegistry = new McpResourceRegistry();
     private final ConcurrentHashMap<String, McpClient> activeClients = new ConcurrentHashMap<>();
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     private final List<Runnable> shutdownHooks = new ArrayList<>();
@@ -31,6 +34,10 @@ public class McpServiceManager {
     public McpServiceManager(Config config, ToolRegistry toolRegistry) {
         this.config = config;
         this.toolRegistry = toolRegistry;
+    }
+
+    public McpResourceRegistry getResourceRegistry() {
+        return resourceRegistry;
     }
 
     public void initialize() {
@@ -116,6 +123,21 @@ public class McpServiceManager {
                             });
                         }
 
+                        client.listResources()
+                                .thenAccept(resources -> {
+                                    if (!resources.isEmpty()) {
+                                        resourceRegistry.registerResources(client, resources);
+                                        logger.info("MCP服务器 {} 共注册了 {} 个资源",
+                                                serverConfig.getName(),
+                                                resources.size());
+                                    }
+                                })
+                                .exceptionally(e -> {
+                                    logger.debug("MCP服务器 {} 不支持 Resources 或获取失败: {}",
+                                            serverId, e.getMessage());
+                                    return null;
+                                });
+
                         logger.info("MCP服务器 {} 就绪！共注册了 {} 个工具",
                                 serverConfig.getName(),
                                 tools.size());
@@ -141,6 +163,7 @@ public class McpServiceManager {
         if (client != null) {
             try {
                 client.disconnect().get();
+                resourceRegistry.unregisterResources(serverId);
                 logger.info("MCP服务器 {} 已断开连接", serverId);
             } catch (Exception e) {
                 logger.warn("断开MCP服务器 {} 连接时出错: {}", serverId, e.getMessage());

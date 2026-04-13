@@ -1,4 +1,6 @@
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -29,6 +31,27 @@ function sendError(id, code, message) {
     process.stdout.write(JSON.stringify(response) + '\n');
 }
 
+const testResources = {
+    "file:///README.md": {
+        name: "README.md",
+        description: "项目说明文档",
+        mimeType: "text/markdown",
+        content: "# MCP Echo Test Server\n\n这是一个用于测试 MCP 协议的 Echo 服务器。\n\n## 功能\n\n- echo: 回显消息\n- add: 计算两个数字的和\n- resources: 提供示例文件内容\n"
+    },
+    "file:///config.example.yaml": {
+        name: "配置示例",
+        description: "MCP 服务器配置示例",
+        mimeType: "text/yaml",
+        content: "mcp:\n  enabled: true\n  auto_connect: true\n  servers:\n    - id: echo\n      name: Echo Test Server\n      type: stdio\n      command: node\n      args: [\"mcp-test-server.js\"]\n"
+    },
+    "test:///server-status": {
+        name: "服务器状态",
+        description: "当前服务器运行状态",
+        mimeType: "text/plain",
+        content: `服务器状态: 运行中\n启动时间: ${new Date().toISOString()}\n版本: 1.0.0\n协议: 2024-11-05\n`
+    }
+};
+
 console.error("MCP Echo Server 启动...");
 
 rl.on('line', (line) => {
@@ -44,10 +67,11 @@ rl.on('line', (line) => {
                     version: "1.0.0"
                 },
                 capabilities: {
-                    tools: {}
+                    tools: {},
+                    resources: {}
                 }
             });
-            console.error("✅ 初始化完成");
+            console.error("✅ 初始化完成 (支持: tools, resources)");
         }
         else if (msg.method === 'initialized') {
             console.error("✅ 客户端已确认初始化");
@@ -99,6 +123,35 @@ rl.on('line', (line) => {
             });
             console.error("✅ 返回工具列表: 3个工具");
         }
+        else if (msg.method === 'resources/list') {
+            const resources = Object.entries(testResources).map(([uri, info]) => ({
+                uri: uri,
+                name: info.name,
+                description: info.description,
+                mimeType: info.mimeType
+            }));
+            sendResponse(msg.id, { resources });
+            console.error(`✅ 返回资源列表: ${resources.length} 个资源`);
+        }
+        else if (msg.method === 'resources/read') {
+            const uri = msg.params.uri;
+            const resource = testResources[uri];
+            
+            if (resource) {
+                sendResponse(msg.id, {
+                    contents: [
+                        {
+                            uri: uri,
+                            mimeType: resource.mimeType,
+                            text: resource.content
+                        }
+                    ]
+                });
+                console.error(`✅ 读取资源: ${uri}`);
+            } else {
+                sendError(msg.id, -32602, `资源不存在: ${uri}`);
+            }
+        }
         else if (msg.method === 'tools/call') {
             const toolName = msg.params.name;
             const args = msg.params.arguments || {};
@@ -135,6 +188,7 @@ rl.on('line', (line) => {
                                 server: "echo-server",
                                 version: "1.0.0",
                                 tools: ["echo", "add", "get_server_info"],
+                                resources: Object.keys(testResources),
                                 timestamp: new Date().toISOString()
                             }, null, 2)
                         }
@@ -150,11 +204,11 @@ rl.on('line', (line) => {
             sendError(msg.id, -32601, `方法未实现: ${msg.method}`);
         }
     } catch (e) {
-        console.error("处理错误:", e.message);
+        console.error("解析错误:", e.message, line);
     }
 });
 
 process.on('SIGINT', () => {
-    console.error("MCP Echo Server 关闭");
+    console.error("收到关闭信号，正在退出...");
     process.exit(0);
 });

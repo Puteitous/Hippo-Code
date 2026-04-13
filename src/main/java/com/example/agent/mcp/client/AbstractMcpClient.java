@@ -5,9 +5,11 @@ import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.mcp.exception.McpException;
 import com.example.agent.mcp.exception.McpTimeoutException;
 import com.example.agent.mcp.model.InitializeResult;
+import com.example.agent.mcp.model.ListResourcesResult;
 import com.example.agent.mcp.model.ListToolsResult;
 import com.example.agent.mcp.model.McpResource;
 import com.example.agent.mcp.model.McpTool;
+import com.example.agent.mcp.model.ReadResourceResult;
 import com.example.agent.mcp.protocol.JsonRpcHandler;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -212,11 +214,14 @@ public abstract class AbstractMcpClient implements McpClient {
 
     @Override
     public CompletableFuture<List<McpResource>> listResources() {
-        throw new UnsupportedOperationException("Resources not implemented yet");
+        return sendRequest("resources/list", null, ListResourcesResult.class)
+                .thenApply(ListResourcesResult::getResources);
     }
 
     @Override
-    public CompletableFuture<Object> readResource(String uri) {
-        throw new UnsupportedOperationException("Resources not implemented yet");
+    public CompletableFuture<ReadResourceResult> readResource(String uri) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("uri", uri);
+        return sendRequest("resources/read", params, ReadResourceResult.class);
     }
 }

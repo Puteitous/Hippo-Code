@@ -2,6 +2,7 @@ package com.example.agent.mcp.client;
 
 import com.example.agent.mcp.model.McpResource;
 import com.example.agent.mcp.model.McpTool;
+import com.example.agent.mcp.model.ReadResourceResult;
 
 import java.util.List;
 import java.util.Map;
@@ -27,5 +28,5 @@ public interface McpClient {
 
     CompletableFuture<List<McpResource>> listResources();
 
-    CompletableFuture<Object> readResource(String uri);
+    CompletableFuture<ReadResourceResult> readResource(String uri);
 }
