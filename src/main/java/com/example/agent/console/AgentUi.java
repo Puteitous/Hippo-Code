@@ -34,8 +34,19 @@ public class AgentUi {
         println(ConsoleStyle.green("  help  ") + ConsoleStyle.gray(" - 显示帮助"));
         println(ConsoleStyle.green("  multi ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));
         println(ConsoleStyle.green("  reset ") + ConsoleStyle.gray(" - 重置会话"));
+        println(ConsoleStyle.blue("  /mcp  ") + ConsoleStyle.gray(" - MCP服务管理"));
         println(ConsoleStyle.green("  exit  ") + ConsoleStyle.gray(" - 退出程序"));
         println();
+        
+        if (config.getMcp().isEnabled()) {
+            int serverCount = config.getMcp().getServers() != null ? config.getMcp().getServers().size() : 0;
+            println(ConsoleStyle.boldBlue(" MCP 服务: ") + ConsoleStyle.info(serverCount + " 个服务器已配置"));
+            if (serverCount > 0) {
+                println(ConsoleStyle.gray("        正在后台连接中，输入 /mcp list 查看状态"));
+            }
+            println();
+        }
+        
         println(ConsoleStyle.yellow("提示: 粘贴多行内容请先输入 \"\"\" 或 multi"));
         println();
     }
@@ -54,6 +65,12 @@ public class AgentUi {
         println(ConsoleStyle.green("  resume  ") + " - 恢复最近的会话");
         println(ConsoleStyle.green("  resume <序号>") + " - 恢复指定会话");
         println(ConsoleStyle.green("  delete-session <序号>") + " - 删除指定会话");
+        println();
+        println(ConsoleStyle.boldBlue("MCP 服务管理:"));
+        println(ConsoleStyle.blue("  /mcp list") + "           - 列出所有配置的 MCP 服务器");
+        println(ConsoleStyle.blue("  /mcp connect <id>") + "     - 连接指定 MCP 服务器");
+        println(ConsoleStyle.blue("  /mcp disconnect <id>") + "  - 断开指定 MCP 服务器");
+        println(ConsoleStyle.blue("  /mcp tools") + "          - 列出所有已注册的 MCP 工具");
         println();
         println(ConsoleStyle.green("  exit    ") + " - 退出程序");
         println(ConsoleStyle.green("  quit    ") + " - 退出程序");
@@ -84,6 +101,18 @@ public class AgentUi {
         println(ConsoleStyle.boldCyan("  [工具配置]"));
         println(ConsoleStyle.green("  Bash: ") + (config.getTools().getBash().isEnabled() ? "启用" : "禁用"));
         println(ConsoleStyle.green("  File: ") + (config.getTools().getFile().isEnabled() ? "启用" : "禁用"));
+        println();
+        println(ConsoleStyle.boldCyan("  [MCP 服务]"));
+        println(ConsoleStyle.green("  启用: ") + (config.getMcp().isEnabled() ? "是" : "否"));
+        println(ConsoleStyle.green("  自动连接: ") + (config.getMcp().isAutoConnect() ? "是" : "否"));
+        int serverCount = config.getMcp().getServers() != null ? config.getMcp().getServers().size() : 0;
+        println(ConsoleStyle.green("  服务器数量: ") + serverCount);
+        if (config.getMcp().getServers() != null) {
+            config.getMcp().getServers().forEach(server -> {
+                String status = server.isAutoRegisterTools() ? "（自动注册工具）" : "";
+                println(ConsoleStyle.green("    - " + server.getId() + ": ") + server.getName() + " [" + server.getType() + "] " + status);
+            });
+        }
         println();
         println(ConsoleStyle.boldCyan("  [会话配置]"));
         println(ConsoleStyle.green("  自动保存: ") + (config.getSession().isAutoSave() ? "是" : "否"));

@@ -109,12 +109,32 @@ public final class ConsoleStyle {
                 .toAnsi();
     }
 
+    public static String blue(String text) {
+        if (text == null) {
+            return "";
+        }
+        return new AttributedStringBuilder()
+                .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE))
+                .append(text)
+                .toAnsi();
+    }
+
     public static String boldCyan(String text) {
         if (text == null) {
             return "";
         }
         return new AttributedStringBuilder()
                 .style(AttributedStyle.BOLD.foreground(AttributedStyle.CYAN))
+                .append(text)
+                .toAnsi();
+    }
+
+    public static String boldBlue(String text) {
+        if (text == null) {
+            return "";
+        }
+        return new AttributedStringBuilder()
+                .style(AttributedStyle.BOLD.foreground(AttributedStyle.BLUE))
                 .append(text)
                 .toAnsi();
     }

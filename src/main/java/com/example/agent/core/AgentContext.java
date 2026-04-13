@@ -103,7 +103,7 @@ public class AgentContext {
                 .build();
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
-                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens"))
+                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools"))
                 .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                 .build();
     }
