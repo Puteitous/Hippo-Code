@@ -16,6 +16,15 @@ public class McpConfig {
     @JsonProperty("auto_connect")
     private boolean autoConnect = true;
 
+    @JsonProperty("auto_reconnect")
+    private boolean autoReconnect = true;
+
+    @JsonProperty("max_reconnect_attempts")
+    private int maxReconnectAttempts = 5;
+
+    @JsonProperty("reconnect_delay_seconds")
+    private int reconnectDelaySeconds = 5;
+
     @JsonProperty("connection_timeout")
     private int connectionTimeout = 30000;
 
@@ -116,6 +125,30 @@ public class McpConfig {
 
     public void setAutoConnect(boolean autoConnect) {
         this.autoConnect = autoConnect;
+    }
+
+    public boolean isAutoReconnect() {
+        return autoReconnect;
+    }
+
+    public void setAutoReconnect(boolean autoReconnect) {
+        this.autoReconnect = autoReconnect;
+    }
+
+    public int getMaxReconnectAttempts() {
+        return maxReconnectAttempts;
+    }
+
+    public void setMaxReconnectAttempts(int maxReconnectAttempts) {
+        this.maxReconnectAttempts = maxReconnectAttempts;
+    }
+
+    public int getReconnectDelaySeconds() {
+        return reconnectDelaySeconds;
+    }
+
+    public void setReconnectDelaySeconds(int reconnectDelaySeconds) {
+        this.reconnectDelaySeconds = reconnectDelaySeconds;
     }
 
     public int getConnectionTimeout() {

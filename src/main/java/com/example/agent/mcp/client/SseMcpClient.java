@@ -19,11 +19,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class SseMcpClient extends AbstractMcpClient {
 
@@ -43,7 +41,7 @@ public class SseMcpClient extends AbstractMcpClient {
     public CompletableFuture<Void> connect() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String baseUrl = config.getUrl();
+                String baseUrl = serverConfig.getUrl();
                 if (baseUrl == null || baseUrl.isEmpty()) {
                     throw new McpConnectionException("SSE服务器URL未配置");
                 }
@@ -76,18 +74,22 @@ public class SseMcpClient extends AbstractMcpClient {
                     public void onFailure(@NotNull EventSource eventSource, Throwable t, Response response) {
                         if (connected) {
                             logger.error("SSE连接错误", t);
+                            onConnectionLost();
                         }
                     }
 
                     @Override
                     public void onClosed(@NotNull EventSource eventSource) {
                         logger.info("SSE连接已关闭");
-                        connected = false;
+                        if (connected) {
+                            onConnectionLost();
+                        }
                     }
                 });
 
                 Thread.sleep(1000);
                 connected = true;
+                resetReconnectState();
                 logger.info("SSE MCP服务器连接成功");
                 return null;
             } catch (Exception e) {
@@ -140,6 +142,7 @@ public class SseMcpClient extends AbstractMcpClient {
     @Override
     public CompletableFuture<Void> disconnect() {
         return CompletableFuture.runAsync(() -> {
+            markUserInitiatedDisconnect();
             connected = false;
             jsonRpcHandler.cancelAllPending();
 

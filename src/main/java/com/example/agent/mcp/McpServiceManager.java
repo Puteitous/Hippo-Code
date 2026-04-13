@@ -1,6 +1,7 @@
 package com.example.agent.mcp;
 
 import com.example.agent.config.Config;
+import com.example.agent.mcp.client.AbstractMcpClient;
 import com.example.agent.mcp.client.McpClient;
 import com.example.agent.mcp.client.McpClientFactory;
 import com.example.agent.mcp.config.McpConfig;
@@ -12,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class McpServiceManager {
@@ -23,6 +26,7 @@ public class McpServiceManager {
     private final ConcurrentHashMap<String, McpClient> activeClients = new ConcurrentHashMap<>();
     private final AtomicBoolean initialized = new AtomicBoolean(false);
     private final List<Runnable> shutdownHooks = new ArrayList<>();
+    private ScheduledExecutorService reconnectExecutor;
 
     public McpServiceManager(Config config, ToolRegistry toolRegistry) {
         this.config = config;
@@ -37,7 +41,13 @@ public class McpServiceManager {
 
         if (initialized.compareAndSet(false, true)) {
             logger.info("初始化MCP服务管理器...");
+            logger.info("自动重连: {} (最多 {} 次，间隔 {} 秒)",
+                    config.getMcp().isAutoReconnect() ? "启用" : "禁用",
+                    config.getMcp().getMaxReconnectAttempts(),
+                    config.getMcp().getReconnectDelaySeconds());
 
+            this.reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
+            
             Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 
             if (config.getMcp().isAutoConnect()) {
@@ -71,6 +81,15 @@ public class McpServiceManager {
         try {
             McpClient client = McpClientFactory.create(serverConfig);
 
+            if (client instanceof AbstractMcpClient) {
+                AbstractMcpClient abstractClient = (AbstractMcpClient) client;
+                abstractClient.setReconnectExecutor(reconnectExecutor);
+                abstractClient.setDisconnectListener(disconnectedClient -> {
+                    logger.warn("MCP服务器 {} 连接已丢失，将不再重试", disconnectedClient.getServerId());
+                    activeClients.remove(disconnectedClient.getServerId());
+                });
+            }
+
             client.connect()
                     .thenCompose(v -> {
                         logger.info("MCP服务器 {} 连接成功，正在初始化...", serverId);
@@ -102,6 +121,9 @@ public class McpServiceManager {
                                 serverId,
                                 e.getMessage(),
                                 e);
+                        if (client instanceof AbstractMcpClient) {
+                            ((AbstractMcpClient) client).onConnectionLost();
+                        }
                         return null;
                     });
 
@@ -133,6 +155,10 @@ public class McpServiceManager {
     public void shutdown() {
         if (initialized.get()) {
             logger.info("关闭MCP服务管理器...");
+
+            if (reconnectExecutor != null) {
+                reconnectExecutor.shutdownNow();
+            }
 
             List<String> serverIds = new ArrayList<>(activeClients.keySet());
             for (String serverId : serverIds) {

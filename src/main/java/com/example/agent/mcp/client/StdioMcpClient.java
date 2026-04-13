@@ -14,11 +14,9 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class StdioMcpClient extends AbstractMcpClient {
 
@@ -39,15 +37,15 @@ public class StdioMcpClient extends AbstractMcpClient {
     public CompletableFuture<Void> connect() {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                logger.info("启动MCP子进程: {} {}", config.getCommand(), config.getArgs());
+                logger.info("启动MCP子进程: {} {}", serverConfig.getCommand(), serverConfig.getArgs());
 
                 List<String> command = new ArrayList<>();
-                command.add(config.getCommand());
-                command.addAll(config.getArgs());
+                command.add(serverConfig.getCommand());
+                command.addAll(serverConfig.getArgs());
 
                 ProcessBuilder pb = new ProcessBuilder(command);
-                if (!config.getEnv().isEmpty()) {
-                    pb.environment().putAll(config.getEnv());
+                if (!serverConfig.getEnv().isEmpty()) {
+                    pb.environment().putAll(serverConfig.getEnv());
                 }
 
                 process = pb.start();
@@ -62,14 +60,29 @@ public class StdioMcpClient extends AbstractMcpClient {
                 executor = Executors.newCachedThreadPool();
                 executor.submit(this::readStdoutLoop);
                 executor.submit(this::readStderrLoop);
+                executor.submit(this::monitorProcessExit);
 
                 connected = true;
+                resetReconnectState();
                 logger.info("MCP子进程启动成功");
                 return null;
             } catch (Exception e) {
                 throw new McpConnectionException("启动MCP子进程失败: " + e.getMessage(), e);
             }
         });
+    }
+
+    private void monitorProcessExit() {
+        try {
+            int exitCode = process.waitFor();
+            if (connected) {
+                logger.warn("MCP子进程异常退出，退出码: {}", exitCode);
+                onConnectionLost();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.debug("进程监控线程被中断");
+        }
     }
 
     @Override
@@ -136,6 +149,7 @@ public class StdioMcpClient extends AbstractMcpClient {
     @Override
     public CompletableFuture<Void> disconnect() {
         return CompletableFuture.runAsync(() -> {
+            markUserInitiatedDisconnect();
             connected = false;
 
             jsonRpcHandler.cancelAllPending();

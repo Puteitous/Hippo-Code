@@ -1,5 +1,6 @@
 package com.example.agent.mcp.client;
 
+import com.example.agent.config.Config;
 import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.mcp.exception.McpException;
 import com.example.agent.mcp.exception.McpTimeoutException;
@@ -16,13 +17,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public abstract class AbstractMcpClient implements McpClient {
 
     protected static final Logger logger = LoggerFactory.getLogger(AbstractMcpClient.class);
 
-    protected final McpConfig.McpServerConfig config;
+    protected final McpConfig.McpServerConfig serverConfig;
+    protected final McpConfig globalConfig;
     protected final JsonRpcHandler jsonRpcHandler;
     protected final int requestTimeoutMs;
 
@@ -30,16 +36,102 @@ public abstract class AbstractMcpClient implements McpClient {
     protected String serverName;
     protected InitializeResult.ServerInfo serverInfo;
 
+    private final AtomicBoolean userInitiatedDisconnect = new AtomicBoolean(false);
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    private Consumer<McpClient> disconnectListener;
+    protected ScheduledExecutorService reconnectExecutor;
+
     protected AbstractMcpClient(McpConfig.McpServerConfig config) {
-        this.config = config;
+        this.serverConfig = config;
+        this.globalConfig = Config.getInstance().getMcp();
         this.jsonRpcHandler = new JsonRpcHandler();
-        this.requestTimeoutMs = 60000;
+        this.requestTimeoutMs = globalConfig.getRequestTimeout();
         this.serverName = config.getName() != null ? config.getName() : config.getId();
+    }
+
+    public void setDisconnectListener(Consumer<McpClient> listener) {
+        this.disconnectListener = listener;
+    }
+
+    public void setReconnectExecutor(ScheduledExecutorService executor) {
+        this.reconnectExecutor = executor;
+    }
+
+    public void onConnectionLost() {
+        if (userInitiatedDisconnect.get()) {
+            logger.info("MCP服务器 {} 已主动断开，不进行重连", getServerId());
+            return;
+        }
+
+        this.connected = false;
+
+        if (!globalConfig.isAutoReconnect()) {
+            logger.info("MCP服务器 {} 连接断开，自动重连已禁用", getServerId());
+            notifyDisconnect();
+            return;
+        }
+
+        int maxAttempts = globalConfig.getMaxReconnectAttempts();
+        int currentAttempt = reconnectAttempts.incrementAndGet();
+
+        if (currentAttempt > maxAttempts) {
+            logger.warn("MCP服务器 {} 已达到最大重连次数 ({})，停止重连", getServerId(), maxAttempts);
+            notifyDisconnect();
+            return;
+        }
+
+        int delay = globalConfig.getReconnectDelaySeconds();
+        logger.warn("MCP服务器 {} 连接异常断开，将在 {} 秒后尝试重连 (第 {}/{} 次)",
+                getServerId(), delay, currentAttempt, maxAttempts);
+
+        if (reconnectExecutor != null) {
+            reconnectExecutor.schedule(this::attemptReconnect, delay, TimeUnit.SECONDS);
+        } else {
+            CompletableFuture.delayedExecutor(delay, TimeUnit.SECONDS)
+                    .execute(this::attemptReconnect);
+        }
+    }
+
+    private void attemptReconnect() {
+        try {
+            logger.info("正在重连 MCP 服务器 {}...", getServerId());
+
+            connect()
+                    .thenCompose(v -> initialize())
+                    .thenAccept(v -> {
+                        logger.info("✅ MCP服务器 {} 重连成功！", getServerId());
+                        reconnectAttempts.set(0);
+                    })
+                    .exceptionally(e -> {
+                        logger.warn("MCP服务器 {} 重连失败: {}", getServerId(), e.getMessage());
+                        onConnectionLost();
+                        return null;
+                    });
+
+        } catch (Exception e) {
+            logger.warn("MCP服务器 {} 重连异常: {}", getServerId(), e.getMessage());
+            onConnectionLost();
+        }
+    }
+
+    protected void markUserInitiatedDisconnect() {
+        userInitiatedDisconnect.set(true);
+    }
+
+    protected void resetReconnectState() {
+        reconnectAttempts.set(0);
+        userInitiatedDisconnect.set(false);
+    }
+
+    private void notifyDisconnect() {
+        if (disconnectListener != null) {
+            disconnectListener.accept(this);
+        }
     }
 
     @Override
     public String getServerId() {
-        return config.getId();
+        return serverConfig.getId();
     }
 
     @Override
