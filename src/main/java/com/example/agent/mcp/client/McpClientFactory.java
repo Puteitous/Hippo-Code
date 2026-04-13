@@ -27,8 +27,8 @@ public class McpClientFactory {
                 return new StdioMcpClient(config);
             case "sse":
             case "http":
-                logger.warn("SSE类型MCP客户端尚未实现，使用Stdio模式: {}", config.getId());
-                return new StdioMcpClient(config);
+                logger.debug("创建SSE类型MCP客户端: {}", config.getId());
+                return new SseMcpClient(config);
             default:
                 logger.warn("未知的MCP连接类型: {}, 使用Stdio模式", type);
                 return new StdioMcpClient(config);

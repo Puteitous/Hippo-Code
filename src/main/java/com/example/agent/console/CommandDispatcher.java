@@ -3,6 +3,9 @@ package com.example.agent.console;
 import com.example.agent.config.Config;
 import com.example.agent.core.AgentContext;
 import com.example.agent.logging.TokenMetricsCollector;
+import com.example.agent.mcp.McpServiceManager;
+import com.example.agent.mcp.client.McpClient;
+import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
@@ -75,6 +78,7 @@ public class CommandDispatcher {
     private final ConversationManager conversationManager;
     private final TokenMetricsCollector tokenMetricsCollector;
     private final SessionStorage sessionStorage;
+    private final McpServiceManager mcpServiceManager;
     private String currentConversationId;
 
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler) {
@@ -93,6 +97,7 @@ public class CommandDispatcher {
         this.conversationManager = context.getConversationManager();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
         this.sessionStorage = sessionStorage;
+        this.mcpServiceManager = context.getMcpServiceManager();
     }
 
     public CommandResult dispatch(String line) throws UserInterruptException, EndOfFileException {
@@ -163,6 +168,10 @@ public class CommandDispatcher {
 
         if ("\"\"\"".equals(line) || "multi".equalsIgnoreCase(line)) {
             return handleMultilineInput();
+        }
+
+        if (line.toLowerCase().startsWith("/mcp")) {
+            return handleMcpCommand(line);
         }
 
         return CommandResult.processInput(line);
@@ -345,6 +354,139 @@ public class CommandDispatcher {
                 return ConsoleStyle.gray("✓");
             default:
                 return "?";
+        }
+    }
+
+    private CommandResult handleMcpCommand(String line) {
+        String[] parts = line.split("\\s+", 3);
+        String subCommand = parts.length > 1 ? parts[1].toLowerCase() : "help";
+
+        switch (subCommand) {
+            case "list":
+                printMcpServerList();
+                break;
+            case "connect":
+                if (parts.length < 3) {
+                    ui.println(ConsoleStyle.yellow("用法: /mcp connect <serverId>"));
+                } else {
+                    connectMcpServer(parts[2].trim());
+                }
+                break;
+            case "disconnect":
+                if (parts.length < 3) {
+                    ui.println(ConsoleStyle.yellow("用法: /mcp disconnect <serverId>"));
+                } else {
+                    disconnectMcpServer(parts[2].trim());
+                }
+                break;
+            case "reconnect":
+                if (parts.length < 3) {
+                    ui.println(ConsoleStyle.yellow("用法: /mcp reconnect <serverId>"));
+                } else {
+                    reconnectMcpServer(parts[2].trim());
+                }
+                break;
+            case "help":
+            default:
+                printMcpHelp();
+                break;
+        }
+        ui.println();
+        return CommandResult.continueExecution();
+    }
+
+    private void printMcpHelp() {
+        ui.println(ConsoleStyle.cyan("╔═══════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                  📡 MCP 服务命令                       ║"));
+        ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════╣"));
+        ui.println(ConsoleStyle.cyan("║  /mcp list          - 列出所有MCP服务器状态            ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp connect <id>  - 连接指定的MCP服务器              ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp disconnect <id> - 断开指定的MCP服务器            ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp reconnect <id> - 重新连接指定的MCP服务器         ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp help          - 显示此帮助信息                   ║"));
+        ui.println(ConsoleStyle.cyan("╚═══════════════════════════════════════════════════════╝"));
+    }
+
+    private void printMcpServerList() {
+        List<McpClient> clients = mcpServiceManager.getActiveClients();
+        List<McpConfig.McpServerConfig> configuredServers = config.getMcp().getServers();
+
+        ui.println(ConsoleStyle.cyan("╔═══════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                     📡 MCP 服务器列表                           ║"));
+        ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════════════╣"));
+
+        if (configuredServers == null || configuredServers.isEmpty()) {
+            ui.println(ConsoleStyle.yellow("║  没有配置MCP服务器，请在config.yaml中配置                      ║"));
+        } else {
+            for (McpConfig.McpServerConfig server : configuredServers) {
+                McpClient client = mcpServiceManager.getClient(server.getId());
+                String status = client != null && client.isConnected()
+                        ? ConsoleStyle.green("✓ 已连接")
+                        : ConsoleStyle.gray("○ 未连接");
+                String type = server.getType().toUpperCase();
+                ui.println(String.format("║  %-12s %-8s %-18s %s    ║",
+                        server.getId(),
+                        type,
+                        status,
+                        server.getName()));
+            }
+        }
+
+        ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════════════╣"));
+        ui.println(String.format("║  总计: %d 个已配置, %d 个已连接                               ║",
+                configuredServers != null ? configuredServers.size() : 0,
+                clients.size()));
+        ui.println(ConsoleStyle.cyan("╚═══════════════════════════════════════════════════════════════╝"));
+    }
+
+    private void connectMcpServer(String serverId) {
+        McpConfig.McpServerConfig serverConfig = config.getMcp().getServers().stream()
+                .filter(s -> serverId.equals(s.getId()))
+                .findFirst()
+                .orElse(null);
+
+        if (serverConfig == null) {
+            ui.println(ConsoleStyle.red("找不到MCP服务器: " + serverId));
+            return;
+        }
+
+        if (mcpServiceManager.getClient(serverId) != null) {
+            ui.println(ConsoleStyle.yellow("MCP服务器已连接: " + serverId));
+            return;
+        }
+
+        ui.println(ConsoleStyle.cyan("正在连接MCP服务器: " + serverId + "..."));
+        mcpServiceManager.connectServer(serverConfig);
+        ui.println(ConsoleStyle.green("连接命令已发送，请稍候..."));
+    }
+
+    private void disconnectMcpServer(String serverId) {
+        McpClient client = mcpServiceManager.getClient(serverId);
+        if (client == null) {
+            ui.println(ConsoleStyle.yellow("MCP服务器未连接: " + serverId));
+            return;
+        }
+
+        ui.println(ConsoleStyle.cyan("正在断开MCP服务器: " + serverId + "..."));
+        mcpServiceManager.disconnectServer(serverId);
+        ui.println(ConsoleStyle.green("已断开MCP服务器: " + serverId));
+    }
+
+    private void reconnectMcpServer(String serverId) {
+        ui.println(ConsoleStyle.cyan("正在重新连接MCP服务器: " + serverId + "..."));
+        disconnectMcpServer(serverId);
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        McpConfig.McpServerConfig serverConfig = config.getMcp().getServers().stream()
+                .filter(s -> serverId.equals(s.getId()))
+                .findFirst()
+                .orElse(null);
+        if (serverConfig != null) {
+            mcpServiceManager.connectServer(serverConfig);
+            ui.println(ConsoleStyle.green("重新连接命令已发送"));
         }
     }
 

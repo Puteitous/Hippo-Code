@@ -94,6 +94,7 @@ public class AgentContext {
     private FileContentService fileContentService;
     private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
+    private McpServiceManager mcpServiceManager;
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
@@ -136,8 +137,8 @@ public class AgentContext {
         this.toolRegistry = createToolRegistry();
         
         // 初始化 MCP 服务管理器（自动注册 MCP 工具）
-        McpServiceManager mcpManager = new McpServiceManager(config, toolRegistry);
-        mcpManager.initialize();
+        this.mcpServiceManager = new McpServiceManager(config, toolRegistry);
+        this.mcpServiceManager.initialize();
         
         // 注入 FileContentService 到 ReadFileTool
         ToolExecutor readFileTool = toolRegistry.getExecutor("read_file");
@@ -262,6 +263,10 @@ public class AgentContext {
 
     public ThinkingEngine getThinkingEngine() {
         return thinkingEngine;
+    }
+
+    public McpServiceManager getMcpServiceManager() {
+        return mcpServiceManager;
     }
 
     public void close() {
