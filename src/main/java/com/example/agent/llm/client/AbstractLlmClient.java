@@ -66,6 +66,20 @@ public abstract class AbstractLlmClient implements LlmClient {
                 .build();
     }
 
+    protected String getModel() {
+        String model = config.getModel();
+        return (model != null && !model.isEmpty()) ? model : getDefaultModel();
+    }
+
+    protected String getBaseUrl() {
+        String baseUrl = config.getBaseUrl();
+        return (baseUrl != null && !baseUrl.isEmpty()) ? baseUrl : getDefaultBaseUrl();
+    }
+
+    protected abstract String getDefaultModel();
+
+    protected abstract String getDefaultBaseUrl();
+
     protected abstract String getChatCompletionsPath();
     
     protected abstract String getAuthorizationHeader();
@@ -93,7 +107,7 @@ public abstract class AbstractLlmClient implements LlmClient {
         
         List<Message> processedMessages = applyCacheStrategy(messages);
         
-        ChatRequest request = ChatRequest.of(config.getModel(), processedMessages)
+        ChatRequest request = ChatRequest.of(getModel(), processedMessages)
                 .maxTokens(config.getMaxTokens());
         
         if (tools != null && !tools.isEmpty()) {
@@ -121,7 +135,7 @@ public abstract class AbstractLlmClient implements LlmClient {
         
         List<Message> processedMessages = applyCacheStrategy(messages);
         
-        ChatRequest request = ChatRequest.of(config.getModel(), processedMessages)
+        ChatRequest request = ChatRequest.of(getModel(), processedMessages)
                 .stream(true)
                 .maxTokens(config.getMaxTokens());
         
@@ -135,7 +149,7 @@ public abstract class AbstractLlmClient implements LlmClient {
     protected ChatResponse executeStreamRequest(ChatRequest request, Consumer<StreamChunk> onChunk) throws LlmException {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
-            String url = config.getBaseUrl() + getChatCompletionsPath();
+            String url = buildUrl(getBaseUrl(), getChatCompletionsPath());
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -175,6 +189,22 @@ public abstract class AbstractLlmClient implements LlmClient {
         }
     }
 
+    protected String buildUrl(String baseUrl, String path) {
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            return path;
+        }
+        if (path == null || path.isEmpty()) {
+            return baseUrl;
+        }
+        if (baseUrl.endsWith("/") && path.startsWith("/")) {
+            return baseUrl + path.substring(1);
+        }
+        if (!baseUrl.endsWith("/") && !path.startsWith("/")) {
+            return baseUrl + "/" + path;
+        }
+        return baseUrl + path;
+    }
+
     protected ChatResponse processStreamResponse(
             HttpResponse<InputStream> response, 
             Consumer<StreamChunk> onChunk) throws LlmException {
@@ -208,6 +238,8 @@ public abstract class AbstractLlmClient implements LlmClient {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (Thread.currentThread().isInterrupted()) {
+                    Thread.currentThread().interrupt();
+                    logger.debug("流式响应读取被中断");
                     break;
                 }
                 
@@ -290,9 +322,14 @@ public abstract class AbstractLlmClient implements LlmClient {
             Integer deltaIndex = delta.getIndex();
             int index = (deltaIndex != null && deltaIndex >= 0) ? deltaIndex : toolCalls.size();
             
-            if (index > MAX_TOOL_CALL_INDEX) {
+            if (index >= MAX_TOOL_CALL_INDEX) {
                 logger.warn("ToolCall index过大: {}, 跳过该delta", index);
                 continue;
+            }
+            
+            if (toolCalls.size() > MAX_TOOL_CALL_INDEX) {
+                logger.warn("ToolCall数量已达上限: {}, 停止添加新ToolCall", toolCalls.size());
+                return;
             }
             
             while (toolCalls.size() <= index) {
@@ -326,7 +363,8 @@ public abstract class AbstractLlmClient implements LlmClient {
                     String currentArgs = func.getArguments() != null ? func.getArguments() : "";
                     String newArgs = currentArgs + funcDelta.getArguments();
                     if (newArgs.length() > MAX_ARGUMENTS_LENGTH) {
-                        logger.warn("ToolCall arguments过长: {} 字符", newArgs.length());
+                        logger.warn("ToolCall arguments过长，已截断: {} -> {} 字符", newArgs.length(), MAX_ARGUMENTS_LENGTH);
+                        newArgs = newArgs.substring(0, MAX_ARGUMENTS_LENGTH);
                     }
                     func.setArguments(newArgs);
                 }
@@ -339,7 +377,7 @@ public abstract class AbstractLlmClient implements LlmClient {
         response.setId("stream-" + System.currentTimeMillis());
         response.setObject("chat.completion");
         response.setCreated(System.currentTimeMillis() / 1000);
-        response.setModel(config.getModel());
+        response.setModel(getModel());
         
         Message message = new Message();
         message.setRole("assistant");
@@ -414,7 +452,7 @@ public abstract class AbstractLlmClient implements LlmClient {
     protected ChatResponse doExecuteRequest(ChatRequest request) throws LlmException {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
-            String url = config.getBaseUrl() + getChatCompletionsPath();
+            String url = buildUrl(config.getBaseUrl(), getChatCompletionsPath());
             
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))

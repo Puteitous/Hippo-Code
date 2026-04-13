@@ -72,11 +72,21 @@ public class DashScopeLlmClient extends AbstractLlmClient {
                 && !msg.getContent().isEmpty();
     }
 
-    public static String getDefaultBaseUrl() {
+    @Override
+    public String getDefaultBaseUrl() {
         return DEFAULT_BASE_URL;
     }
 
-    public static String getDefaultModel() {
+    @Override
+    public String getDefaultModel() {
+        return DEFAULT_MODEL;
+    }
+
+    public static String getDefaultBaseUrlStatic() {
+        return DEFAULT_BASE_URL;
+    }
+
+    public static String getDefaultModelStatic() {
         return DEFAULT_MODEL;
     }
 }

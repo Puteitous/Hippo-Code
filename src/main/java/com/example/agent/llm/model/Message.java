@@ -29,8 +29,8 @@ public class Message {
     }
 
     public Message(String role, String content) {
-        // 放宽验证：允许null和空字符串，但确保role不为null
-        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "unknown";
+        // 使用LLM标准role作为默认值，避免发送API不识别的"unknown"
+        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "user";
         this.content = content != null ? content : "";
     }
 
@@ -72,8 +72,8 @@ public class Message {
     }
 
     public void setRole(String role) {
-        // 放宽验证：允许null和空字符串，但设置默认值
-        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "unknown";
+        // 使用LLM标准role作为默认值，避免发送API不识别的"unknown"
+        this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "user";
     }
 
     public String getContent() {

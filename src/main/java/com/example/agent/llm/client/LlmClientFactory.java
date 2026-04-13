@@ -39,13 +39,14 @@ public class LlmClientFactory {
             throw new IllegalArgumentException("RetryPolicy不能为null");
         }
 
-        applyProviderDefaults(config);
-        
         String providerName = config.getLlm().getProvider() != null ? config.getLlm().getProvider() : "dashscope";
         Provider provider = parseProvider(providerName);
+        
+        String baseUrl = getBaseUrlWithDefault(config, providerName);
+        String model = getModelWithDefault(config, providerName);
 
         logger.info("创建 LLM 客户端: provider={}, model={}, baseUrl={}", 
-            providerName, config.getModel(), config.getBaseUrl());
+            providerName, model, baseUrl);
 
         switch (provider) {
             case DASHSCOPE:
@@ -64,15 +65,20 @@ public class LlmClientFactory {
         }
     }
 
-    private static void applyProviderDefaults(Config config) {
-        String providerName = config.getLlm().getProvider() != null ? config.getLlm().getProvider() : "dashscope";
-        
-        if (config.getLlm().getBaseUrl() == null || config.getLlm().getBaseUrl().isEmpty()) {
-            config.getLlm().setBaseUrl(getDefaultBaseUrl(providerName));
+    private static String getBaseUrlWithDefault(Config config, String providerName) {
+        String baseUrl = config.getLlm().getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            return getDefaultBaseUrl(providerName);
         }
-        if (config.getLlm().getModel() == null || config.getLlm().getModel().isEmpty()) {
-            config.getLlm().setModel(getDefaultModel(providerName));
+        return baseUrl;
+    }
+
+    private static String getModelWithDefault(Config config, String providerName) {
+        String model = config.getLlm().getModel();
+        if (model == null || model.isEmpty()) {
+            return getDefaultModel(providerName);
         }
+        return model;
     }
 
     private static Provider parseProvider(String providerName) {
@@ -117,13 +123,13 @@ public class LlmClientFactory {
         Provider provider = parseProvider(providerName);
         switch (provider) {
             case DASHSCOPE:
-                return DashScopeLlmClient.getDefaultBaseUrl();
+                return DashScopeLlmClient.getDefaultBaseUrlStatic();
             case OPENAI:
-                return OpenAiLlmClient.getDefaultBaseUrl();
+                return OpenAiLlmClient.getDefaultBaseUrlStatic();
             case OLLAMA:
-                return OllamaLlmClient.getDefaultBaseUrl();
+                return OllamaLlmClient.getDefaultBaseUrlStatic();
             default:
-                return OpenAiLlmClient.getDefaultBaseUrl();
+                return OpenAiLlmClient.getDefaultBaseUrlStatic();
         }
     }
 
@@ -131,13 +137,13 @@ public class LlmClientFactory {
         Provider provider = parseProvider(providerName);
         switch (provider) {
             case DASHSCOPE:
-                return DashScopeLlmClient.getDefaultModel();
+                return DashScopeLlmClient.getDefaultModelStatic();
             case OPENAI:
-                return OpenAiLlmClient.getDefaultModel();
+                return OpenAiLlmClient.getDefaultModelStatic();
             case OLLAMA:
-                return OllamaLlmClient.getDefaultModel();
+                return OllamaLlmClient.getDefaultModelStatic();
             default:
-                return OpenAiLlmClient.getDefaultModel();
+                return OpenAiLlmClient.getDefaultModelStatic();
         }
     }
 }
