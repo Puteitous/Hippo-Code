@@ -382,6 +382,16 @@ public class CommandDispatcher {
                     readMcpResource(parts[2].trim());
                 }
                 break;
+            case "prompts":
+                printMcpPrompts();
+                break;
+            case "prompt":
+                if (parts.length < 3) {
+                    ui.println(ConsoleStyle.yellow("用法: /mcp prompt <提示词名称> [参数名=值...]"));
+                } else {
+                    renderMcpPrompt(parts[2].trim());
+                }
+                break;
             case "connect":
                 if (parts.length < 3) {
                     ui.println(ConsoleStyle.yellow("用法: /mcp connect <serverId>"));
@@ -420,6 +430,8 @@ public class CommandDispatcher {
         ui.println(ConsoleStyle.cyan("║  /mcp tools         - 列出所有已注册的MCP工具           ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp resources     - 列出所有可用的MCP资源            ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp read <uri>    - 读取指定资源内容                 ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp prompts       - 列出所有可用的MCP提示词           ║"));
+        ui.println(ConsoleStyle.cyan("║  /mcp prompt <name> - 渲染指定提示词(支持参数)          ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp connect <id>  - 连接指定的MCP服务器              ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp disconnect <id> - 断开指定的MCP服务器            ║"));
         ui.println(ConsoleStyle.cyan("║  /mcp reconnect <id> - 重新连接指定的MCP服务器         ║"));
@@ -506,6 +518,75 @@ public class CommandDispatcher {
             ui.println(ConsoleStyle.gray("────────────────────────────────────────────────────────"));
         } catch (Exception e) {
             ui.println(ConsoleStyle.red("读取资源失败: " + e.getMessage()));
+        }
+    }
+
+    private void printMcpPrompts() {
+        var promptRegistry = mcpServiceManager.getPromptRegistry();
+        var allPrompts = promptRegistry.getAllPrompts();
+
+        ui.println(ConsoleStyle.cyan("╔═══════════════════════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.cyan("║                           💡 MCP 提示词列表                                ║"));
+        ui.println(ConsoleStyle.cyan("╠═══════════════════════════════════════════════════════════════════════════╣"));
+
+        if (allPrompts.isEmpty()) {
+            ui.println(ConsoleStyle.yellow("║  暂无可用提示词，请先连接支持Prompts的MCP服务器                          ║"));
+        } else {
+            for (var entry : allPrompts) {
+                String serverId = entry.client().getServerId();
+                String fullName = entry.getFullName();
+                String desc = entry.prompt().getDescription();
+                if (desc == null) desc = "";
+                if (desc.length() > 40) desc = desc.substring(0, 40) + "...";
+
+                ui.println(String.format("║  [%s] %s",
+                        ConsoleStyle.cyan(serverId),
+                        fullName));
+                if (!desc.isEmpty()) {
+                    ui.println(String.format("║        %s", desc));
+                }
+                if (!entry.prompt().getArguments().isEmpty()) {
+                    ui.print("║        参数: ");
+                    entry.prompt().getArguments().forEach(arg -> {
+                        ui.print(ConsoleStyle.yellow(arg.getName()));
+                        if (arg.isRequired()) ui.print("*");
+                        ui.print(" ");
+                    });
+                    ui.println();
+                }
+                ui.println(ConsoleStyle.cyan("║                                                                       ║"));
+            }
+            ui.println(String.format("║  总计: %d 个提示词                                                    ║", allPrompts.size()));
+        }
+        ui.println(ConsoleStyle.cyan("╚═══════════════════════════════════════════════════════════════════════════╝"));
+    }
+
+    private void renderMcpPrompt(String argStr) {
+        var promptRegistry = mcpServiceManager.getPromptRegistry();
+
+        String[] parts = argStr.split("\\s+");
+        String promptName = parts[0];
+        java.util.Map<String, String> args = new java.util.HashMap<>();
+
+        for (int i = 1; i < parts.length; i++) {
+            String[] keyValue = parts[i].split("=", 2);
+            if (keyValue.length == 2) {
+                args.put(keyValue[0], keyValue[1]);
+            }
+        }
+
+        try {
+            ui.println(ConsoleStyle.cyan("渲染提示词: ") + promptName);
+            if (!args.isEmpty()) {
+                ui.println(ConsoleStyle.cyan("参数: ") + args);
+            }
+            ui.println();
+            String content = promptRegistry.renderPromptAsText(promptName, args);
+            ui.println(ConsoleStyle.gray("────────────────────────────────────────────────────────"));
+            ui.println(content);
+            ui.println(ConsoleStyle.gray("────────────────────────────────────────────────────────"));
+        } catch (Exception e) {
+            ui.println(ConsoleStyle.red("渲染提示词失败: " + e.getMessage()));
         }
     }
 

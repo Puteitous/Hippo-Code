@@ -36,7 +36,7 @@ const testResources = {
         name: "README.md",
         description: "项目说明文档",
         mimeType: "text/markdown",
-        content: "# MCP Echo Test Server\n\n这是一个用于测试 MCP 协议的 Echo 服务器。\n\n## 功能\n\n- echo: 回显消息\n- add: 计算两个数字的和\n- resources: 提供示例文件内容\n"
+        content: "# MCP Echo Test Server\n\n这是一个用于测试 MCP 协议的 Echo 服务器。\n\n## 功能\n\n- echo: 回显消息\n- add: 计算两个数字的和\n- resources: 提供示例文件内容\n- prompts: 提供示例提示词模板\n"
     },
     "file:///config.example.yaml": {
         name: "配置示例",
@@ -49,6 +49,122 @@ const testResources = {
         description: "当前服务器运行状态",
         mimeType: "text/plain",
         content: `服务器状态: 运行中\n启动时间: ${new Date().toISOString()}\n版本: 1.0.0\n协议: 2024-11-05\n`
+    }
+};
+
+const testPrompts = {
+    "code-review": {
+        name: "code-review",
+        description: "代码审查专家提示词",
+        arguments: [
+            {
+                name: "language",
+                description: "编程语言",
+                required: true
+            },
+            {
+                name: "code",
+                description: "待审查的代码",
+                required: true
+            }
+        ],
+        render: (args) => ({
+            description: "专业代码审查提示词",
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text: `请作为一名资深的 ${args.language || 'software'} 开发专家，对以下代码进行全面审查：
+
+\`\`\`${args.language || 'java'}
+${args.code || '// 请提供代码'}
+\`\`\`
+
+请重点关注：
+1. 代码逻辑正确性
+2. 潜在的 bug 和边界情况
+3. 性能优化建议
+4. 代码风格和可读性
+5. 安全隐患（如有）
+
+请给出具体的改进建议和示例。`
+                    }
+                }
+            ]
+        })
+    },
+    "summarize": {
+        name: "summarize",
+        description: "文本摘要生成器",
+        arguments: [
+            {
+                name: "text",
+                description: "待摘要的文本",
+                required: true
+            },
+            {
+                name: "style",
+                description: "摘要风格 (bullet/paragraph/technical)",
+                required: false
+            }
+        ],
+        render: (args) => ({
+            description: "智能文本摘要提示词",
+            messages: [
+                {
+                    role: "system",
+                    content: {
+                        type: "text",
+                        text: "你是一名专业的内容摘要专家，擅长从长文本中提取核心信息。"
+                    }
+                },
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text: `请对以下文本进行${args.style === 'bullet' ? '要点式' : args.style === 'technical' ? '技术性' : '简洁的'}摘要：
+
+${args.text}
+
+要求：
+- 准确提取关键信息
+- 保持原意
+- ${args.style === 'bullet' ? '- 使用项目符号列出要点' : '- 语言流畅简洁'}
+- 不超过原文 30% 的长度`
+                    }
+                }
+            ]
+        })
+    },
+    "explain-term": {
+        name: "explain-term",
+        description: "技术术语解释器",
+        arguments: [
+            {
+                name: "term",
+                description: "要解释的技术术语",
+                required: true
+            }
+        ],
+        render: (args) => ({
+            description: "技术术语解释提示词",
+            messages: [
+                {
+                    role: "user",
+                    content: {
+                        type: "text",
+                        text: `请用通俗易懂的方式解释以下技术术语：「${args.term || 'MCP'}」
+
+解释结构：
+1. 简单定义（一句话）
+2. 核心概念
+3. 主要用途/应用场景
+4. 简单类比（帮助理解）`
+                    }
+                }
+            ]
+        })
     }
 };
 
@@ -68,10 +184,11 @@ rl.on('line', (line) => {
                 },
                 capabilities: {
                     tools: {},
-                    resources: {}
+                    resources: {},
+                    prompts: {}
                 }
             });
-            console.error("✅ 初始化完成 (支持: tools, resources)");
+            console.error("✅ 初始化完成 (支持: tools, resources, prompts)");
         }
         else if (msg.method === 'initialized') {
             console.error("✅ 客户端已确认初始化");
@@ -152,6 +269,27 @@ rl.on('line', (line) => {
                 sendError(msg.id, -32602, `资源不存在: ${uri}`);
             }
         }
+        else if (msg.method === 'prompts/list') {
+            const prompts = Object.values(testPrompts).map(p => ({
+                name: p.name,
+                description: p.description,
+                arguments: p.arguments
+            }));
+            sendResponse(msg.id, { prompts });
+            console.error(`✅ 返回提示词列表: ${prompts.length} 个提示词`);
+        }
+        else if (msg.method === 'prompts/get') {
+            const promptName = msg.params.name;
+            const promptArgs = msg.params.arguments || {};
+            const prompt = testPrompts[promptName];
+            
+            if (prompt) {
+                sendResponse(msg.id, prompt.render(promptArgs));
+                console.error(`✅ 渲染提示词: ${promptName}, 参数:`, promptArgs);
+            } else {
+                sendError(msg.id, -32602, `提示词不存在: ${promptName}`);
+            }
+        }
         else if (msg.method === 'tools/call') {
             const toolName = msg.params.name;
             const args = msg.params.arguments || {};
@@ -189,6 +327,7 @@ rl.on('line', (line) => {
                                 version: "1.0.0",
                                 tools: ["echo", "add", "get_server_info"],
                                 resources: Object.keys(testResources),
+                                prompts: Object.keys(testPrompts),
                                 timestamp: new Date().toISOString()
                             }, null, 2)
                         }

@@ -1,5 +1,7 @@
 package com.example.agent.mcp.client;
 
+import com.example.agent.mcp.model.GetPromptResult;
+import com.example.agent.mcp.model.McpPrompt;
 import com.example.agent.mcp.model.McpResource;
 import com.example.agent.mcp.model.McpTool;
 import com.example.agent.mcp.model.ReadResourceResult;
@@ -29,4 +31,8 @@ public interface McpClient {
     CompletableFuture<List<McpResource>> listResources();
 
     CompletableFuture<ReadResourceResult> readResource(String uri);
+
+    CompletableFuture<List<McpPrompt>> listPrompts();
+
+    CompletableFuture<GetPromptResult> getPrompt(String name, Map<String, String> arguments);
 }

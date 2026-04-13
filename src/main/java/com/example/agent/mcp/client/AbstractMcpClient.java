@@ -4,9 +4,12 @@ import com.example.agent.config.Config;
 import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.mcp.exception.McpException;
 import com.example.agent.mcp.exception.McpTimeoutException;
+import com.example.agent.mcp.model.GetPromptResult;
 import com.example.agent.mcp.model.InitializeResult;
+import com.example.agent.mcp.model.ListPromptsResult;
 import com.example.agent.mcp.model.ListResourcesResult;
 import com.example.agent.mcp.model.ListToolsResult;
+import com.example.agent.mcp.model.McpPrompt;
 import com.example.agent.mcp.model.McpResource;
 import com.example.agent.mcp.model.McpTool;
 import com.example.agent.mcp.model.ReadResourceResult;
@@ -223,5 +226,21 @@ public abstract class AbstractMcpClient implements McpClient {
         Map<String, Object> params = new HashMap<>();
         params.put("uri", uri);
         return sendRequest("resources/read", params, ReadResourceResult.class);
+    }
+
+    @Override
+    public CompletableFuture<List<McpPrompt>> listPrompts() {
+        return sendRequest("prompts/list", null, ListPromptsResult.class)
+                .thenApply(ListPromptsResult::getPrompts);
+    }
+
+    @Override
+    public CompletableFuture<GetPromptResult> getPrompt(String name, Map<String, String> arguments) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("name", name);
+        if (arguments != null && !arguments.isEmpty()) {
+            params.put("arguments", arguments);
+        }
+        return sendRequest("prompts/get", params, GetPromptResult.class);
     }
 }
