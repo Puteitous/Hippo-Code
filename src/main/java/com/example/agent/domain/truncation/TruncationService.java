@@ -44,7 +44,7 @@ public class TruncationService {
         if (content == null || content.isEmpty()) {
             return content;
         }
-        int effectiveMax = Math.min(maxTokens, GLOBAL_HARD_LIMIT);
+        int effectiveMax = Math.max(1, Math.min(maxTokens, GLOBAL_HARD_LIMIT));
         int originalTokens = tokenEstimator.estimateTextTokens(content);
         if (originalTokens <= effectiveMax) {
             return content;
@@ -57,7 +57,7 @@ public class TruncationService {
         if (content == null || content.isEmpty()) {
             return content;
         }
-        int effectiveMax = Math.min(maxTokens, GLOBAL_HARD_LIMIT);
+        int effectiveMax = Math.max(1, Math.min(maxTokens, GLOBAL_HARD_LIMIT));
         int originalTokens = tokenEstimator.estimateTextTokens(content);
         if (originalTokens <= effectiveMax) {
             return content;
@@ -80,7 +80,7 @@ public class TruncationService {
         if (content == null || content.isEmpty()) {
             return content;
         }
-        int effectiveMax = Math.min(maxTokens, GLOBAL_HARD_LIMIT);
+        int effectiveMax = Math.max(1, Math.min(maxTokens, GLOBAL_HARD_LIMIT));
         int originalTokens = tokenEstimator.estimateTextTokens(content);
         if (originalTokens <= effectiveMax) {
             return content;
@@ -92,13 +92,34 @@ public class TruncationService {
     }
 
     public String forceTruncate(String content, ContentType type, int maxTokens) {
+        if (maxTokens <= 0) {
+            return content.substring(0, Math.min(content.length(), 100)) + "\n... [强制截断] ...";
+        }
+
         String result = truncate(content, type, maxTokens);
         int tokens = tokenEstimator.estimateTextTokens(result);
-        while (tokens > maxTokens && result.length() > 100) {
-            int cutIndex = result.length() * 80 / 100;
-            result = result.substring(0, cutIndex) + "\n... [强制截断] ...";
+        int iteration = 0;
+        final int maxIterations = 5;
+        final String truncateMarker = "\n... [强制截断] ...";
+
+        while (tokens > maxTokens && result.length() > 100 && iteration < maxIterations) {
+            int cutIndex = result.length() * 70 / 100;
+            int markerPos = result.lastIndexOf(truncateMarker);
+            if (markerPos > 0) {
+                result = result.substring(0, markerPos);
+            }
+            result = result.substring(0, cutIndex) + truncateMarker;
             tokens = tokenEstimator.estimateTextTokens(result);
+            iteration++;
         }
+
+        if (tokens > maxTokens) {
+            int safeLength = Math.max(50, maxTokens * 2);
+            if (result.length() > safeLength) {
+                result = result.substring(0, safeLength) + truncateMarker;
+            }
+        }
+
         return result;
     }
 

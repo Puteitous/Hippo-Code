@@ -23,7 +23,7 @@ public class CodeTruncation implements TruncationStrategy {
     @Override
     public String truncate(String content, int maxTokens) {
         int originalTokens = tokenEstimator.estimateTextTokens(content);
-        if (originalTokens <= maxTokens) {
+        if (originalTokens <= maxTokens || maxTokens <= 0) {
             return content;
         }
 
@@ -31,6 +31,10 @@ public class CodeTruncation implements TruncationStrategy {
 
         String[] lines = content.split("\n");
         int totalLines = lines.length;
+
+        if (totalLines == 0) {
+            return content;
+        }
 
         float tokenPerLine = (float) originalTokens / totalLines;
         int targetHeadLines = Math.round((maxTokens * HEAD_RATIO) / tokenPerLine);

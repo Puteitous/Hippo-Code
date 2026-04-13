@@ -34,8 +34,9 @@ public class InvertedIndexSearch implements CodeSearchStrategy {
     @Override
     public void buildIndex() {
         Path projectRoot = Paths.get(System.getProperty("user.dir"));
+        final int maxDepth = 15;
         try {
-            Files.walk(projectRoot)
+            Files.walk(projectRoot, maxDepth)
                     .filter(Files::isRegularFile)
                     .filter(SearchEngineUtils::isCodeFile)
                     .filter(SearchEngineUtils::isNotInIgnoredDir)
@@ -45,9 +46,13 @@ public class InvertedIndexSearch implements CodeSearchStrategy {
                             String content = Files.readString(path);
                             fileContents.put(relativePath, content);
                             indexFile(relativePath, content);
-                        } catch (IOException ignored) {}
+                        } catch (IOException | SecurityException | OutOfMemoryError e) {
+                            logger.debug("跳过文件 {}: {}", path, e.getMessage());
+                        } catch (Exception e) {
+                            logger.debug("处理文件 {} 时发生异常: {}", path, e.getMessage());
+                        }
                     });
-            logger.debug("构建倒排索引完成，共 {} 个词条", invertedIndex.size());
+            logger.debug("构建倒排索引完成，共 {} 个文件, {} 个词条", fileContents.size(), invertedIndex.size());
         } catch (IOException e) {
             logger.warn("扫描文件失败: {}", e.getMessage());
         }

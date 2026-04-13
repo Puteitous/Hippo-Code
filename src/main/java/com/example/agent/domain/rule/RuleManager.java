@@ -22,6 +22,9 @@ public class RuleManager {
     private int totalTokens;
 
     public RuleManager(TokenEstimator tokenEstimator, RuleConfig config) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("TokenEstimator cannot be null");
+        }
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new RuleConfig();
         this.hippoRulesContent = "";

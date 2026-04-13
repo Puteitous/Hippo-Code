@@ -132,8 +132,11 @@ public class CacheManager {
         monitorExecutor.scheduleAtFixedRate(() -> {
             try {
                 checkMemoryPressure();
-            } catch (Exception e) {
-                logger.warn("缓存监控线程异常: {}", e.getMessage());
+            } catch (OutOfMemoryError e) {
+                logger.error("缓存监控线程检测到内存溢出，执行紧急清理: {}", e.getMessage());
+                clearPartitionsUpTo(CacheCost.FILE);
+            } catch (Throwable t) {
+                logger.error("缓存监控线程异常: {}", t.getMessage(), t);
             }
         }, 30, 30, TimeUnit.SECONDS);
 

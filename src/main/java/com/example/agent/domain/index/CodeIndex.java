@@ -21,6 +21,9 @@ public class CodeIndex {
     private final TruncationService truncationService;
 
     public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config, CacheManager cacheManager) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("TokenEstimator cannot be null");
+        }
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
