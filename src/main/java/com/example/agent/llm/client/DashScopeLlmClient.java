@@ -1,7 +1,11 @@
 package com.example.agent.llm.client;
 
 import com.example.agent.config.Config;
+import com.example.agent.llm.model.Message;
 import com.example.agent.llm.retry.RetryPolicy;
+
+import java.net.http.HttpRequest;
+import java.util.List;
 
 public class DashScopeLlmClient extends AbstractLlmClient {
 

@@ -3,6 +3,8 @@ package com.example.agent.llm.client;
 import com.example.agent.config.Config;
 import com.example.agent.llm.retry.RetryPolicy;
 
+import java.net.http.HttpRequest;
+
 public class OllamaLlmClient extends AbstractLlmClient {
 
     private static final String CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
