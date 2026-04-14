@@ -67,9 +67,9 @@ public class McpServiceManager {
                 return t;
             });
             
-            if (shutdownHookRegistered.compareAndSet(false, true)) {
-                Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
-            }
+            if (!shutdownHookRegistered.getAndSet(true)) {
+            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+        }
 
             if (config.getMcp().isAutoConnect()) {
                 connectAllConfiguredServers();

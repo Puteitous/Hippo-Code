@@ -123,7 +123,7 @@ public class AgentContext {
         logger.info("RuleManager 初始化完成");
         
         // 初始化 CacheManager - 通用缓存
-        this.cacheManager = new CacheManager();
+        this.cacheManager = CacheManager.getInstance();
         
         // 初始化 FileContentService - 文件服务（带缓存）
         this.fileContentService = new FileContentService(cacheManager);

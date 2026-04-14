@@ -19,7 +19,11 @@ public class SearchEngineUtils {
     public static boolean isNotInIgnoredDir(Path path) {
         String pathStr = path.toString().toLowerCase();
         for (String dir : IGNORE_DIRS) {
-            if (pathStr.contains("/" + dir + "/") || pathStr.contains("\\" + dir + "\\")) {
+            String dirName = dir.toLowerCase();
+            if (pathStr.contains("/" + dirName + "/")
+                || pathStr.contains("\\" + dirName + "\\")
+                || pathStr.startsWith(dirName + "/")
+                || pathStr.startsWith(dirName + "\\")) {
                 return false;
             }
         }

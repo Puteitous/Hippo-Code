@@ -90,6 +90,11 @@ public class InvertedIndexSearch implements CodeSearchStrategy {
 
     @Override
     public List<SearchResult> search(String query, int maxResults) {
+        List<SearchResult> emptyResults = new ArrayList<>();
+        if (query == null || query.isEmpty() || maxResults <= 0) {
+            return emptyResults;
+        }
+
         Map<String, Double> scores = new HashMap<>();
         String[] keywords = query.toLowerCase().split("[\\s_\\-]+");
 

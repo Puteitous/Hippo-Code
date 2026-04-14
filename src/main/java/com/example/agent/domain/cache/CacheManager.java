@@ -71,14 +71,22 @@ public class CacheManager {
     private final CachePartition<String, Object> commonCache;
     private final List<CachePartition<?, ?>> allPartitions;
     private final long defaultTtlMillis;
-    private final ScheduledExecutorService monitorExecutor;
+    private ScheduledExecutorService monitorExecutor;
     private volatile double lastMemoryUsage;
 
-    public CacheManager() {
+    private static class InstanceHolder {
+        private static final CacheManager INSTANCE = new CacheManager();
+    }
+
+    public static CacheManager getInstance() {
+        return InstanceHolder.INSTANCE;
+    }
+
+    CacheManager() {
         this(30 * 60 * 1000L);
     }
 
-    public CacheManager(long defaultTtlMillis) {
+    CacheManager(long defaultTtlMillis) {
         this.defaultTtlMillis = defaultTtlMillis;
 
         this.searchCache = new CachePartition<>("search", CacheCost.SEARCH,
@@ -116,12 +124,7 @@ public class CacheManager {
         allPartitions.add(fileCache);
         allPartitions.sort(Comparator.comparingInt(p -> p.cost.getWeight()));
 
-        this.monitorExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "cache-monitor");
-            t.setDaemon(true);
-            return t;
-        });
-
+        this.monitorExecutor = null;
         this.lastMemoryUsage = 0.0;
 
         logger.debug("CacheManager 初始化完成，4分区按成本排序: {}",
@@ -129,6 +132,13 @@ public class CacheManager {
     }
 
     public void startMemoryMonitor() {
+        if (monitorExecutor == null) {
+            monitorExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "cache-monitor");
+                t.setDaemon(true);
+                return t;
+            });
+        }
         monitorExecutor.scheduleAtFixedRate(() -> {
             try {
                 checkMemoryPressure();
@@ -387,10 +397,7 @@ public class CacheManager {
         );
     }
 
-    public void stopMonitor() {
-        monitorExecutor.shutdown();
-        logger.debug("缓存监控线程已停止");
-    }
+
 
     private void logCacheHit(String partition, String key, boolean hit) {
         if (hit) {
