@@ -3,6 +3,7 @@ package com.example.agent.llm.model;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -65,7 +66,9 @@ public class ChatRequest {
     }
 
     public ChatRequest toolChoiceFunction(String functionName) {
-        this.toolChoice = java.util.Map.of("type", "function", "function", java.util.Map.of("name", functionName));
+        Map<String, Object> functionMap = new HashMap<>();
+        functionMap.put("name", functionName);
+        this.toolChoice = Map.of("type", "function", "function", functionMap);
         return this;
     }
 

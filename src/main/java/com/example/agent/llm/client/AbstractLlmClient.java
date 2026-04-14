@@ -68,12 +68,12 @@ public abstract class AbstractLlmClient implements LlmClient {
 
     protected String getModel() {
         String model = config.getModel();
-        return (model != null && !model.isEmpty()) ? model : getDefaultModel();
+        return (model != null && !model.isBlank()) ? model : getDefaultModel();
     }
 
     protected String getBaseUrl() {
         String baseUrl = config.getBaseUrl();
-        return (baseUrl != null && !baseUrl.isEmpty()) ? baseUrl : getDefaultBaseUrl();
+        return (baseUrl != null && !baseUrl.isBlank()) ? baseUrl : getDefaultBaseUrl();
     }
 
     protected abstract String getDefaultModel();
@@ -239,7 +239,7 @@ public abstract class AbstractLlmClient implements LlmClient {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (Thread.currentThread().isInterrupted()) {
-                    Thread.currentThread().interrupt();
+                    Thread.interrupted();
                     logger.debug("流式响应读取被中断");
                     break;
                 }
