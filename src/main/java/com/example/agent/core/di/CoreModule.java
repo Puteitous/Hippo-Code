@@ -9,6 +9,7 @@ import com.example.agent.domain.rule.RuleManager;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.client.LlmClientFactory;
 import com.example.agent.llm.retry.RetryPolicy;
+import com.example.agent.logging.CostMetricsCollector;
 import com.example.agent.service.FileContentService;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
@@ -36,6 +37,10 @@ public final class CoreModule {
 
         ThreadPools.initialize();
         logger.info("全局线程池管理器初始化完成 ✅");
+
+        CostMetricsCollector costMetrics = new CostMetricsCollector();
+        ServiceLocator.registerSingleton(CostMetricsCollector.class, costMetrics);
+        logger.info("LLM 成本计算器初始化完成 ✅ (事件驱动模式)");
 
         ServiceLocator.registerProvider(TokenEstimator.class, () ->
                 TokenEstimatorFactory.create(ServiceLocator.get(Config.class)));
