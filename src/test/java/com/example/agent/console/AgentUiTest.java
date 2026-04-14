@@ -5,6 +5,7 @@ import com.example.agent.config.LlmConfig;
 import com.example.agent.config.ToolsConfig;
 import com.example.agent.config.SessionConfig;
 import com.example.agent.config.UiConfig;
+import com.example.agent.mcp.config.McpConfig;
 import org.jline.terminal.Terminal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -68,6 +69,13 @@ class AgentUiTest {
         when(uiConfig.getPrompt()).thenReturn("> ");
         when(uiConfig.isSyntaxHighlight()).thenReturn(true);
         when(config.getUi()).thenReturn(uiConfig);
+        
+        // Mock McpConfig
+        McpConfig mcpConfig = mock(McpConfig.class);
+        when(mcpConfig.isEnabled()).thenReturn(false);
+        when(mcpConfig.isAutoConnect()).thenReturn(true);
+        when(mcpConfig.getServers()).thenReturn(java.util.Collections.emptyList());
+        when(config.getMcp()).thenReturn(mcpConfig);
         
         ui = new AgentUi(terminal, config);
     }

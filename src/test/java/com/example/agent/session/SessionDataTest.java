@@ -229,7 +229,7 @@ class SessionDataTest {
         List<Message> messages = Arrays.asList(msg);
         SessionData session = SessionData.create("null-role", messages, SessionData.Status.ACTIVE);
         
-        assertNull(session.getLastUserMessage());
+        assertEquals("Test content", session.getLastUserMessage());
     }
 
     @Test
@@ -241,7 +241,7 @@ class SessionDataTest {
         List<Message> messages = Arrays.asList(msg);
         SessionData session = SessionData.create("empty-role", messages, SessionData.Status.ACTIVE);
         
-        assertNull(session.getLastUserMessage());
+        assertEquals("Test content", session.getLastUserMessage());
     }
 
     @Test

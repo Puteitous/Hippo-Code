@@ -92,6 +92,18 @@ class SearchCodeToolTest {
 
         String result = tool.execute(args);
         assertNotNull(result);
+        assertTrue(result.contains("未找到相关代码文件"));
+    }
+
+    @Test
+    void testNormalSearchWithoutCodeIndex() throws Exception {
+        tool.setCodeIndex(null);
+
+        ObjectNode args = objectMapper.createObjectNode();
+        args.put("query", "AgentContext");
+
+        String result = tool.execute(args);
+        assertNotNull(result);
         assertTrue(result.contains("检索功能暂不可用"));
     }
 

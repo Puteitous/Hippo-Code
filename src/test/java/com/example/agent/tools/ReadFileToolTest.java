@@ -177,7 +177,7 @@ class ReadFileToolTest {
             filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.size(mockPath)).thenReturn((long) fileContent.length());
-            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
+            filesMock.when(() -> Files.readString(mockPath)).thenReturn(fileContent);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -204,7 +204,7 @@ class ReadFileToolTest {
             filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.size(mockPath)).thenReturn((long) fileContent.getBytes(StandardCharsets.UTF_8).length);
-            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
+            filesMock.when(() -> Files.readString(mockPath)).thenReturn(fileContent);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "unicode.txt");
@@ -228,7 +228,7 @@ class ReadFileToolTest {
             filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.size(mockPath)).thenReturn(0L);
-            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn("");
+            filesMock.when(() -> Files.readString(mockPath)).thenReturn("");
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "empty.txt");
@@ -278,7 +278,7 @@ class ReadFileToolTest {
             filesMock.when(() -> Files.isRegularFile(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.isReadable(mockPath)).thenReturn(true);
             filesMock.when(() -> Files.size(mockPath)).thenReturn(100L);
-            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8))
+            filesMock.when(() -> Files.readString(mockPath))
                 .thenThrow(new IOException("Read error"));
             
             ObjectNode args = objectMapper.createObjectNode();
