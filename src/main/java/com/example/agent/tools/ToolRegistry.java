@@ -1,5 +1,7 @@
 package com.example.agent.tools;
 
+import com.example.agent.core.event.EventBus;
+import com.example.agent.core.event.ToolExecutedEvent;
 import com.example.agent.llm.model.Tool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -67,12 +69,34 @@ public class ToolRegistry {
             argumentsJson = "{}";
         }
 
+        long startMs = System.currentTimeMillis();
         try {
             JsonNode arguments = objectMapper.readTree(argumentsJson);
-            return executor.execute(arguments);
+            String result = executor.execute(arguments);
+            
+            EventBus.publish(new ToolExecutedEvent(
+                    toolName,
+                    true,
+                    System.currentTimeMillis() - startMs,
+                    null
+            ));
+            
+            return result;
         } catch (ToolExecutionException e) {
+            EventBus.publish(new ToolExecutedEvent(
+                    toolName,
+                    false,
+                    System.currentTimeMillis() - startMs,
+                    e.getMessage()
+            ));
             throw e;
         } catch (Exception e) {
+            EventBus.publish(new ToolExecutedEvent(
+                    toolName,
+                    false,
+                    System.currentTimeMillis() - startMs,
+                    e.getMessage()
+            ));
             throw new ToolExecutionException("解析参数失败: " + e.getMessage(), e);
         }
     }

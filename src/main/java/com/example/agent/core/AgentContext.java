@@ -2,20 +2,20 @@ package com.example.agent.core;
 
 import com.example.agent.config.Config;
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.core.di.CoreModule;
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.rule.RuleManager;
 import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.index.CodeIndex;
-import com.example.agent.service.FileContentService;
 import com.example.agent.llm.client.LlmClient;
-import com.example.agent.llm.client.LlmClientFactory;
+import com.example.agent.logging.EventMetricsCollector;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
-import com.example.agent.plan.LlmTaskPlanner;
 import com.example.agent.service.ConversationManager;
+import com.example.agent.service.FileContentService;
 import com.example.agent.service.TokenEstimator;
-import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.mcp.McpServiceManager;
-import com.example.agent.tools.*;
+import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -89,9 +89,9 @@ public class AgentContext {
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
     private TokenMetricsCollector tokenMetricsCollector;
+    private EventMetricsCollector eventMetricsCollector;
     private RuleManager ruleManager;
     private CacheManager cacheManager;
-    private FileContentService fileContentService;
     private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
     private McpServiceManager mcpServiceManager;
@@ -110,92 +110,53 @@ public class AgentContext {
 
     public void initialize() {
         LogDirectoryManager.ensureDirectoriesExist();
-        this.tokenMetricsCollector = new TokenMetricsCollector(LocalDate.now());
+        LocalDate today = LocalDate.now();
+        this.tokenMetricsCollector = new TokenMetricsCollector(today);
+        this.eventMetricsCollector = new EventMetricsCollector(today);
         logger.info("日志系统已初始化");
-        
-        this.llmClient = LlmClientFactory.create(config);
-        this.tokenEstimator = TokenEstimatorFactory.create(config);
-        
-        // 初始化 RuleManager - 加载规则文件
-        this.ruleManager = new RuleManager(tokenEstimator, config.getRule());
+
+        // ✅ 一行代码初始化所有依赖
+        CoreModule.configure();
+        logger.info("DI 容器初始化完成 ✅");
+
+        // ✅ 从 DI 容器获取所有依赖，再也不需要手动 new 了！
+        this.llmClient = ServiceLocator.get(LlmClient.class);
+        this.tokenEstimator = ServiceLocator.get(TokenEstimator.class);
+        this.cacheManager = ServiceLocator.get(CacheManager.class);
+        this.ruleManager = ServiceLocator.get(RuleManager.class);
+        this.codeIndex = ServiceLocator.get(CodeIndex.class);
+        this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
+        this.concurrentToolExecutor = ServiceLocator.get(ConcurrentToolExecutor.class);
+
+        // 初始化各种管理器
         this.ruleManager.loadHippoRules();
         this.ruleManager.loadMemoryMd();
         logger.info("RuleManager 初始化完成");
-        
-        // 初始化 CacheManager - 通用缓存
-        this.cacheManager = CacheManager.getInstance();
-        
-        // 初始化 FileContentService - 文件服务（带缓存）
-        this.fileContentService = new FileContentService(cacheManager);
-        
-        // 初始化 CodeIndex - 代码检索引擎（复用缓存管理器）
-        this.codeIndex = new CodeIndex(tokenEstimator, config.getIndex(), this.cacheManager);
+
         this.codeIndex.buildIndex();
         logger.info("代码索引构建完成");
-        
-        // 创建工具注册表并注入依赖
-        this.toolRegistry = createToolRegistry();
-        
-        // 初始化 MCP 服务管理器（自动注册 MCP 工具）
+
+        // 初始化 MCP 服务管理器
         this.mcpServiceManager = new McpServiceManager(config, toolRegistry);
         this.mcpServiceManager.initialize();
-        
-        // 注入 FileContentService 到 ReadFileTool
-        ToolExecutor readFileTool = toolRegistry.getExecutor("read_file");
-        if (readFileTool instanceof ReadFileTool) {
-            ((ReadFileTool) readFileTool).setFileContentService(this.fileContentService);
-        }
 
-        // 注入 CacheManager 到 WriteFileTool
-        ToolExecutor writeFileTool = toolRegistry.getExecutor("write_file");
-        if (writeFileTool instanceof WriteFileTool) {
-            ((WriteFileTool) writeFileTool).setCacheManager(this.cacheManager);
-        }
-
-        // 注入 CacheManager 到 EditFileTool
-        ToolExecutor editFileTool = toolRegistry.getExecutor("edit_file");
-        if (editFileTool instanceof EditFileTool) {
-            ((EditFileTool) editFileTool).setCacheManager(this.cacheManager);
-        }
-        
-        // 注入 CodeIndex 到 SearchCodeTool
-        ToolExecutor searchCodeTool = toolRegistry.getExecutor("search_code");
-        if (searchCodeTool instanceof SearchCodeTool) {
-            ((SearchCodeTool) searchCodeTool).setCodeIndex(this.codeIndex);
-        }
-
-        // 启动缓存内存监控线程
+        // 启动缓存监控
         this.cacheManager.startMemoryMonitor();
         logger.info("缓存监控线程已启动");
-        
-        this.concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry);
 
-        // Phase 1: 初始化 ThinkingEngine - 统一思考引擎
+        // 初始化 ThinkingEngine
         this.thinkingEngine = new ThinkingEngine(
                 this.llmClient,
                 this.toolRegistry,
                 this.concurrentToolExecutor
         );
+        this.thinkingEngine.setCodeIndex(this.codeIndex);
 
         logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
-        
+
         // 增强系统提示词
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(SYSTEM_PROMPT);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
-    }
-
-    private ToolRegistry createToolRegistry() {
-        ToolRegistry registry = new ToolRegistry();
-        registry.register(new ReadFileTool());
-        registry.register(new WriteFileTool());
-        registry.register(new ListDirectoryTool());
-        registry.register(new GlobTool());
-        registry.register(new GrepTool());
-        registry.register(new SearchCodeTool());
-        registry.register(new EditFileTool());
-        registry.register(new AskUserTool());
-        registry.register(new BashTool());
-        return registry;
     }
 
     public void resetConversation() {
@@ -245,6 +206,10 @@ public class AgentContext {
         return tokenMetricsCollector;
     }
 
+    public EventMetricsCollector getEventMetricsCollector() {
+        return eventMetricsCollector;
+    }
+
     public RuleManager getRuleManager() {
         return ruleManager;
     }
@@ -254,7 +219,7 @@ public class AgentContext {
     }
 
     public FileContentService getFileContentService() {
-        return fileContentService;
+        return ServiceLocator.get(FileContentService.class);
     }
 
     public CodeIndex getCodeIndex() {

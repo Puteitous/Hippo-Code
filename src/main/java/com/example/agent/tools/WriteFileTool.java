@@ -18,9 +18,13 @@ public class WriteFileTool implements ToolExecutor {
     private static final Logger logger = LoggerFactory.getLogger(WriteFileTool.class);
     private static final long MAX_CONTENT_SIZE = 10 * 1024 * 1024;
 
-    private CacheManager cacheManager;
+    private final CacheManager cacheManager;
 
-    public void setCacheManager(CacheManager cacheManager) {
+    public WriteFileTool() {
+        this(null);
+    }
+
+    public WriteFileTool(CacheManager cacheManager) {
         this.cacheManager = cacheManager;
     }
 

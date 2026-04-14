@@ -18,9 +18,13 @@ public class EditFileTool implements ToolExecutor {
     private static final Logger logger = LoggerFactory.getLogger(EditFileTool.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-    private CacheManager cacheManager;
+    private final CacheManager cacheManager;
 
-    public void setCacheManager(CacheManager cacheManager) {
+    public EditFileTool() {
+        this(null);
+    }
+
+    public EditFileTool(CacheManager cacheManager) {
         this.cacheManager = cacheManager;
     }
 
