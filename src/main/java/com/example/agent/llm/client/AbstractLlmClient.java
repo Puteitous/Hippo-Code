@@ -1,6 +1,8 @@
 package com.example.agent.llm.client;
 
 import com.example.agent.config.Config;
+import com.example.agent.core.event.EventBus;
+import com.example.agent.core.event.LlmRequestEvent;
 import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
@@ -79,6 +81,8 @@ public abstract class AbstractLlmClient implements LlmClient {
     protected abstract String getDefaultModel();
 
     protected abstract String getDefaultBaseUrl();
+
+    public abstract String getProviderName();
 
     protected abstract String getChatCompletionsPath();
     
@@ -422,14 +426,34 @@ public abstract class AbstractLlmClient implements LlmClient {
         
         LlmException lastException = null;
         int attempt = 0;
+        long startMs = System.currentTimeMillis();
         
         while (attempt <= retryPolicy.getMaxRetries()) {
             try {
-                return doExecuteRequest(request);
+                ChatResponse response = doExecuteRequest(request);
+                
+                EventBus.publish(new LlmRequestEvent(
+                        getProviderName(),
+                        getModel(),
+                        response.getUsage() != null ? response.getUsage().getPromptTokens() : 0,
+                        response.getUsage() != null ? response.getUsage().getCompletionTokens() : 0,
+                        System.currentTimeMillis() - startMs,
+                        true
+                ));
+                
+                return response;
             } catch (LlmException e) {
                 lastException = e;
                 
                 if (!retryPolicy.shouldRetry(e, attempt)) {
+                    EventBus.publish(new LlmRequestEvent(
+                            getProviderName(),
+                            getModel(),
+                            0,
+                            0,
+                            System.currentTimeMillis() - startMs,
+                            false
+                    ));
                     throw e;
                 }
                 

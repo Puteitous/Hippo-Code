@@ -57,4 +57,9 @@ public class OpenAiLlmClient extends AbstractLlmClient {
     public static String getDefaultModelStatic() {
         return DEFAULT_MODEL;
     }
+
+    @Override
+    public String getProviderName() {
+        return "openai";
+    }
 }
