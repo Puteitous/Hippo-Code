@@ -1,6 +1,7 @@
 package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
+import com.example.agent.core.ThinkingEngine;
 import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.domain.rule.RuleManager;
@@ -12,8 +13,16 @@ import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.*;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class CoreModule {
+    private static final Logger logger = LoggerFactory.getLogger(CoreModule.class);
+
     private CoreModule() {}
 
     public static void configure() {
@@ -21,6 +30,8 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(Config.class, config);
         ServiceLocator.registerSingleton(CacheManager.class, CacheManager.getInstance());
         ServiceLocator.registerSingleton(RetryPolicy.class, RetryPolicy.defaultPolicy());
+        ServiceLocator.registerSingleton(ObjectMapper.class, createConfiguredObjectMapper());
+        logger.info("全局 ObjectMapper 配置完成 ✅");
 
         ServiceLocator.registerProvider(TokenEstimator.class, () ->
                 TokenEstimatorFactory.create(ServiceLocator.get(Config.class)));
@@ -47,11 +58,22 @@ public final class CoreModule {
         ServiceLocator.registerProvider(ToolRegistry.class, CoreModule::createConfiguredToolRegistry);
 
         ServiceLocator.registerProvider(ConcurrentToolExecutor.class, () ->
-                new ConcurrentToolExecutor(ServiceLocator.get(ToolRegistry.class)));
+                new ConcurrentToolExecutor(
+                        ServiceLocator.get(ToolRegistry.class),
+                        ServiceLocator.get(ObjectMapper.class)
+                ));
+
+        ServiceLocator.registerProvider(ThinkingEngine.class, () ->
+                new ThinkingEngine(
+                        ServiceLocator.get(LlmClient.class),
+                        ServiceLocator.get(ToolRegistry.class),
+                        ServiceLocator.get(ConcurrentToolExecutor.class),
+                        ServiceLocator.get(ObjectMapper.class)
+                ));
     }
 
     private static ToolRegistry createConfiguredToolRegistry() {
-        ToolRegistry registry = new ToolRegistry();
+        ToolRegistry registry = new ToolRegistry(ServiceLocator.get(ObjectMapper.class));
 
         registry.register(new ReadFileTool(ServiceLocator.get(FileContentService.class)));
         registry.register(new WriteFileTool(ServiceLocator.get(CacheManager.class)));
@@ -65,5 +87,13 @@ public final class CoreModule {
         registry.register(new BashTool());
 
         return registry;
+    }
+
+    private static ObjectMapper createConfiguredObjectMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
     }
 }

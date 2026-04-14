@@ -14,9 +14,14 @@ import java.util.Map;
 public class ToolRegistry {
 
     private final Map<String, ToolExecutor> executors = new HashMap<>();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     public ToolRegistry() {
+        this(new ObjectMapper());
+    }
+
+    public ToolRegistry(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 
     public ToolRegistry register(ToolExecutor executor) {

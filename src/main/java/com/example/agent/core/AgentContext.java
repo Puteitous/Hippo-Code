@@ -145,11 +145,7 @@ public class AgentContext {
         logger.info("缓存监控线程已启动");
 
         // 初始化 ThinkingEngine
-        this.thinkingEngine = new ThinkingEngine(
-                this.llmClient,
-                this.toolRegistry,
-                this.concurrentToolExecutor
-        );
+        this.thinkingEngine = ServiceLocator.get(ThinkingEngine.class);
         this.thinkingEngine.setCodeIndex(this.codeIndex);
 
         logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");

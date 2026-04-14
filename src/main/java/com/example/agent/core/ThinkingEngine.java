@@ -32,10 +32,15 @@ public class ThinkingEngine {
     private boolean memoryBoostEnabled = true;
 
     public ThinkingEngine(LlmClient llmClient, ToolRegistry toolRegistry, ConcurrentToolExecutor toolExecutor) {
+        this(llmClient, toolRegistry, toolExecutor, new ObjectMapper());
+    }
+
+    public ThinkingEngine(LlmClient llmClient, ToolRegistry toolRegistry, ConcurrentToolExecutor toolExecutor,
+                          ObjectMapper objectMapper) {
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry;
         this.toolExecutor = toolExecutor;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     public void setCodeIndex(CodeIndex codeIndex) {

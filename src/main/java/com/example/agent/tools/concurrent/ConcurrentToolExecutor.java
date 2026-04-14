@@ -19,9 +19,13 @@ public class ConcurrentToolExecutor {
     private final ObjectMapper objectMapper;
 
     public ConcurrentToolExecutor(ToolRegistry toolRegistry) {
+        this(toolRegistry, new ObjectMapper());
+    }
+
+    public ConcurrentToolExecutor(ToolRegistry toolRegistry, ObjectMapper objectMapper) {
         this.toolRegistry = toolRegistry;
         this.lockManager = FileLockManager.getInstance();
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     public List<ToolExecutionResult> executeConcurrently(List<ToolCall> toolCalls) {
