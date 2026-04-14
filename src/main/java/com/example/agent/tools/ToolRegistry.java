@@ -1,5 +1,7 @@
 package com.example.agent.tools;
 
+import com.example.agent.core.blocker.BlockerChain;
+import com.example.agent.core.error.ErrorFormatter;
 import com.example.agent.core.event.EventBus;
 import com.example.agent.core.event.ToolExecutedEvent;
 import com.example.agent.llm.model.Tool;
@@ -15,6 +17,7 @@ public class ToolRegistry {
 
     private final Map<String, ToolExecutor> executors = new HashMap<>();
     private final ObjectMapper objectMapper;
+    private final BlockerChain blockerChain = new BlockerChain();
 
     public ToolRegistry() {
         this(new ObjectMapper());
@@ -22,6 +25,10 @@ public class ToolRegistry {
 
     public ToolRegistry(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    public BlockerChain getBlockerChain() {
+        return blockerChain;
     }
 
     public ToolRegistry register(ToolExecutor executor) {
@@ -77,6 +84,18 @@ public class ToolRegistry {
         long startMs = System.currentTimeMillis();
         try {
             JsonNode arguments = objectMapper.readTree(argumentsJson);
+            
+            String blockReason = blockerChain.check(toolName, arguments);
+            if (blockReason != null) {
+                EventBus.publish(new ToolExecutedEvent(
+                        toolName,
+                        false,
+                        System.currentTimeMillis() - startMs,
+                        blockReason
+                ));
+                throw new ToolExecutionException(ErrorFormatter.formatBlocked(blockReason));
+            }
+            
             String result = executor.execute(arguments);
             
             EventBus.publish(new ToolExecutedEvent(

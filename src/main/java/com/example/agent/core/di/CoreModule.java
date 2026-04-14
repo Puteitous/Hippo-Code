@@ -104,6 +104,8 @@ public final class CoreModule {
     private static ToolRegistry createConfiguredToolRegistry() {
         ToolRegistry registry = new ToolRegistry(ServiceLocator.get(ObjectMapper.class));
 
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
+
         registry.register(new ReadFileTool(ServiceLocator.get(FileContentService.class)));
         registry.register(new WriteFileTool(ServiceLocator.get(CacheManager.class)));
         registry.register(new EditFileTool(ServiceLocator.get(CacheManager.class)));
