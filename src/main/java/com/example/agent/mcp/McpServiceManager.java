@@ -1,6 +1,7 @@
 package com.example.agent.mcp;
 
 import com.example.agent.config.Config;
+import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.mcp.client.AbstractMcpClient;
 import com.example.agent.mcp.client.McpClient;
 import com.example.agent.mcp.client.McpClientFactory;
@@ -61,15 +62,7 @@ public class McpServiceManager {
                     config.getMcp().getMaxReconnectAttempts(),
                     config.getMcp().getReconnectDelaySeconds());
 
-            this.reconnectExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "mcp-reconnect");
-                t.setDaemon(true);
-                return t;
-            });
-            
-            if (!shutdownHookRegistered.getAndSet(true)) {
-            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
-        }
+            this.reconnectExecutor = ThreadPools.mcpScheduler();
 
             if (config.getMcp().isAutoConnect()) {
                 connectAllConfiguredServers();

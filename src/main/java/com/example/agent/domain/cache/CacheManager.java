@@ -3,6 +3,7 @@ package com.example.agent.domain.cache;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.stats.CacheStats;
+import com.example.agent.core.concurrency.ThreadPools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,13 +133,7 @@ public class CacheManager {
     }
 
     public void startMemoryMonitor() {
-        if (monitorExecutor == null) {
-            monitorExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "cache-monitor");
-                t.setDaemon(true);
-                return t;
-            });
-        }
+        monitorExecutor = ThreadPools.cacheMonitor();
         monitorExecutor.scheduleAtFixedRate(() -> {
             try {
                 checkMemoryPressure();

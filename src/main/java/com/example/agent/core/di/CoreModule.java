@@ -2,6 +2,7 @@ package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.ThinkingEngine;
+import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.domain.rule.RuleManager;
@@ -32,6 +33,9 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(RetryPolicy.class, RetryPolicy.defaultPolicy());
         ServiceLocator.registerSingleton(ObjectMapper.class, createConfiguredObjectMapper());
         logger.info("全局 ObjectMapper 配置完成 ✅");
+
+        ThreadPools.initialize();
+        logger.info("全局线程池管理器初始化完成 ✅");
 
         ServiceLocator.registerProvider(TokenEstimator.class, () ->
                 TokenEstimatorFactory.create(ServiceLocator.get(Config.class)));
