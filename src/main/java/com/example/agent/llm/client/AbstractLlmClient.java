@@ -88,7 +88,7 @@ public abstract class AbstractLlmClient implements LlmClient {
     }
     
     protected List<Message> applyCacheStrategy(List<Message> messages) {
-        if (config.getLlm().isServerCache()) {
+        if (config.getLlm() != null && config.getLlm().isServerCache()) {
             logger.warn("⚠️ 当前Provider暂不支持服务端缓存，已忽略该配置");
         }
         return messages;

@@ -29,6 +29,7 @@ public class CodeIndex {
         this.searchEngine = SearchEngineFactory.getDefault();
         this.cacheManager = cacheManager != null ? cacheManager : CacheManager.getInstance();
         this.truncationService = new TruncationService(tokenEstimator);
+        clearCache();
     }
 
     public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {

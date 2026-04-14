@@ -72,7 +72,11 @@ public class PathSecurityUtils {
         if (path == null) {
             return false;
         }
-        Path normalizedPath = path.toAbsolutePath().normalize();
+        Path absolute = path.toAbsolutePath();
+        if (absolute == null) {
+            return false;
+        }
+        Path normalizedPath = absolute.normalize();
         return normalizedPath.startsWith(PROJECT_ROOT);
     }
 

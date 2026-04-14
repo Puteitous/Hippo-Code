@@ -270,6 +270,9 @@ public class Config {
     }
 
     public McpConfig getMcp() {
+        if (mcp == null) {
+            mcp = new McpConfig();
+        }
         return mcp;
     }
 

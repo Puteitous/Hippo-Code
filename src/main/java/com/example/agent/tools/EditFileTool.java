@@ -151,7 +151,7 @@ public class EditFileTool implements ToolExecutor {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
 
-            String absolutePath = path.toAbsolutePath().toString();
+            String absolutePath = path.toAbsolutePath() != null ? path.toAbsolutePath().toString() : path.toString();
             String relativePath = PathSecurityUtils.getRelativePath(path);
 
             if (cacheManager != null) {

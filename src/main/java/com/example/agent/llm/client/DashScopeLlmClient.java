@@ -44,7 +44,7 @@ public class DashScopeLlmClient extends AbstractLlmClient {
 
     @Override
     protected List<Message> applyCacheStrategy(List<Message> messages) {
-        if (!config.getLlm().isServerCache()) {
+        if (config.getLlm() == null || !config.getLlm().isServerCache()) {
             return messages;
         }
         

@@ -12,6 +12,7 @@ import java.util.List;
 public class ReadFileTool implements ToolExecutor {
 
     private static final int DEFAULT_MAX_TOKENS = 4000;
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
 
     private FileContentService fileContentService;
 
@@ -100,6 +101,12 @@ public class ReadFileTool implements ToolExecutor {
         }
 
         try {
+            long fileSize = Files.size(path);
+            if (fileSize > MAX_FILE_SIZE) {
+                throw new ToolExecutionException(
+                        String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
+            }
+
             String content;
             if (fileContentService != null) {
                 content = fileContentService.readFile(filePath, maxTokens);

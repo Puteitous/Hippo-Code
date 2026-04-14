@@ -21,10 +21,10 @@ public class LlmConfig {
     @JsonProperty("server_cache")
     private boolean serverCache = false;
     
-    private String model;
+    private String model = "qwen3.5-plus";
     
     @JsonProperty("base_url")
-    private String baseUrl;
+    private String baseUrl = "https://dashscope.aliyuncs.com";
     
     @JsonProperty("max_tokens")
     private int maxTokens = DEFAULT_MAX_TOKENS;

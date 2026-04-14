@@ -106,7 +106,7 @@ public class CacheManager {
         this.commonCache = new CachePartition<>("common", CacheCost.COMMON,
             Caffeine.newBuilder()
                 .maximumSize(1000)
-                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .expireAfterWrite(defaultTtlMillis, TimeUnit.MILLISECONDS)
                 .recordStats()
                 .build());
 
@@ -279,15 +279,22 @@ public class CacheManager {
         logger.debug("检索缓存存入: {}:{} ({} 个结果)", packageName, query, value != null ? value.size() : 0);
     }
 
+    private static final String NULL_KEY = "__NULL_KEY__";
+
     @SuppressWarnings("unchecked")
     public <T> T get(String key) {
-        T value = (T) commonCache.cache.getIfPresent(key);
+        String actualKey = key != null ? key : NULL_KEY;
+        T value = (T) commonCache.cache.getIfPresent(actualKey);
         logCacheHit("common", key, value != null);
         return value;
     }
 
     public <T> void put(String key, T value) {
-        commonCache.cache.put(key, value);
+        if (value == null) {
+            return;
+        }
+        String actualKey = key != null ? key : NULL_KEY;
+        commonCache.cache.put(actualKey, value);
         logger.debug("通用缓存存入: {}", key);
     }
 
@@ -311,7 +318,8 @@ public class CacheManager {
     }
 
     public void invalidate(String key) {
-        commonCache.cache.invalidate(key);
+        String actualKey = key != null ? key : NULL_KEY;
+        commonCache.cache.invalidate(actualKey);
         logger.debug("通用缓存失效: {}", key);
     }
 
