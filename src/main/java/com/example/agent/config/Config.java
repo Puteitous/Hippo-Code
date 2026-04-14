@@ -321,6 +321,10 @@ public class Config {
         return llm != null ? llm.getMaxTokens() : 0;
     }
 
+    public double getTemperature() {
+        return llm != null ? llm.getTemperature() : 0.7;
+    }
+
     @Deprecated
     public void setMaxTokens(int maxTokens) {
         if (llm != null) {

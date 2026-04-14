@@ -3,6 +3,11 @@ package com.example.agent.core.di;
 import com.example.agent.config.Config;
 import com.example.agent.core.ThinkingEngine;
 import com.example.agent.core.concurrency.ThreadPools;
+import com.example.agent.core.health.CacheHealthIndicator;
+import com.example.agent.core.health.ConfigHealthIndicator;
+import com.example.agent.core.health.HealthCheckRegistry;
+import com.example.agent.core.health.LlmHealthIndicator;
+import com.example.agent.core.health.SystemHealthIndicator;
 import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.domain.rule.RuleManager;
@@ -42,6 +47,18 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(CostMetricsCollector.class, costMetrics);
         logger.info("LLM 成本计算器初始化完成 ✅ (事件驱动模式)");
 
+        HealthCheckRegistry healthRegistry = new HealthCheckRegistry();
+        healthRegistry.register(new SystemHealthIndicator());
+        healthRegistry.register(new ConfigHealthIndicator(config));
+        healthRegistry.register(new CacheHealthIndicator(ServiceLocator.get(CacheManager.class)));
+        ServiceLocator.registerSingleton(HealthCheckRegistry.class, healthRegistry);
+        logger.info("健康检查注册中心初始化完成 ✅ (共 {} 个检查器)", healthRegistry.getIndicatorNames().size());
+
+        ServiceLocator.registerProvider(LlmHealthIndicator.class, () ->
+                new LlmHealthIndicator(
+                        ServiceLocator.get(LlmClient.class),
+                        ServiceLocator.get(CostMetricsCollector.class)));
+
         ServiceLocator.registerProvider(TokenEstimator.class, () ->
                 TokenEstimatorFactory.create(ServiceLocator.get(Config.class)));
 
@@ -79,6 +96,9 @@ public final class CoreModule {
                         ServiceLocator.get(ConcurrentToolExecutor.class),
                         ServiceLocator.get(ObjectMapper.class)
                 ));
+
+        healthRegistry.register(ServiceLocator.get(LlmHealthIndicator.class));
+        logger.info("LLM 健康检查器已注册 ✅");
     }
 
     private static ToolRegistry createConfiguredToolRegistry() {

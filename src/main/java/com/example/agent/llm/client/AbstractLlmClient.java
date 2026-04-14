@@ -68,12 +68,14 @@ public abstract class AbstractLlmClient implements LlmClient {
                 .build();
     }
 
-    protected String getModel() {
+    @Override
+    public String getModel() {
         String model = config.getModel();
         return (model != null && !model.isBlank()) ? model : getDefaultModel();
     }
 
-    protected String getBaseUrl() {
+    @Override
+    public String getBaseUrl() {
         String baseUrl = config.getBaseUrl();
         return (baseUrl != null && !baseUrl.isBlank()) ? baseUrl : getDefaultBaseUrl();
     }

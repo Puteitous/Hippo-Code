@@ -400,6 +400,16 @@ public class CacheManager {
         );
     }
 
+    public CacheStats getAggregatedStats() {
+        return allPartitions.stream()
+                .map(p -> p.cache.stats())
+                .reduce(CacheStats.empty(), CacheStats::plus);
+    }
+
+    public boolean isMonitorRunning() {
+        return monitorExecutor != null && !monitorExecutor.isShutdown();
+    }
+
 
 
     private void logCacheHit(String partition, String key, boolean hit) {

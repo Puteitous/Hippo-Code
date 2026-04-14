@@ -30,6 +30,12 @@ public interface LlmClient {
     ChatResponse continueWithToolResults(ChatResponse previousResponse, List<Message> messages, 
                                          List<ToolResult> toolResults) throws LlmException;
 
+    String getModel();
+
+    String getBaseUrl();
+
+    String getProviderName();
+
     class ToolResult {
         private final String toolCallId;
         private final String toolName;
