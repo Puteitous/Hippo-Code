@@ -28,7 +28,7 @@ class RuleManagerTest {
     }
 
     @Test
-    @DisplayName("构造函数 - null config")
+    @DisplayName("构造函数 - null config 使用默认配置")
     void testConstructorWithNullConfig() {
         RuleManager manager = new RuleManager(tokenEstimator, null);
         assertNotNull(manager);
@@ -37,22 +37,34 @@ class RuleManagerTest {
     }
 
     @Test
-    @DisplayName("构造函数 - null tokenEstimator")
+    @DisplayName("构造函数 - null tokenEstimator 应抛出 IllegalArgumentException (Fail-Fast)")
     void testConstructorWithNullTokenEstimator() {
         RuleConfig config = new RuleConfig();
-        assertDoesNotThrow(() -> new RuleManager(null, config));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new RuleManager(null, config)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
-    @DisplayName("构造函数 - 双参数都为 null")
+    @DisplayName("构造函数 - 双参数都为 null 应抛出异常")
     void testConstructorWithBothNull() {
-        assertDoesNotThrow(() -> new RuleManager(null, null));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new RuleManager(null, null)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
-    @DisplayName("构造函数 - 单参数 null tokenEstimator")
+    @DisplayName("构造函数 - 单参数 null tokenEstimator 应抛出异常")
     void testSingleArgConstructor() {
-        assertDoesNotThrow(() -> new RuleManager(null));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new RuleManager(null)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
@@ -152,10 +164,13 @@ class RuleManagerTest {
     }
 
     @Test
-    @DisplayName("边界 - null tokenEstimator 下的 enhanceSystemPrompt")
+    @DisplayName("边界 - null tokenEstimator 构造应抛异常 (Fail-Fast)")
     void testNullTokenEstimatorEnhance() {
-        RuleManager manager = new RuleManager(null);
-        assertDoesNotThrow(() -> manager.enhanceSystemPrompt("test"));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new RuleManager(null)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test

@@ -31,7 +31,7 @@ class CodeIndexTest {
     }
 
     @Test
-    @DisplayName("构造函数 - null config")
+    @DisplayName("构造函数 - null config 使用默认配置")
     void testConstructorWithNullConfig() {
         CodeIndex index = new CodeIndex(tokenEstimator, null);
         assertNotNull(index);
@@ -39,22 +39,34 @@ class CodeIndexTest {
     }
 
     @Test
-    @DisplayName("构造函数 - null tokenEstimator")
+    @DisplayName("构造函数 - null tokenEstimator 应抛出 IllegalArgumentException (Fail-Fast)")
     void testConstructorWithNullTokenEstimator() {
         IndexConfig config = new IndexConfig();
-        assertDoesNotThrow(() -> new CodeIndex(null, config));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new CodeIndex(null, config)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
-    @DisplayName("构造函数 - 双参数都为 null")
+    @DisplayName("构造函数 - 双参数都为 null 应抛出异常")
     void testConstructorWithBothNull() {
-        assertDoesNotThrow(() -> new CodeIndex(null, null));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new CodeIndex(null, null)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
-    @DisplayName("构造函数 - 单参数 null tokenEstimator")
+    @DisplayName("构造函数 - 单参数 null tokenEstimator 应抛出异常")
     void testSingleArgConstructor() {
-        assertDoesNotThrow(() -> new CodeIndex(null));
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> new CodeIndex(null)
+        );
+        assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
     @Test
