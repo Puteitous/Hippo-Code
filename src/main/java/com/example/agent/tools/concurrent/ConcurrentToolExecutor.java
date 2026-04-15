@@ -1,18 +1,24 @@
 package com.example.agent.tools.concurrent;
 
+import com.example.agent.core.logging.LoggingContext;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public class ConcurrentToolExecutor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ConcurrentToolExecutor.class);
 
     private final ToolRegistry toolRegistry;
     private final FileLockManager lockManager;
@@ -68,6 +74,8 @@ public class ConcurrentToolExecutor {
     }
 
     private ToolExecutionResult executeSingle(ToolCall toolCall, int index) {
+        Map<String, String> mdcSnapshot = LoggingContext.snapshot();
+        
         if (toolCall.getFunction() == null || toolCall.getFunction().getName() == null 
             || toolCall.getFunction().getName().isEmpty()) {
             return ToolExecutionResult.builder()
@@ -91,10 +99,16 @@ public class ConcurrentToolExecutor {
         long startTime = System.currentTimeMillis();
         
         try {
+            LoggingContext.restore(mdcSnapshot);
+            LoggingContext.setTool(toolName);
+            
+            logger.debug("开始执行");
+            
             JsonNode argumentsNode = objectMapper.readTree(arguments);
             String result = toolRegistry.execute(toolName, arguments);
             
             long executionTime = System.currentTimeMillis() - startTime;
+            logger.debug("执行完成, duration={}ms", executionTime);
             
             return ToolExecutionResult.builder()
                     .index(index)
@@ -107,6 +121,7 @@ public class ConcurrentToolExecutor {
                     
         } catch (ToolExecutionException e) {
             long executionTime = System.currentTimeMillis() - startTime;
+            logger.debug("执行失败, duration={}ms, error={}", executionTime, e.getMessage());
             return ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCallId)
@@ -117,6 +132,7 @@ public class ConcurrentToolExecutor {
                     .build();
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
+            logger.debug("执行异常, duration={}ms, error={}", executionTime, e.getMessage());
             return ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCallId)
@@ -125,6 +141,8 @@ public class ConcurrentToolExecutor {
                     .errorMessage("参数解析失败: " + e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
+        } finally {
+            LoggingContext.clearTool();
         }
     }
 

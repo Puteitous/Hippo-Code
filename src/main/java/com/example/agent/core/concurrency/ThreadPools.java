@@ -1,7 +1,9 @@
 package com.example.agent.core.concurrency;
 
+import com.example.agent.core.logging.LoggingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -99,6 +101,18 @@ public final class ThreadPools {
                 t.setUncaughtExceptionHandler((thread, e) ->
                         logger.error("线程 {} 未捕获异常: {}", thread.getName(), e.getMessage(), e));
                 return t;
+            }
+        };
+    }
+
+    public static Runnable wrapWithMdc(Runnable runnable) {
+        Map<String, String> snapshot = LoggingContext.snapshot();
+        return () -> {
+            LoggingContext.restore(snapshot);
+            try {
+                runnable.run();
+            } finally {
+                MDC.clear();
             }
         };
     }

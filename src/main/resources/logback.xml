@@ -2,7 +2,7 @@
 <configuration>
     <property name="LOG_DIR" value="logs" />
     <property name="SYSTEM_LOG_DIR" value="logs/system" />
-    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" />
+    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} [%X{sessionId:-} turn=%X{turn:-} tool=%X{tool:-}] - %msg%n" />
     
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
