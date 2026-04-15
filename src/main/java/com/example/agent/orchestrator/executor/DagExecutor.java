@@ -28,13 +28,17 @@ public class DagExecutor {
     private final ConcurrentToolExecutor fallbackExecutor;
     private final RetryHandler retryHandler;
     private final TransactionHandler transactionHandler;
+    private final CompilationChecker compilationChecker;
     private final ExecutorService executorService;
     private final Map<String, ToolExecutionResult> results = new ConcurrentHashMap<>();
+
+    private boolean compilationCheckEnabled = true;
 
     public DagExecutor(ConcurrentToolExecutor fallbackExecutor) {
         this.fallbackExecutor = fallbackExecutor;
         this.retryHandler = new RetryHandler();
         this.transactionHandler = new TransactionHandler();
+        this.compilationChecker = new CompilationChecker();
         this.executorService = Executors.newCachedThreadPool();
     }
 
@@ -65,7 +69,17 @@ public class DagExecutor {
                 }
             }
 
-            transactionHandler.commit();
+            if (compilationCheckEnabled && hasFileOperations(plan)) {
+                CompilationChecker.CompilationResult compileResult = compilationChecker.check();
+                if (!compileResult.isSuccess()) {
+                    transactionHandler.rollback();
+                    prependCompilationError(results, compileResult);
+                } else {
+                    transactionHandler.commit();
+                }
+            } else {
+                transactionHandler.commit();
+            }
 
         } catch (Exception e) {
             logger.error("DAG 执行异常，执行事务回滚并降级", e);
@@ -131,6 +145,37 @@ public class DagExecutor {
                 }
             }
         }
+    }
+
+    private boolean hasFileOperations(ToolExecutionPlan plan) {
+        return plan.getAllNodes().stream()
+                .anyMatch(node -> "edit_file".equals(node.getToolName())
+                        || "write_file".equals(node.getToolName()));
+    }
+
+    private void prependCompilationError(Map<String, ToolExecutionResult> results,
+                                          CompilationChecker.CompilationResult compileResult) {
+        String errorMessage = compileResult.formatErrorMessage();
+
+        for (Map.Entry<String, ToolExecutionResult> entry : results.entrySet()) {
+            ToolExecutionResult original = entry.getValue();
+            if (original.isSuccess()) {
+                String originalResult = original.getResult() != null ? original.getResult() : "";
+                String newResult = errorMessage + "\n\n" + originalResult;
+                results.put(entry.getKey(), ToolExecutionResult.builder()
+                        .index(original.getIndex())
+                        .toolCallId(original.getToolCallId())
+                        .toolName(original.getToolName())
+                        .result(newResult)
+                        .success(true)
+                        .executionTimeMs(original.getExecutionTimeMs())
+                        .build());
+            }
+        }
+    }
+
+    public void setCompilationCheckEnabled(boolean enabled) {
+        this.compilationCheckEnabled = enabled;
     }
 
     public void shutdown() {
