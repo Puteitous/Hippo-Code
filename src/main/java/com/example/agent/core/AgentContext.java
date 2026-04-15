@@ -11,6 +11,8 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.EventMetricsCollector;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
+import com.example.agent.prompt.PromptLibrary;
+import com.example.agent.prompt.PromptService;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.FileContentService;
 import com.example.agent.service.TokenEstimator;
@@ -150,19 +152,29 @@ public class AgentContext {
 
         logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
 
-        // 增强系统提示词
-        String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(SYSTEM_PROMPT);
+        // 初始化 PromptLibrary
+        PromptService promptService = new PromptService();
+        ServiceLocator.registerSingleton(PromptService.class, promptService);
+        ServiceLocator.registerSingleton(PromptLibrary.class, PromptLibrary.getInstance());
+        logger.info("PromptLibrary 初始化完成 ✅");
+
+        // 增强系统提示词（使用 PromptLibrary）
+        String basePrompt = promptService.getBasePrompt(null);
+        String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
     }
 
     public void resetConversation() {
+        PromptService promptService = ServiceLocator.get(PromptService.class);
+        String basePrompt = promptService != null ? promptService.getBasePrompt(null) : SYSTEM_PROMPT;
+
         // 重新加载规则（确保文件有更新时能重新加载）
         if (this.ruleManager != null) {
             this.ruleManager.reload();
-            String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(SYSTEM_PROMPT);
+            String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
             this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
         } else {
-            this.conversationManager = new ConversationManager(SYSTEM_PROMPT, tokenEstimator, config.getContext());
+            this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, config.getContext());
         }
     }
 

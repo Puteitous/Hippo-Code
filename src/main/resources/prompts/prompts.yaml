@@ -1,0 +1,64 @@
+prompts:
+  - type: BASE_CODING
+    file: base/base_coding.md
+    version: "1.0.0"
+    enabled: true
+    priority: 100
+
+  - type: BASE_RESEARCH
+    file: base/base_research.md
+    version: "1.0.0"
+    enabled: true
+    priority: 100
+
+  - type: TASK_REFACTOR
+    file: task/task_refactor.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      intent: REFACTOR
+
+  - type: TASK_DEBUG
+    file: task/task_debug.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      intent: DEBUG
+
+  - type: TASK_CODEGEN
+    file: task/task_codegen.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      intent: CODE_GENERATION
+
+  - type: TASK_REVIEW
+    file: task/task_review.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      intent: CODE_REVIEW
+
+  - type: EXPERT_JAVA
+    file: expert/expert_java.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      keywords: ["java", "spring", "jdk", "maven"]
+
+  - type: EXPERT_TESTING
+    file: expert/expert_testing.md
+    version: "1.0.0"
+    enabled: true
+    autoInject:
+      keywords: ["test", "单元测试", "集成测试"]
+
+  - type: TOOL_EDIT_GUIDE
+    file: tool/tool_edit_guide.md
+    version: "1.0.0"
+    enabled: true
+
+config:
+  defaultBase: BASE_CODING
+  maxExpertPrompts: 2
+  autoInjectEnabled: true
