@@ -1,11 +1,13 @@
 package com.example.agent.core;
 
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.ToolCall;
+import com.example.agent.orchestrator.ToolOrchestrator;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
@@ -83,7 +85,10 @@ public class ThinkingEngine {
             }
 
             logger.debug("执行 {} 个工具调用", allowedCalls.size());
-            List<ToolExecutionResult> results = toolExecutor.executeConcurrently(allowedCalls);
+            ToolOrchestrator orchestrator = ServiceLocator.getOrNull(ToolOrchestrator.class);
+            List<ToolExecutionResult> results = orchestrator != null
+                    ? orchestrator.executeConcurrently(allowedCalls)
+                    : toolExecutor.executeConcurrently(allowedCalls);
 
             for (ToolExecutionResult result : results) {
                 String toolResult = result.isSuccess()

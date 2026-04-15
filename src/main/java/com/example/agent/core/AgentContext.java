@@ -20,6 +20,7 @@ import com.example.agent.service.TokenEstimator;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
+import com.example.agent.orchestrator.ToolOrchestrator;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.impl.completer.StringsCompleter;
@@ -89,6 +90,7 @@ public class AgentContext {
     private LlmClient llmClient;
     private ToolRegistry toolRegistry;
     private ConcurrentToolExecutor concurrentToolExecutor;
+    private ToolOrchestrator toolOrchestrator;
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
     private TokenMetricsCollector tokenMetricsCollector;
@@ -130,6 +132,11 @@ public class AgentContext {
         this.codeIndex = ServiceLocator.get(CodeIndex.class);
         this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
         this.concurrentToolExecutor = ServiceLocator.get(ConcurrentToolExecutor.class);
+
+        // 初始化 Tool Orchestrator 工具编排引擎
+        this.toolOrchestrator = new ToolOrchestrator(concurrentToolExecutor);
+        ServiceLocator.registerSingleton(ToolOrchestrator.class, toolOrchestrator);
+        logger.info("ToolOrchestrator 初始化完成 ✅ - {}", toolOrchestrator.getStats());
 
         // 初始化各种管理器
         this.ruleManager.loadHippoRules();
