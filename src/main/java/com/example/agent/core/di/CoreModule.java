@@ -104,12 +104,6 @@ public final class CoreModule {
         CacheManager cacheManager = ServiceLocator.get(CacheManager.class);
         ToolRegistry registry = new ToolRegistry(objectMapper);
 
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.PathExistenceBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditBeforeReadBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
-
         registry.register(new ReadFileTool(fileContentService));
         registry.register(new WriteFileTool(cacheManager));
         registry.register(new EditFileTool(cacheManager));
@@ -120,6 +114,13 @@ public final class CoreModule {
         registry.register(new GrepTool());
         registry.register(new AskUserTool());
         registry.register(new BashTool());
+
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.SchemaValidationBlocker(registry));
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditBeforeReadBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.PathExistenceBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
 
         return registry;
     }
