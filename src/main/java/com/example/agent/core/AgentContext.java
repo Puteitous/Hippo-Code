@@ -11,6 +11,7 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.EventMetricsCollector;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
+import com.example.agent.memory.MemorySystem;
 import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
 import com.example.agent.service.ConversationManager;
@@ -158,14 +159,26 @@ public class AgentContext {
         ServiceLocator.registerSingleton(PromptLibrary.class, PromptLibrary.getInstance());
         logger.info("PromptLibrary 初始化完成 ✅");
 
+        // 初始化 MemorySystem - 优先级记忆系统
+        MemorySystem memorySystem = new MemorySystem(tokenEstimator);
+        ServiceLocator.registerSingleton(MemorySystem.class, memorySystem);
+        logger.info("MemorySystem 初始化完成 ✅ - {}", memorySystem.getStats());
+
         // 增强系统提示词（使用 PromptLibrary）
         String basePrompt = promptService.getBasePrompt(null);
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
+
+        // 启用优先级记忆策略（可通过配置关闭）
+        if (memorySystem.isEnabled()) {
+            this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
+            logger.info("优先级记忆策略已启用 ✅");
+        }
     }
 
     public void resetConversation() {
         PromptService promptService = ServiceLocator.get(PromptService.class);
+        MemorySystem memorySystem = ServiceLocator.getOrNull(MemorySystem.class);
         String basePrompt = promptService != null ? promptService.getBasePrompt(null) : SYSTEM_PROMPT;
 
         // 重新加载规则（确保文件有更新时能重新加载）
@@ -175,6 +188,11 @@ public class AgentContext {
             this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
         } else {
             this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, config.getContext());
+        }
+
+        // 重置记忆策略
+        if (memorySystem != null && memorySystem.isEnabled()) {
+            this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
         }
     }
 

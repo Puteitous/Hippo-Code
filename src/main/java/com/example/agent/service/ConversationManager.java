@@ -17,7 +17,7 @@ public class ConversationManager {
     private final TokenEstimator tokenEstimator;
     private final String systemPrompt;
     
-    private final TrimPolicy trimPolicy;
+    private TrimPolicy trimPolicy;
     private final Compressor toolResultCompressor;
     private final ContextConfig config;
 
@@ -133,6 +133,12 @@ public class ConversationManager {
 
     public TrimPolicy getTrimPolicy() {
         return trimPolicy;
+    }
+
+    public void setTrimPolicy(TrimPolicy trimPolicy) {
+        if (trimPolicy != null) {
+            this.trimPolicy = trimPolicy;
+        }
     }
 
     public Compressor getToolResultCompressor() {
