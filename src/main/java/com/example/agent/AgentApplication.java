@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
@@ -45,6 +46,9 @@ public class AgentApplication {
         AgentContext context = null;
         try {
             context = new AgentContext();
+
+            registerShutdownHook(context);
+
             context.initialize();
 
             AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
@@ -84,9 +88,9 @@ public class AgentApplication {
             context.getTerminal().handle(org.jline.terminal.Terminal.Signal.INT, signal -> {
                 if (!finalLoop.isProcessing()) {
                     finalUi.printCtrlC();
-                    finalUi.printGoodbye();
                     System.exit(0);
                 } else {
+                    finalUi.println("\n🛑 正在中断当前任务，请稍候...");
                     finalLoop.interrupt();
                 }
             });
@@ -146,7 +150,10 @@ public class AgentApplication {
             System.err.println(ConsoleStyle.error("终端错误: " + e.getMessage()));
         } finally {
             if (context != null) {
-                context.close();
+                try {
+                    context.close();
+                } catch (Exception ignored) {
+                }
             }
         }
     }
@@ -233,6 +240,27 @@ public class AgentApplication {
         }
 
         return recognizer;
+    }
+
+    private void registerShutdownHook(AgentContext context) {
+        final AgentContext finalContext = context;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            String osName = ManagementFactory.getRuntimeMXBean().getName();
+            long pid = Long.parseLong(osName.split("@")[0]);
+            System.err.println("\n🛑 Agent 正在退出 (PID: " + pid + " 正在清理资源...");
+
+            try {
+                finalContext.close();
+            } catch (Exception ignored) {
+            }
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ignored) {
+            }
+        }, "agent-shutdown-hook"));
+
+        logger.debug("ShutdownHook 已注册");
     }
 
     private TaskPlanner createTaskPlanner(AgentContext context) {

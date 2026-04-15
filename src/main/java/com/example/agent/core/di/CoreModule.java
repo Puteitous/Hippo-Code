@@ -33,83 +33,83 @@ public final class CoreModule {
     private CoreModule() {}
 
     public static void configure() {
+        logger.info("========== 按层级初始化 DI 容器 ==========");
+
         Config config = Config.getInstance();
+
+        ThreadPools.initialize();
+        logger.info("✅ [Level 0] 基础设施: 线程池管理器");
+
+        ObjectMapper objectMapper = createConfiguredObjectMapper();
+        ServiceLocator.registerSingleton(ObjectMapper.class, objectMapper);
+        logger.info("✅ [Level 0] 基础设施: ObjectMapper");
+
         ServiceLocator.registerSingleton(Config.class, config);
         ServiceLocator.registerSingleton(CacheManager.class, CacheManager.getInstance());
         ServiceLocator.registerSingleton(RetryPolicy.class, RetryPolicy.defaultPolicy());
-        ServiceLocator.registerSingleton(ObjectMapper.class, createConfiguredObjectMapper());
-        logger.info("全局 ObjectMapper 配置完成 ✅");
+        logger.info("✅ [Level 1] 基础服务: Config, CacheManager, RetryPolicy");
 
-        ThreadPools.initialize();
-        logger.info("全局线程池管理器初始化完成 ✅");
+        TokenEstimator tokenEstimator = TokenEstimatorFactory.create(config);
+        ServiceLocator.registerSingleton(TokenEstimator.class, tokenEstimator);
+        logger.info("✅ [Level 1] 基础服务: TokenEstimator");
 
         CostMetricsCollector costMetrics = new CostMetricsCollector();
         ServiceLocator.registerSingleton(CostMetricsCollector.class, costMetrics);
-        logger.info("LLM 成本计算器初始化完成 ✅ (事件驱动模式)");
+        logger.info("✅ [Level 1] 基础服务: 成本计算器");
 
         HealthCheckRegistry healthRegistry = new HealthCheckRegistry();
         healthRegistry.register(new SystemHealthIndicator());
         healthRegistry.register(new ConfigHealthIndicator(config));
         healthRegistry.register(new CacheHealthIndicator(ServiceLocator.get(CacheManager.class)));
         ServiceLocator.registerSingleton(HealthCheckRegistry.class, healthRegistry);
-        logger.info("健康检查注册中心初始化完成 ✅ (共 {} 个检查器)", healthRegistry.getIndicatorNames().size());
+        logger.info("✅ [Level 1] 基础服务: 健康检查注册中心 ({} 个检查器)", healthRegistry.getIndicatorNames().size());
 
-        ServiceLocator.registerProvider(LlmHealthIndicator.class, () ->
-                new LlmHealthIndicator(
-                        ServiceLocator.get(LlmClient.class),
-                        ServiceLocator.get(CostMetricsCollector.class)));
+        RuleManager ruleManager = new RuleManager(tokenEstimator, config.getRule());
+        ServiceLocator.registerSingleton(RuleManager.class, ruleManager);
+        logger.info("✅ [Level 2] 领域服务: RuleManager");
 
-        ServiceLocator.registerProvider(TokenEstimator.class, () ->
-                TokenEstimatorFactory.create(ServiceLocator.get(Config.class)));
+        FileContentService fileContentService = new FileContentService(ServiceLocator.get(CacheManager.class));
+        ServiceLocator.registerSingleton(FileContentService.class, fileContentService);
+        logger.info("✅ [Level 2] 领域服务: FileContentService");
 
-        ServiceLocator.registerProvider(LlmClient.class, () ->
-                LlmClientFactory.create(
-                        ServiceLocator.get(Config.class),
-                        ServiceLocator.get(RetryPolicy.class)));
+        CodeIndex codeIndex = new CodeIndex(tokenEstimator, config.getIndex(), ServiceLocator.get(CacheManager.class));
+        ServiceLocator.registerSingleton(CodeIndex.class, codeIndex);
+        logger.info("✅ [Level 2] 领域服务: CodeIndex");
 
-        ServiceLocator.registerProvider(RuleManager.class, () ->
-                new RuleManager(
-                        ServiceLocator.get(TokenEstimator.class),
-                        ServiceLocator.get(Config.class).getRule()));
+        LlmClient llmClient = LlmClientFactory.create(config, ServiceLocator.get(RetryPolicy.class));
+        ServiceLocator.registerSingleton(LlmClient.class, llmClient);
+        logger.info("✅ [Level 2] 领域服务: LlmClient");
 
-        ServiceLocator.registerProvider(FileContentService.class, () ->
-                new FileContentService(ServiceLocator.get(CacheManager.class)));
+        ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, fileContentService, codeIndex);
+        ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
+        logger.info("✅ [Level 3] 工具层: ToolRegistry (9 个内置工具)");
 
-        ServiceLocator.registerProvider(CodeIndex.class, () ->
-                new CodeIndex(
-                        ServiceLocator.get(TokenEstimator.class),
-                        ServiceLocator.get(Config.class).getIndex(),
-                        ServiceLocator.get(CacheManager.class)));
+        ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
+        ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
+        logger.info("✅ [Level 3] 工具层: ConcurrentToolExecutor");
 
-        ServiceLocator.registerProvider(ToolRegistry.class, CoreModule::createConfiguredToolRegistry);
+        ThinkingEngine thinkingEngine = new ThinkingEngine(llmClient, toolRegistry, concurrentToolExecutor, objectMapper);
+        ServiceLocator.registerSingleton(ThinkingEngine.class, thinkingEngine);
+        logger.info("✅ [Level 4] 引擎层: ThinkingEngine");
 
-        ServiceLocator.registerProvider(ConcurrentToolExecutor.class, () ->
-                new ConcurrentToolExecutor(
-                        ServiceLocator.get(ToolRegistry.class),
-                        ServiceLocator.get(ObjectMapper.class)
-                ));
+        healthRegistry.register(new LlmHealthIndicator(llmClient, costMetrics));
+        logger.info("✅ [收尾] LLM 健康检查器已注册");
 
-        ServiceLocator.registerProvider(ThinkingEngine.class, () ->
-                new ThinkingEngine(
-                        ServiceLocator.get(LlmClient.class),
-                        ServiceLocator.get(ToolRegistry.class),
-                        ServiceLocator.get(ConcurrentToolExecutor.class),
-                        ServiceLocator.get(ObjectMapper.class)
-                ));
-
-        healthRegistry.register(ServiceLocator.get(LlmHealthIndicator.class));
-        logger.info("LLM 健康检查器已注册 ✅");
+        logger.info("========== DI 容器初始化完成，共 {} 个服务 ==========", ServiceLocator.countSingletons());
     }
 
-    private static ToolRegistry createConfiguredToolRegistry() {
-        ToolRegistry registry = new ToolRegistry(ServiceLocator.get(ObjectMapper.class));
+    private static ToolRegistry createConfiguredToolRegistry(ObjectMapper objectMapper,
+                                                             FileContentService fileContentService,
+                                                             CodeIndex codeIndex) {
+        CacheManager cacheManager = ServiceLocator.get(CacheManager.class);
+        ToolRegistry registry = new ToolRegistry(objectMapper);
 
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
 
-        registry.register(new ReadFileTool(ServiceLocator.get(FileContentService.class)));
-        registry.register(new WriteFileTool(ServiceLocator.get(CacheManager.class)));
-        registry.register(new EditFileTool(ServiceLocator.get(CacheManager.class)));
-        registry.register(new SearchCodeTool(ServiceLocator.get(CodeIndex.class)));
+        registry.register(new ReadFileTool(fileContentService));
+        registry.register(new WriteFileTool(cacheManager));
+        registry.register(new EditFileTool(cacheManager));
+        registry.register(new SearchCodeTool(codeIndex));
 
         registry.register(new ListDirectoryTool());
         registry.register(new GlobTool());

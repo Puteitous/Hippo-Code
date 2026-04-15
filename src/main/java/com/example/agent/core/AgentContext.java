@@ -231,6 +231,12 @@ public class AgentContext {
     }
 
     public void close() {
+        logger.info("开始清理 AgentContext 资源...");
+
+        if (mcpServiceManager != null) {
+            mcpServiceManager.shutdown();
+        }
+
         try {
             if (terminal != null) {
                 terminal.close();
@@ -238,5 +244,7 @@ public class AgentContext {
         } catch (IOException e) {
             logger.error("关闭终端失败", e);
         }
+
+        logger.info("AgentContext 资源清理完成 ✅");
     }
 }
