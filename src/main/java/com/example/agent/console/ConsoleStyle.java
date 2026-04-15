@@ -1,6 +1,5 @@
 package com.example.agent.console;
 
-import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 
@@ -69,6 +68,16 @@ public final class ConsoleStyle {
                 .toAnsi();
     }
 
+    public static String blue(String text) {
+        if (text == null) {
+            return "";
+        }
+        return new AttributedStringBuilder()
+                .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE))
+                .append(text)
+                .toAnsi();
+    }
+
     public static String bold(String text) {
         if (text == null) {
             return "";
@@ -109,16 +118,6 @@ public final class ConsoleStyle {
                 .toAnsi();
     }
 
-    public static String blue(String text) {
-        if (text == null) {
-            return "";
-        }
-        return new AttributedStringBuilder()
-                .style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE))
-                .append(text)
-                .toAnsi();
-    }
-
     public static String boldCyan(String text) {
         if (text == null) {
             return "";
@@ -147,6 +146,10 @@ public final class ConsoleStyle {
                 .style(AttributedStyle.DEFAULT.faint())
                 .append(text)
                 .toAnsi();
+    }
+
+    public static String cursor() {
+        return "❯ ";
     }
 
     public static String prompt() {

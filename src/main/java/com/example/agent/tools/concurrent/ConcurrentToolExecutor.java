@@ -2,6 +2,7 @@ package com.example.agent.tools.concurrent;
 
 import com.example.agent.core.logging.LoggingContext;
 import com.example.agent.llm.model.ToolCall;
+import com.example.agent.progress.ToolExecutionCallback;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
@@ -23,6 +25,7 @@ public class ConcurrentToolExecutor {
     private final ToolRegistry toolRegistry;
     private final FileLockManager lockManager;
     private final ObjectMapper objectMapper;
+    private final List<ToolExecutionCallback> callbacks = new CopyOnWriteArrayList<>();
 
     public ConcurrentToolExecutor(ToolRegistry toolRegistry) {
         this(toolRegistry, new ObjectMapper());
@@ -34,6 +37,34 @@ public class ConcurrentToolExecutor {
         this.objectMapper = objectMapper;
     }
 
+    public void registerCallback(ToolExecutionCallback callback) {
+        callbacks.add(callback);
+    }
+
+    public void removeCallback(ToolExecutionCallback callback) {
+        callbacks.remove(callback);
+    }
+
+    private void notifyToolStart(ToolCall toolCall, int index, int total) {
+        for (ToolExecutionCallback callback : callbacks) {
+            try {
+                callback.onToolStart(toolCall, index, total);
+            } catch (Exception e) {
+                logger.warn("回调执行异常: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void notifyToolComplete(ToolCall toolCall, ToolExecutionResult result, int index, int total) {
+        for (ToolExecutionCallback callback : callbacks) {
+            try {
+                callback.onToolComplete(toolCall, result, index, total);
+            } catch (Exception e) {
+                logger.warn("回调执行异常: {}", e.getMessage());
+            }
+        }
+    }
+
     public List<ToolExecutionResult> executeConcurrently(List<ToolCall> toolCalls) {
         List<ToolExecutionResult> results = new ArrayList<>();
         
@@ -41,8 +72,10 @@ public class ConcurrentToolExecutor {
             return results;
         }
 
+        int total = toolCalls.size();
+        
         if (toolCalls.size() == 1) {
-            results.add(executeSingle(toolCalls.get(0), 0));
+            results.add(executeSingle(toolCalls.get(0), 0, total));
             return results;
         }
 
@@ -53,7 +86,7 @@ public class ConcurrentToolExecutor {
                 int index = i;
                 ToolCall call = toolCalls.get(i);
                 
-                futures.add(executor.submit(() -> executeSingle(call, index)));
+                futures.add(executor.submit(() -> executeSingle(call, index, total)));
             }
 
             for (Future<ToolExecutionResult> future : futures) {
@@ -73,12 +106,12 @@ public class ConcurrentToolExecutor {
         return results;
     }
 
-    private ToolExecutionResult executeSingle(ToolCall toolCall, int index) {
+    private ToolExecutionResult executeSingle(ToolCall toolCall, int index, int total) {
         Map<String, String> mdcSnapshot = LoggingContext.snapshot();
         
         if (toolCall.getFunction() == null || toolCall.getFunction().getName() == null 
             || toolCall.getFunction().getName().isEmpty()) {
-            return ToolExecutionResult.builder()
+            ToolExecutionResult result = ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCall.getId())
                     .toolName("")
@@ -86,6 +119,8 @@ public class ConcurrentToolExecutor {
                     .errorMessage("无效的工具调用: 工具名称为空")
                     .executionTimeMs(0)
                     .build();
+            notifyToolComplete(toolCall, result, index, total);
+            return result;
         }
         
         String toolName = toolCall.getFunction().getName();
@@ -96,6 +131,7 @@ public class ConcurrentToolExecutor {
             arguments = "{}";
         }
 
+        notifyToolStart(toolCall, index, total);
         long startTime = System.currentTimeMillis();
         
         try {
@@ -110,7 +146,7 @@ public class ConcurrentToolExecutor {
             long executionTime = System.currentTimeMillis() - startTime;
             logger.debug("执行完成, duration={}ms", executionTime);
             
-            return ToolExecutionResult.builder()
+            ToolExecutionResult execResult = ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCallId)
                     .toolName(toolName)
@@ -119,10 +155,13 @@ public class ConcurrentToolExecutor {
                     .executionTimeMs(executionTime)
                     .build();
                     
+            notifyToolComplete(toolCall, execResult, index, total);
+            return execResult;
+                    
         } catch (ToolExecutionException e) {
             long executionTime = System.currentTimeMillis() - startTime;
             logger.debug("执行失败, duration={}ms, error={}", executionTime, e.getMessage());
-            return ToolExecutionResult.builder()
+            ToolExecutionResult execResult = ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCallId)
                     .toolName(toolName)
@@ -130,10 +169,12 @@ public class ConcurrentToolExecutor {
                     .errorMessage(e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
+            notifyToolComplete(toolCall, execResult, index, total);
+            return execResult;
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
             logger.debug("执行异常, duration={}ms, error={}", executionTime, e.getMessage());
-            return ToolExecutionResult.builder()
+            ToolExecutionResult execResult = ToolExecutionResult.builder()
                     .index(index)
                     .toolCallId(toolCallId)
                     .toolName(toolName)
@@ -141,6 +182,8 @@ public class ConcurrentToolExecutor {
                     .errorMessage("参数解析失败: " + e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
+            notifyToolComplete(toolCall, execResult, index, total);
+            return execResult;
         } finally {
             LoggingContext.clearTool();
         }

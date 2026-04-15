@@ -122,6 +122,7 @@ public final class CoreModule {
         registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditConfirmationBlocker());
 
         return registry;
     }

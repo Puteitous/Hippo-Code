@@ -151,7 +151,17 @@ public class ConversationLoop {
         ui.println();
 
         try {
+            IntentResult intent = recognizeIntent(userInput);
+
+            ExecutionPlan plan = null;
+            if (taskPlanner != null && intent != null) {
+                plan = createExecutionPlan(userInput, intent);
+                displayIntentInfo(intent);
+                displayPlanInfo(plan);
+            }
+
             processAgentLoop();
+
         } finally {
             processing = false;
             MDC.clear();

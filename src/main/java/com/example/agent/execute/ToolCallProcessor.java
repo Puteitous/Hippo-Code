@@ -5,6 +5,7 @@ import com.example.agent.console.ConsoleStyle;
 import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
+import com.example.agent.progress.ToolCardRenderer;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
@@ -55,20 +56,25 @@ public class ToolCallProcessor {
             return;
         }
 
+        ToolCardRenderer renderer = new ToolCardRenderer(ui);
+        concurrentToolExecutor.registerCallback(renderer);
+        
+        renderer.renderHeader();
+
         List<ToolExecutionResult> results = concurrentToolExecutor.executeConcurrently(validToolCalls);
 
+        concurrentToolExecutor.removeCallback(renderer);
+
         long totalTime = System.currentTimeMillis() - startTime;
+        
+        renderer.renderFooter(validToolCalls.size(), totalTime);
 
         for (ToolExecutionResult result : results) {
             String arguments = argumentsMap.get(result.getToolCallId());
+            String rawResult = result.getResult() != null ? result.getResult() : "";
+            String truncatedResult = truncationService.truncateToolOutput(result.getToolName(), rawResult);
 
             if (result.isSuccess()) {
-                ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "成功"));
-                String rawResult = result.getResult() != null ? result.getResult() : "";
-                String truncatedResult = truncationService.truncateToolOutput(result.getToolName(), rawResult);
-                String displayResult = ui.truncate(truncatedResult, 100);
-                ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.dim(displayResult));
-
                 if (conversationLogger != null) {
                     conversationLogger.logToolCall(
                             result.getToolName(),
@@ -81,9 +87,7 @@ public class ToolCallProcessor {
 
                 conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), truncatedResult);
             } else {
-                ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.toolCall(result.getToolName(), "失败"));
                 String errorMsg = result.getErrorMessage() != null ? result.getErrorMessage() : "未知错误";
-                ui.println(ConsoleStyle.gray("  │  └─ ") + ConsoleStyle.red(errorMsg));
 
                 if (conversationLogger != null) {
                     conversationLogger.logToolCall(
@@ -98,12 +102,6 @@ public class ToolCallProcessor {
                 String errorResult = "Error: " + errorMsg + "\nPlease try a different approach or check if the path is correct.";
                 conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), errorResult);
             }
-        }
-
-        if (toolCalls.size() > 1) {
-            ui.println(ConsoleStyle.gray("  │"));
-            ui.println(ConsoleStyle.gray("  │  ") + ConsoleStyle.dim(
-                    String.format("并发执行 %d 个工具，总耗时 %d ms", toolCalls.size(), totalTime)));
         }
     }
 }
