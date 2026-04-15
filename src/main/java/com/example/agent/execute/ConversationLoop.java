@@ -26,6 +26,7 @@ import com.example.agent.session.SessionStorage;
 import org.jline.reader.UserInterruptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
@@ -108,7 +109,11 @@ public class ConversationLoop {
         turnExecutor.setInterrupted(false);
         conversationRound++;
 
-        currentConversationId = String.valueOf(System.currentTimeMillis());
+        String sessionId = String.valueOf(System.currentTimeMillis());
+        currentConversationId = sessionId;
+        
+        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
+        MDC.put("turn", String.valueOf(conversationRound));
         Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
         conversationLogger = new ConversationLogger(currentConversationId, logFile);
 
@@ -149,6 +154,7 @@ public class ConversationLoop {
             processAgentLoop();
         } finally {
             processing = false;
+            MDC.clear();
         }
     }
 
