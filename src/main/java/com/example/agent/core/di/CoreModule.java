@@ -2,6 +2,8 @@ package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.ThinkingEngine;
+import com.example.agent.core.blocker.EditBeforeReadBlocker;
+import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.core.health.CacheHealthIndicator;
 import com.example.agent.core.health.ConfigHealthIndicator;
@@ -82,7 +84,7 @@ public final class CoreModule {
 
         ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, fileContentService, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
-        logger.info("✅ [Level 3] 工具层: ToolRegistry (9 个内置工具)");
+        logger.info("✅ [Level 3] 工具层: ToolRegistry (9 个内置工具, 9 个 Blocker)");
 
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
@@ -115,11 +117,15 @@ public final class CoreModule {
         registry.register(new AskUserTool());
         registry.register(new BashTool());
 
+        FileOperationStateMachine stateMachine = new FileOperationStateMachine();
+        EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();
+        editBeforeReadBlocker.setStateMachine(stateMachine);
+
+        registry.getBlockerChain().add(stateMachine);
         registry.getBlockerChain().add(new com.example.agent.core.blocker.SchemaValidationBlocker(registry));
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.SyntaxValidationBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditBeforeReadBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.PathExistenceBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
+        registry.getBlockerChain().add(editBeforeReadBlocker);
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.SyntaxValidationBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditConfirmationBlocker());

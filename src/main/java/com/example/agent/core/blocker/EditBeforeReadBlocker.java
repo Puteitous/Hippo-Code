@@ -11,6 +11,8 @@ public class EditBeforeReadBlocker implements Blocker {
     private final Set<String> readFiles = ConcurrentHashMap.newKeySet();
     private final List<String> editTools = List.of("edit_file", "write_file");
 
+    private FileOperationStateMachine stateMachine;
+
     @Override
     public HookResult check(String toolName, JsonNode arguments) {
         if ("read_file".equals(toolName) && arguments.has("path")) {
@@ -30,16 +32,24 @@ public class EditBeforeReadBlocker implements Blocker {
             return HookResult.allow();
         }
 
-        String path = arguments.get("path").asText();
+        String pathStr = arguments.get("path").asText();
 
-        if (!readFiles.contains(path)) {
+        if (stateMachine != null && stateMachine.isNewlyCreated(pathStr)) {
+            return HookResult.allow();
+        }
+
+        if (!readFiles.contains(pathStr)) {
             return HookResult.deny(
-                String.format("编辑 %s 前未读取文件内容", path),
-                String.format("请先调用 read_file 获取 %s 的最新内容后再编辑", path)
+                String.format("编辑 %s 前未读取文件内容", pathStr),
+                String.format("请先调用 read_file 获取 %s 的最新内容后再编辑", pathStr)
             );
         }
 
         return HookResult.allow();
+    }
+
+    public void setStateMachine(FileOperationStateMachine stateMachine) {
+        this.stateMachine = stateMachine;
     }
 
     public void reset() {
