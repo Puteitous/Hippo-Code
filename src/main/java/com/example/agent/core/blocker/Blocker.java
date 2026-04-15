@@ -4,5 +4,5 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 public interface Blocker {
 
-    String check(String toolName, JsonNode arguments);
+    HookResult check(String toolName, JsonNode arguments);
 }

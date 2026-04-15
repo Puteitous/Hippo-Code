@@ -13,24 +13,24 @@ public class EditCountBlocker implements Blocker {
     private final List<String> editTools = List.of("edit_file", "write_file");
 
     @Override
-    public String check(String toolName, JsonNode arguments) {
+    public HookResult check(String toolName, JsonNode arguments) {
         if (!editTools.contains(toolName)) {
-            return null;
+            return HookResult.allow();
         }
 
         List<String> paths = getAffectedPaths(toolName, arguments);
         for (String path : paths) {
             int count = editCounts.getOrDefault(path, 0) + 1;
             if (count > MAX_EDITS_PER_FILE) {
-                return String.format(
-                    "⛔ 阻断: 文件 %s 已被编辑 %d 次。\n💡 建议: 停止打补丁，先理解根本原因，重新分析问题后再尝试修改。",
-                    path, MAX_EDITS_PER_FILE
+                return HookResult.deny(
+                    String.format("文件 %s 已被编辑 %d 次", path, MAX_EDITS_PER_FILE),
+                    "停止打补丁，先理解根本原因，重新分析问题后再尝试修改"
                 );
             }
             editCounts.put(path, count);
         }
 
-        return null;
+        return HookResult.allow();
     }
 
     private List<String> getAffectedPaths(String toolName, JsonNode arguments) {

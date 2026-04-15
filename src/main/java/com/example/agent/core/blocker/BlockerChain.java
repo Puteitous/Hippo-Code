@@ -15,14 +15,14 @@ public class BlockerChain implements Blocker {
     }
 
     @Override
-    public String check(String toolName, JsonNode arguments) {
+    public HookResult check(String toolName, JsonNode arguments) {
         for (Blocker blocker : blockers) {
-            String reason = blocker.check(toolName, arguments);
-            if (reason != null) {
-                return reason;
+            HookResult result = blocker.check(toolName, arguments);
+            if (!result.isAllowed()) {
+                return result;
             }
         }
-        return null;
+        return HookResult.allow();
     }
 
     public List<Blocker> getBlockers() {

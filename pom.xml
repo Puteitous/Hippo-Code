@@ -9,7 +9,7 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Simple Java Agent</name>
+    <name>Hippo Code</name>
     <description>A simple command-line AI Agent</description>
 
     <properties>
@@ -130,6 +130,12 @@
             <version>3.1.8</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>io.github.bonede</groupId>
+            <artifactId>tree-sitter</artifactId>
+            <version>0.22.6</version>
+        </dependency>
+
     </dependencies>
 
     <build>

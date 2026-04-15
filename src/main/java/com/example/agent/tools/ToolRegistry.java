@@ -85,15 +85,16 @@ public class ToolRegistry {
         try {
             JsonNode arguments = objectMapper.readTree(argumentsJson);
             
-            String blockReason = blockerChain.check(toolName, arguments);
-            if (blockReason != null) {
+            com.example.agent.core.blocker.HookResult hookResult = blockerChain.check(toolName, arguments);
+            if (!hookResult.isAllowed()) {
+                String errorMessage = hookResult.formatErrorMessage();
                 EventBus.publish(new ToolExecutedEvent(
                         toolName,
                         false,
                         System.currentTimeMillis() - startMs,
-                        blockReason
+                        hookResult.getReason()
                 ));
-                throw new ToolExecutionException(ErrorFormatter.formatBlocked(blockReason));
+                throw new ToolExecutionException(errorMessage);
             }
             
             String result = executor.execute(arguments);
