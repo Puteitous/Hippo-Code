@@ -104,6 +104,10 @@ public final class CoreModule {
         CacheManager cacheManager = ServiceLocator.get(CacheManager.class);
         ToolRegistry registry = new ToolRegistry(objectMapper);
 
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.PathExistenceBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditBeforeReadBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
 
         registry.register(new ReadFileTool(fileContentService));
