@@ -131,9 +131,9 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
-            <groupId>io.github.bonede</groupId>
-            <artifactId>tree-sitter</artifactId>
-            <version>0.22.6</version>
+            <groupId>ch.usi.si.seart</groupId>
+            <artifactId>java-tree-sitter</artifactId>
+            <version>1.12.0</version>
         </dependency>
 
     </dependencies>

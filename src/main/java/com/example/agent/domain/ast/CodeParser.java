@@ -6,5 +6,5 @@ public interface CodeParser {
 
     boolean supports(String filePath);
 
-    Object parse(String content) throws Exception;
+    ParseResult parse(String content) throws Exception;
 }
