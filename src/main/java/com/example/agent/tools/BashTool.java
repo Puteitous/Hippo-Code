@@ -29,8 +29,7 @@ public class BashTool implements ToolExecutor {
         "rm", "del", "rmdir", "rd", "format", "fdisk",
         "sudo", "su", "chmod", "chown",
         "shutdown", "reboot", "halt", "poweroff",
-        "dd", "mkfs", "fsck",
-        ">", ">>", "|", "&", ";", "&&", "||"
+        "dd", "mkfs", "fsck"
     ));
     
     private static final Set<String> DANGEROUS_PATTERNS = new HashSet<>(Arrays.asList(

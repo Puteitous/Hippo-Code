@@ -129,10 +129,23 @@ public class EditFileTool implements ToolExecutor {
             String content = Files.readString(path, StandardCharsets.UTF_8);
             
             int firstIndex = content.indexOf(oldText);
+            String adjustmentNote = "";
             if (firstIndex == -1) {
+                String adjusted = tryAdjustMatching(content, oldText);
+                if (adjusted != null) {
+                    adjustmentNote = String.format("\n✅ 智能修正：old_text 从 %d 字符调整为 %d 字符（移除了末尾不匹配的空白/换行）",
+                        oldText.length(), adjusted.length());
+                    logger.debug("智能修正匹配成功：{}", adjustmentNote);
+                    oldText = adjusted;
+                    firstIndex = content.indexOf(oldText);
+                }
+            }
+            
+            if (firstIndex == -1) {
+                String diagnosis = diagnoseMismatch(content, oldText);
                 throw new ToolExecutionException(
                     "未找到要替换的文本。\n" +
-                    "请确保 old_text 与文件中的内容完全一致（包括空格、缩进、换行符等）。\n" +
+                    diagnosis +
                     "提示：可以先使用 read_file 查看文件内容，然后精确复制要替换的文本。"
                 );
             }
@@ -163,7 +176,7 @@ public class EditFileTool implements ToolExecutor {
                 logger.debug("编辑文件后触发缓存失效: {}", absolutePath);
             }
             
-            return formatResult(relativePath, oldText, newText, content, newContent);
+            return formatResult(relativePath, oldText, newText, content, newContent, adjustmentNote);
             
         } catch (IOException e) {
             throw new ToolExecutionException("编辑文件失败: " + e.getMessage(), e);
@@ -183,12 +196,15 @@ public class EditFileTool implements ToolExecutor {
         return count;
     }
 
-    private String formatResult(String filePath, String oldText, String newText, String oldContent, String newContent) {
+    private String formatResult(String filePath, String oldText, String newText, String oldContent, String newContent, String adjustmentNote) {
         StringBuilder result = new StringBuilder();
         
         result.append("文件编辑成功\n");
         result.append("─────────────────────────────────────────────────────────────\n");
         result.append("文件: ").append(filePath).append("\n");
+        if (adjustmentNote != null && !adjustmentNote.isEmpty()) {
+            result.append(adjustmentNote).append("\n");
+        }
         result.append("─────────────────────────────────────────────────────────────\n");
         
         int oldLines = oldText.split("\n", -1).length;
@@ -228,5 +244,70 @@ public class EditFileTool implements ToolExecutor {
         }
         
         return sb.toString();
+    }
+
+    private String tryAdjustMatching(String content, String oldText) {
+        String trimmed = oldText.stripTrailing();
+        if (!trimmed.equals(oldText) && content.contains(trimmed)) {
+            return trimmed;
+        }
+        
+        String trimmedBoth = oldText.strip();
+        if (!trimmedBoth.equals(oldText) && content.contains(trimmedBoth)) {
+            return trimmedBoth;
+        }
+        
+        String noTrailingNewline = oldText.replaceAll("[\\r\\n]+$", "");
+        if (!noTrailingNewline.equals(oldText) && content.contains(noTrailingNewline)) {
+            return noTrailingNewline;
+        }
+        
+        String withNewline = oldText + "\n";
+        if (content.contains(withNewline)) {
+            return withNewline;
+        }
+        
+        return null;
+    }
+
+    private String diagnoseMismatch(String content, String oldText) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("=== 匹配诊断 ===\n");
+        sb.append("old_text 长度: ").append(oldText.length()).append(" 字符");
+        if (oldText.endsWith("\n")) {
+            sb.append(", 末尾有换行符");
+        } else {
+            sb.append(", 末尾无换行符");
+        }
+        sb.append("\n");
+        
+        String contentEnd = content.length() > 200 
+            ? content.substring(content.length() - 200) 
+            : content;
+        sb.append("文件末尾: ").append(contentEnd.endsWith("\n") 
+            ? "有换行符" : "无换行符").append("\n");
+        
+        if (oldText.endsWith("\n") && !content.contains(oldText.replaceAll("[\\r\\n]+$", ""))) {
+            sb.append("⚠️  检测到：old_text 多出末尾换行符！建议移除后重试\n");
+        }
+        
+        String partial = findLongestMatchingSuffix(content, oldText);
+        if (partial != null && partial.length() > 10) {
+            sb.append("💡 最长匹配片段: ").append(partial.length()).append(" 字符\n");
+        }
+        
+        sb.append("\n");
+        return sb.toString();
+    }
+
+    private String findLongestMatchingSuffix(String content, String oldText) {
+        for (int i = oldText.length() - 1; i >= 10; i--) {
+            String prefix = oldText.substring(0, i);
+            if (content.contains(prefix)) {
+                return prefix;
+            }
+        }
+        return null;
     }
 }

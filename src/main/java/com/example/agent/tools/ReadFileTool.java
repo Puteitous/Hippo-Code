@@ -125,11 +125,11 @@ public class ReadFileTool implements ToolExecutor {
             result.append("):\n");
             result.append("────────────────────────────────────────\n");
             result.append(content);
-            if (!content.endsWith("\n")) {
-                result.append("\n");
-            }
-            result.append("────────────────────────────────────────\n");
+            result.append("\n────────────────────────────────────────\n");
             result.append("(").append(content.length()).append(" 字符");
+            if (!content.endsWith("\n")) {
+                result.append(", 文件末尾无换行符");
+            }
             if (fileContentService != null) {
                 result.append(", 智能截断已启用");
             }

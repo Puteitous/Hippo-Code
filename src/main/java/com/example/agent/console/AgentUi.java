@@ -24,7 +24,7 @@ public class AgentUi {
     public void printWelcome() {
         println();
         println(ConsoleStyle.boldCyan("╔═════════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldCyan("║       Code Agent - AI 编程助手               ║"));
+        println(ConsoleStyle.boldCyan("║       Hippo Code - AI 编程助手               ║"));
         println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
         println(ConsoleStyle.info("模型: " + config.getModel()));
