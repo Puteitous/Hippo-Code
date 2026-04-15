@@ -19,7 +19,11 @@ public class SyntaxValidationBlocker implements Blocker {
     private final List<String> targetTools = List.of("edit_file", "write_file");
 
     public SyntaxValidationBlocker() {
-        parsers.put("java", new TreeSitterJavaParser());
+        if (TreeSitterJavaParser.isAvailable()) {
+            parsers.put("java", new TreeSitterJavaParser());
+        } else {
+            logger.warn("Tree-sitter is not available on this platform. Syntax validation will be disabled.");
+        }
     }
 
     @Override

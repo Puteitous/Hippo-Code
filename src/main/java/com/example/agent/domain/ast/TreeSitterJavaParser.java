@@ -15,9 +15,21 @@ import java.util.List;
 public class TreeSitterJavaParser implements CodeParser {
 
     private static final Logger logger = LoggerFactory.getLogger(TreeSitterJavaParser.class);
+    private static boolean libraryLoaded = false;
+    private static Throwable loadError = null;
 
     static {
-        LibraryLoader.load();
+        try {
+            LibraryLoader.load();
+            libraryLoaded = true;
+        } catch (Throwable t) {
+            loadError = t;
+            logger.warn("Tree-sitter library could not be loaded. Syntax validation will be disabled: {}", t.getMessage());
+        }
+    }
+
+    public static boolean isAvailable() {
+        return libraryLoaded;
     }
 
     @Override
@@ -32,6 +44,10 @@ public class TreeSitterJavaParser implements CodeParser {
 
     @Override
     public ParseResult parse(String content) throws Exception {
+        if (!libraryLoaded) {
+            return new ParseResult(true, List.of(), content);
+        }
+
         if (content == null || content.trim().isEmpty()) {
             return new ParseResult(true, List.of(), content);
         }
