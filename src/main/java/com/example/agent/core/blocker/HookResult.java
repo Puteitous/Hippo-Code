@@ -16,12 +16,29 @@ public class HookResult {
         return new HookResult(true, null, null);
     }
 
+    /**
+     * 格式/契约类错误专用 - SchemaValidationBlocker 等参数校验使用
+     * 只有这类错误才允许提供格式示例
+     */
+    @Deprecated
     public static HookResult deny(String reason, String suggestion) {
-        return new HookResult(false, reason, suggestion);
+        return validationError(reason, suggestion);
     }
 
-    public static HookResult block(String reason) {
-        return new HookResult(false, reason, null);
+    /**
+     * 格式/契约类错误专用 - 提供参数格式示例
+     * 仅限：SchemaValidationBlocker, SyntaxValidationBlocker
+     */
+    public static HookResult validationError(String reason, String example) {
+        return new HookResult(false, reason, example);
+    }
+
+    /**
+     * 逻辑/状态错误专用 - 只报错误码，不给指导
+     * 所有 Blocker 的默认选择
+     */
+    public static HookResult block(String errorCode) {
+        return new HookResult(false, errorCode, null);
     }
 
     public boolean isAllowed() {
@@ -40,10 +57,16 @@ public class HookResult {
         if (allowed) {
             return "";
         }
+        if (suggestion != null) {
+            return String.format("""
+                ⛔ 执行被阻断
+                ❌ 原因: %s
+                💡 示例: %s
+                """, reason, suggestion);
+        }
         return String.format("""
             ⛔ 执行被阻断
-            ❌ 原因: %s
-            💡 建议: %s
-            """, reason, suggestion);
+            ❌ %s
+            """, reason);
     }
 }

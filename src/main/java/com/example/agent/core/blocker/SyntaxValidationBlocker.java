@@ -49,7 +49,7 @@ public class SyntaxValidationBlocker implements Blocker {
             if (!result.isValid()) {
                 String suggestion = getSuggestionForErrors(result);
 
-                return HookResult.deny(
+                return HookResult.validationError(
                     String.format("检测到 %d 个语法错误\n%s",
                         result.getErrorCount(),
                         result.formatErrors()),

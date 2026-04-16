@@ -57,7 +57,7 @@ public class SchemaValidationBlocker implements Blocker {
 
         for (String field : requiredFields) {
             if (!arguments.has(field) || arguments.get(field).isNull()) {
-                return HookResult.deny(
+                return HookResult.validationError(
                     String.format("缺少必需参数: %s", field),
                     String.format("正确示例: %s", getExampleForTool(toolName, field))
                 );

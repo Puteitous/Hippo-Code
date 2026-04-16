@@ -18,12 +18,7 @@ public class ErrorFormatter {
     }
 
     public static String formatForAi(AgentException e) {
-        return String.format(
-            "错误码: %s\n错误信息: %s%s\n建议操作: %s",
-            e.getErrorCode().getCode(),
-            e.getErrorCode().getMessage(),
-            e.getDetail() != null ? "\n详细信息: " + e.getDetail() : "",
-            e.getSuggestion()
-        );
+        String detail = e.getDetail() != null ? ": " + e.getDetail() : "";
+        return String.format("%s%s", e.getErrorCode().name(), detail);
     }
 }

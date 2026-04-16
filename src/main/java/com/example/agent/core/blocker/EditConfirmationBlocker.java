@@ -42,7 +42,7 @@ public class EditConfirmationBlocker implements Blocker {
             if (confirmed) {
                 return HookResult.allow();
             } else {
-                return HookResult.deny("用户取消了修改", "用户交互");
+                return HookResult.block("USER_CANCELLED");
             }
 
         } catch (Exception e) {
