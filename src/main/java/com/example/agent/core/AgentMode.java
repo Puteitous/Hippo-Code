@@ -10,7 +10,7 @@ public enum AgentMode {
 
     BUILDER("🛠️", "构建模式", "全权限执行，自动完成任务",
         Set.of("glob", "grep", "list_directory", "read_file", "search_code", 
-               "write_file", "edit_file", "bash", "ask_user")
+               "write_file", "edit_file", "bash", "ask_user", "todo_write")
     );
 
     private final String icon;

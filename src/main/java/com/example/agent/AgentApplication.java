@@ -5,6 +5,7 @@ import com.example.agent.console.CommandDispatcher;
 import com.example.agent.console.InputHandler;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.core.AgentContext;
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.core.blocker.EditConfirmationBlocker;
 import com.example.agent.execute.AgentTurnExecutor;
 import com.example.agent.execute.ConversationLoop;
@@ -54,6 +55,7 @@ public class AgentApplication {
             context.initialize();
 
             AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
+            ServiceLocator.registerSingleton(AgentUi.class, ui);
             TokenEstimator tokenEstimator = context.getTokenEstimator();
             InputHandler inputHandler = new InputHandler(context.getReader(), tokenEstimator);
             

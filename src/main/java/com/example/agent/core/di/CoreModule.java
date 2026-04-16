@@ -1,10 +1,13 @@
 package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.core.ThinkingEngine;
 import com.example.agent.core.blocker.EditBeforeReadBlocker;
 import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
+import com.example.agent.core.todo.TodoManager;
+import com.example.agent.tools.TodoWriteTool;
 import com.example.agent.core.health.CacheHealthIndicator;
 import com.example.agent.core.health.ConfigHealthIndicator;
 import com.example.agent.core.health.HealthCheckRegistry;
@@ -78,13 +81,17 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(CodeIndex.class, codeIndex);
         logger.info("✅ [Level 2] 领域服务: CodeIndex");
 
+        TodoManager todoManager = new TodoManager();
+        ServiceLocator.registerSingleton(TodoManager.class, todoManager);
+        logger.info("✅ [Level 2] 领域服务: TodoManager");
+
         LlmClient llmClient = LlmClientFactory.create(config, ServiceLocator.get(RetryPolicy.class));
         ServiceLocator.registerSingleton(LlmClient.class, llmClient);
         logger.info("✅ [Level 2] 领域服务: LlmClient");
 
         ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, fileContentService, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
-        logger.info("✅ [Level 3] 工具层: ToolRegistry (9 个内置工具, 9 个 Blocker)");
+        logger.info("✅ [Level 3] 工具层: ToolRegistry (10 个内置工具, 9 个 Blocker)");
 
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
@@ -116,6 +123,7 @@ public final class CoreModule {
         registry.register(new GrepTool());
         registry.register(new AskUserTool());
         registry.register(new BashTool());
+        registry.register(new TodoWriteTool(ServiceLocator.get(TodoManager.class)));
 
         FileOperationStateMachine stateMachine = new FileOperationStateMachine();
         EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();
