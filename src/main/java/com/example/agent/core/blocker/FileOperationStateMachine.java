@@ -75,10 +75,7 @@ public class FileOperationStateMachine implements Blocker {
     private HookResult handleWriteFile(String pathStr, FileState state) {
         switch (state) {
             case IS_DIRECTORY:
-                return HookResult.deny(
-                    String.format("路径是目录而不是文件: %s", pathStr),
-                    "write_file 不能写入目录，请指定具体的文件路径"
-                );
+                return HookResult.block(String.format("FileStateError: path is directory %s", pathStr));
             case NOT_EXISTS:
             case NEWLY_CREATED:
                 trackedNewFiles.add(pathStr);
@@ -94,15 +91,9 @@ public class FileOperationStateMachine implements Blocker {
         switch (state) {
             case NOT_EXISTS:
             case NEWLY_CREATED:
-                return HookResult.deny(
-                    String.format("文件不存在: %s", pathStr),
-                    "edit_file 只能修改已存在的文件，创建新文件请使用 write_file"
-                );
+                return HookResult.block(String.format("FileStateError: not exists for edit %s", pathStr));
             case IS_DIRECTORY:
-                return HookResult.deny(
-                    String.format("路径是目录而不是文件: %s", pathStr),
-                    "edit_file 不能编辑目录"
-                );
+                return HookResult.block(String.format("FileStateError: path is directory %s", pathStr));
             case EXISTS:
                 return HookResult.allow();
             default:
@@ -114,15 +105,9 @@ public class FileOperationStateMachine implements Blocker {
         switch (state) {
             case NOT_EXISTS:
             case NEWLY_CREATED:
-                return HookResult.deny(
-                    String.format("路径不存在: %s", pathStr),
-                    "请先使用 glob 或 grep 搜索确认文件位置，或确认路径是否正确"
-                );
+                return HookResult.block(String.format("FileStateError: not exists %s", pathStr));
             case IS_DIRECTORY:
-                return HookResult.deny(
-                    String.format("路径是目录而不是文件: %s", pathStr),
-                    "请使用 list_directory 查看目录内容"
-                );
+                return HookResult.block(String.format("FileStateError: path is directory %s", pathStr));
             case EXISTS:
                 return HookResult.allow();
             default:
@@ -134,15 +119,9 @@ public class FileOperationStateMachine implements Blocker {
         switch (state) {
             case NOT_EXISTS:
             case NEWLY_CREATED:
-                return HookResult.deny(
-                    String.format("要删除的文件不存在: %s", pathStr),
-                    "请确认路径是否正确"
-                );
+                return HookResult.block(String.format("FileStateError: not exists for delete %s", pathStr));
             case IS_DIRECTORY:
-                return HookResult.deny(
-                    String.format("不能删除目录: %s", pathStr),
-                    "delete_file 只能删除文件"
-                );
+                return HookResult.block(String.format("FileStateError: cannot delete directory %s", pathStr));
             case EXISTS:
                 trackedNewFiles.remove(pathStr);
                 return HookResult.allow();

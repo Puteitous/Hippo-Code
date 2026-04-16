@@ -39,10 +39,7 @@ public class EditBeforeReadBlocker implements Blocker {
         }
 
         if (!readFiles.contains(pathStr)) {
-            return HookResult.deny(
-                String.format("编辑 %s 前未读取文件内容", pathStr),
-                String.format("请先调用 read_file 获取 %s 的最新内容后再编辑", pathStr)
-            );
+            return HookResult.block(String.format("EditBeforeReadError: %s", pathStr));
         }
 
         return HookResult.allow();

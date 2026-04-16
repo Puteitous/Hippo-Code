@@ -22,10 +22,7 @@ public class EditCountBlocker implements Blocker {
         for (String path : paths) {
             int count = editCounts.getOrDefault(path, 0) + 1;
             if (count > MAX_EDITS_PER_FILE) {
-                return HookResult.deny(
-                    String.format("文件 %s 已被编辑 %d 次", path, MAX_EDITS_PER_FILE),
-                    "停止打补丁，先理解根本原因，重新分析问题后再尝试修改"
-                );
+                return HookResult.block(String.format("EditCountExceededError: %s", path));
             }
             editCounts.put(path, count);
         }

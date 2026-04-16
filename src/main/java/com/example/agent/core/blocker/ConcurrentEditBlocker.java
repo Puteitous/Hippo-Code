@@ -23,10 +23,7 @@ public class ConcurrentEditBlocker implements Blocker {
         String path = arguments.get("path").asText();
 
         if (lockManager.isLocked(path)) {
-            return HookResult.deny(
-                String.format("文件 %s 正在被其他操作编辑中", path),
-                "请等待当前编辑完成后再尝试，或确认是否有并发编辑冲突"
-            );
+            return HookResult.block(String.format("ConcurrentEditLockError: %s", path));
         }
 
         return HookResult.allow();

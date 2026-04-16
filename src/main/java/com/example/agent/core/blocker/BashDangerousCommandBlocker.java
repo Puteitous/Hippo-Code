@@ -28,10 +28,7 @@ public class BashDangerousCommandBlocker implements Blocker {
 
         for (String pattern : DANGEROUS_PATTERNS) {
             if (command.contains(pattern)) {
-                return HookResult.deny(
-                    String.format("检测到危险命令模式: %s", pattern),
-                    "为了系统安全，该操作已被禁止。如需执行请使用更安全的方式"
-                );
+                return HookResult.block(String.format("CommandBlocked: %s", pattern));
             }
         }
 
