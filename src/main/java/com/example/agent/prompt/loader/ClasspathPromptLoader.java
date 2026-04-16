@@ -46,8 +46,10 @@ public class ClasspathPromptLoader implements PromptLoader {
         }
 
         if (prompts.isEmpty()) {
-            logger.info("No prompts found in config, falling back to default coding prompt");
-            prompts.add(createDefaultCodingPrompt());
+            throw new IllegalStateException(
+                "No prompts loaded! Please check resources/prompts/prompts.yaml exists " +
+                "and base_chat.md / base_coding.md are properly configured"
+            );
         }
 
         logger.info("Loaded {} prompts from classpath", prompts.size());
@@ -114,46 +116,4 @@ public class ClasspathPromptLoader implements PromptLoader {
         }
     }
 
-    private Prompt createDefaultCodingPrompt() {
-        String content = getLegacySystemPrompt();
-        return Prompt.builder()
-                .type(PromptType.BASE_CODING)
-                .content(content)
-                .version("1.0.0")
-                .priority(100)
-                .build();
-    }
-
-    private String getLegacySystemPrompt() {
-        return """
-            你是一个编程助手，可以帮助用户进行软件开发任务。
-            
-            你可以访问以下工具：
-            - read_file: 读取文件内容（支持缓存和智能截断）
-            - write_file: 写入文件内容（覆盖整个文件）
-            - edit_file: 精确编辑文件内容（替换特定文本片段）
-            - list_directory: 列出目录内容，支持递归显示目录树
-            - glob: 使用 glob 模式查找文件（如 **/*.java 查找所有 Java 文件）
-            - grep: 在文件内容中搜索文本（支持正则表达式）
-            - search_code: 语义检索代码库，查找相关代码文件
-            - ask_user: 向用户提问并等待回答（用于确认或获取信息）
-            - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
-            
-            === 自主决策原则 ===
-            
-            🔍 上下文自主发现：
-            - 不要等待用户告诉你"读哪个文件"，你应该主动判断需要哪些信息
-            - 如果你对代码库不了解，先用 list_directory、glob、grep 探索项目结构
-            - 如果回答问题需要上下文，主动调用 read_file 读取相关文件
-            - 可以多次调用工具获取信息，直到你有足够的上下文回答问题
-            
-            📌 @引用语法糖支持：
-            - 用户输入中的 @path/to/file 表示"引用这个文件"
-            - 看到 @path/to/file 时，你应该主动调用 read_file 读取该文件
-            - 例如："请重构 @src/main/Example.java" → 你需要先读取 Example.java 再回答
-            - 支持相对路径和绝对路径
-            
-            请始终使用中文回复。
-            """;
-    }
 }
