@@ -183,6 +183,24 @@ public class AgentContext {
             this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
             logger.info("优先级记忆策略已启用 ✅");
         }
+
+        // 模式切换监听器：自动切换 System Prompt
+        onModeChanged(newMode -> {
+            com.example.agent.prompt.model.TaskMode taskMode = switch (newMode) {
+                case CHAT -> com.example.agent.prompt.model.TaskMode.CHAT;
+                case BUILDER -> com.example.agent.prompt.model.TaskMode.CODING;
+            };
+            String prompt = promptService.getBasePrompt(taskMode);
+            String enhancedPrompt = ruleManager.enhanceSystemPrompt(prompt);
+            conversationManager.setSystemPrompt(enhancedPrompt);
+            logger.info("系统 Prompt 已切换为: {}", taskMode);
+        });
+
+        // 默认使用 Chat 模式 Prompt
+        String defaultPrompt = promptService.getBasePrompt(com.example.agent.prompt.model.TaskMode.CHAT);
+        String enhancedDefaultPrompt = ruleManager.enhanceSystemPrompt(defaultPrompt);
+        conversationManager.setSystemPrompt(enhancedDefaultPrompt);
+        logger.info("默认启用 Chat 模式 System Prompt ✅");
     }
 
     public void resetConversation() {

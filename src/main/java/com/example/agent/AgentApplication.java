@@ -66,6 +66,7 @@ public class AgentApplication {
             }
 
             ToolCallProcessor toolCallProcessor = new ToolCallProcessor(
+                    context,
                     context.getConcurrentToolExecutor(),
                     context.getConversationManager(),
                     ui

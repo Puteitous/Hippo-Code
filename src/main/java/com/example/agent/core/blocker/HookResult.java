@@ -20,6 +20,10 @@ public class HookResult {
         return new HookResult(false, reason, suggestion);
     }
 
+    public static HookResult block(String reason) {
+        return new HookResult(false, reason, null);
+    }
+
     public boolean isAllowed() {
         return allowed;
     }

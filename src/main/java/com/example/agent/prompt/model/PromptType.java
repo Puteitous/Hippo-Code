@@ -4,6 +4,7 @@ public enum PromptType {
 
     BASE_CODING("base", "coding", "基础编程助手"),
     BASE_RESEARCH("base", "research", "代码研究模式"),
+    BASE_CHAT("base", "chat", "聊天对话模式"),
 
     TASK_REFACTOR("task", "refactor", "代码重构专家"),
     TASK_DEBUG("task", "debug", "调试专家"),

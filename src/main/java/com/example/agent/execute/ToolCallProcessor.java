@@ -2,6 +2,8 @@ package com.example.agent.execute;
 
 import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
+import com.example.agent.core.AgentContext;
+import com.example.agent.core.AgentMode;
 import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
@@ -10,6 +12,8 @@ import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,14 +22,19 @@ import java.util.Map;
 
 public class ToolCallProcessor {
 
+    private static final Logger logger = LoggerFactory.getLogger(ToolCallProcessor.class);
+
     private final ConcurrentToolExecutor concurrentToolExecutor;
     private final ConversationManager conversationManager;
     private final AgentUi ui;
     private final TruncationService truncationService;
+    private final AgentContext context;
 
-    public ToolCallProcessor(ConcurrentToolExecutor concurrentToolExecutor,
+    public ToolCallProcessor(AgentContext context,
+                             ConcurrentToolExecutor concurrentToolExecutor,
                              ConversationManager conversationManager,
                              AgentUi ui) {
+        this.context = context;
         this.concurrentToolExecutor = concurrentToolExecutor;
         this.conversationManager = conversationManager;
         this.ui = ui;
@@ -38,6 +47,7 @@ public class ToolCallProcessor {
         }
 
         long startTime = System.currentTimeMillis();
+        AgentMode mode = context.getCurrentMode();
 
         List<ToolCall> validToolCalls = new ArrayList<>();
         Map<String, String> argumentsMap = new HashMap<>();
@@ -45,6 +55,19 @@ public class ToolCallProcessor {
         for (ToolCall toolCall : toolCalls) {
             if (toolCall.getFunction() != null && toolCall.getFunction().getName() != null
                     && !toolCall.getFunction().getName().isEmpty()) {
+                
+                String toolName = toolCall.getFunction().getName();
+                if (!mode.isToolAllowed(toolName)) {
+                    String msg = String.format(
+                        "[%s] 模式下不允许使用工具 '%s'，请输入 /builder 切换到构建模式",
+                        mode.getDisplayName(), toolName
+                    );
+                    ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.yellow(msg));
+                    logger.warn("模式权限拦截: {} - {}", mode, toolName);
+                    conversationManager.addToolResult(toolCall.getId(), toolName, "权限受限: " + msg);
+                    continue;
+                }
+                
                 validToolCalls.add(toolCall);
                 argumentsMap.put(toolCall.getId(), toolCall.getFunction().getArguments());
             } else {

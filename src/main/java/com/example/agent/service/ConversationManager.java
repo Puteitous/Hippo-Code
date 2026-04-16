@@ -15,7 +15,7 @@ public class ConversationManager {
 
     private final List<Message> conversationHistory;
     private final TokenEstimator tokenEstimator;
-    private final String systemPrompt;
+    private String systemPrompt;
     
     private TrimPolicy trimPolicy;
     private final Compressor toolResultCompressor;
@@ -61,6 +61,15 @@ public class ConversationManager {
     public void reset() {
         conversationHistory.clear();
         conversationHistory.add(Message.system(systemPrompt));
+    }
+
+    public void setSystemPrompt(String newSystemPrompt) {
+        this.systemPrompt = newSystemPrompt;
+        reset();
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
     }
 
     public void addUserMessage(String content) {
@@ -143,10 +152,6 @@ public class ConversationManager {
 
     public Compressor getToolResultCompressor() {
         return toolResultCompressor;
-    }
-
-    public String getSystemPrompt() {
-        return systemPrompt;
     }
 
     public SessionData exportSession(String sessionId, SessionData.Status status) {
