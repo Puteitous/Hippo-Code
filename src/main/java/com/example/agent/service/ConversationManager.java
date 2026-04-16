@@ -64,8 +64,23 @@ public class ConversationManager {
     }
 
     public void setSystemPrompt(String newSystemPrompt) {
+        setSystemPrompt(newSystemPrompt, false);
+    }
+
+    public void setSystemPrompt(String newSystemPrompt, boolean preserveHistory) {
         this.systemPrompt = newSystemPrompt;
-        reset();
+
+        if (!preserveHistory || conversationHistory.isEmpty()) {
+            reset();
+            return;
+        }
+
+        // ✅ 无缝切换：只替换第一条 System 消息，保留所有对话历史
+        if (!conversationHistory.isEmpty() && conversationHistory.get(0).isSystem()) {
+            conversationHistory.set(0, Message.system(newSystemPrompt));
+        } else {
+            conversationHistory.add(0, Message.system(newSystemPrompt));
+        }
     }
 
     public String getSystemPrompt() {

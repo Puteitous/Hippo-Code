@@ -67,6 +67,22 @@ public class Message {
         return message;
     }
 
+    public boolean isSystem() {
+        return "system".equals(role);
+    }
+
+    public boolean isUser() {
+        return "user".equals(role);
+    }
+
+    public boolean isAssistant() {
+        return "assistant".equals(role);
+    }
+
+    public boolean isTool() {
+        return "tool".equals(role);
+    }
+
     public String getRole() {
         return role;
     }

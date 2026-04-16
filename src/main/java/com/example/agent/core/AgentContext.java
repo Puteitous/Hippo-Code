@@ -20,11 +20,15 @@ import com.example.agent.service.TokenEstimator;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
+import com.example.agent.console.AgentUi;
+import com.example.agent.console.ConsoleStyle;
 import com.example.agent.orchestrator.ToolOrchestrator;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.Reference;
 import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
+import org.jline.utils.InfoCmp;
 import org.jline.terminal.TerminalBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,6 +117,34 @@ public class AgentContext {
                 .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/builder", "/mode", "/mode chat", "/mode builder"))
                 .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                 .build();
+
+        // ✅ 注册快捷键: Shift+Tab 一键切换 Builder/Chat 模式
+        registerModeSwitchShortcut();
+    }
+
+    private void registerModeSwitchShortcut() {
+        reader.getWidgets().put("toggle-mode", () -> {
+            AgentMode newMode = (currentMode == AgentMode.CHAT) 
+                ? AgentMode.BUILDER 
+                : AgentMode.CHAT;
+            
+            switchMode(newMode);
+            
+            terminal.puts(InfoCmp.Capability.carriage_return);
+            terminal.writer().println();
+            terminal.writer().println(ConsoleStyle.boldCyan(String.format(
+                "  ⌨️  Shift+Tab 切换到 %s", newMode.getFullDisplayName()
+            )));
+            terminal.writer().flush();
+            
+            reader.callWidget(LineReader.REDRAW_LINE);
+            return true;
+        });
+        
+        reader.getKeyMaps().get(LineReader.MAIN).bind(
+            new Reference("toggle-mode"), 
+            "shift-tab"
+        );
     }
 
     public void initialize() {
@@ -184,7 +216,7 @@ public class AgentContext {
             logger.info("优先级记忆策略已启用 ✅");
         }
 
-        // 模式切换监听器：自动切换 System Prompt
+        // 模式切换监听器：自动切换 System Prompt + 状态栏，无缝保留上下文
         onModeChanged(newMode -> {
             com.example.agent.prompt.model.TaskMode taskMode = switch (newMode) {
                 case CHAT -> com.example.agent.prompt.model.TaskMode.CHAT;
@@ -192,8 +224,17 @@ public class AgentContext {
             };
             String prompt = promptService.getBasePrompt(taskMode);
             String enhancedPrompt = ruleManager.enhanceSystemPrompt(prompt);
-            conversationManager.setSystemPrompt(enhancedPrompt);
-            logger.info("系统 Prompt 已切换为: {}", taskMode);
+            
+            // ✅ 核心：preserveHistory = true
+            conversationManager.setSystemPrompt(enhancedPrompt, true);
+            
+            // ✅ 更新 Terminal 状态栏标题
+            AgentUi ui = ServiceLocator.getOrNull(AgentUi.class);
+            if (ui != null) {
+                ui.updateTerminalTitle(newMode);
+            }
+            
+            logger.info("模式无缝切换: {} - 上下文已完整保留", newMode.getFullDisplayName());
         });
 
         // 默认使用 Chat 模式 Prompt

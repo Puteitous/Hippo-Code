@@ -3,6 +3,7 @@ package com.example.agent.execute;
 import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.core.AgentContext;
+import com.example.agent.core.AgentMode;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;
@@ -140,6 +141,12 @@ public class AgentTurnExecutor {
             ui.println();
             ui.println(ConsoleStyle.gray(" ---  ") + ConsoleStyle.green("完成✅"));
             ui.println();
+
+            if (context.getCurrentMode() == AgentMode.CHAT) {
+                ui.println(ConsoleStyle.gray("💡 需要直接修改文件？输入 /builder 开启全权限模式"));
+                ui.println();
+            }
+
             ui.println(ConsoleStyle.conversationEnd());
             ui.println();
             return AgentTurnResult.DONE;
