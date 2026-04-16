@@ -1,6 +1,7 @@
 package com.example.agent.console;
 
 import com.example.agent.config.Config;
+import com.example.agent.core.AgentMode;
 import com.example.agent.logging.LogDirectoryManager;
 import org.jline.terminal.Terminal;
 
@@ -27,15 +28,19 @@ public class AgentUi {
         println(ConsoleStyle.boldCyan("║       Hippo Code - AI 编程助手               ║"));
         println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
+        printModeInfo(AgentMode.CHAT);
         println(ConsoleStyle.info("模型: " + config.getModel()));
         println(ConsoleStyle.info("API: " + config.getBaseUrl()));
         println();
         println(ConsoleStyle.bold("快捷命令:"));
-        println(ConsoleStyle.green("  help  ") + ConsoleStyle.gray(" - 显示帮助"));
-        println(ConsoleStyle.green("  multi ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));
-        println(ConsoleStyle.green("  reset ") + ConsoleStyle.gray(" - 重置会话"));
-        println(ConsoleStyle.blue("  /mcp  ") + ConsoleStyle.gray(" - MCP服务管理"));
-        println(ConsoleStyle.green("  exit  ") + ConsoleStyle.gray(" - 退出程序"));
+        println(ConsoleStyle.green("  /chat    ") + ConsoleStyle.gray(" - 切换到聊天模式（只读探索）"));
+        println(ConsoleStyle.cyan("  /builder ") + ConsoleStyle.gray(" - 切换到构建模式（全权限执行）"));
+        println(ConsoleStyle.gray("  /mode    ") + ConsoleStyle.gray(" - 查看当前模式"));
+        println(ConsoleStyle.green("  help     ") + ConsoleStyle.gray(" - 显示帮助"));
+        println(ConsoleStyle.green("  multi    ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));
+        println(ConsoleStyle.green("  reset    ") + ConsoleStyle.gray(" - 重置会话"));
+        println(ConsoleStyle.blue("  /mcp     ") + ConsoleStyle.gray(" - MCP服务管理"));
+        println(ConsoleStyle.green("  exit     ") + ConsoleStyle.gray(" - 退出程序"));
         println();
         
         if (config.getMcp().isEnabled()) {
@@ -48,6 +53,13 @@ public class AgentUi {
         }
         
         println(ConsoleStyle.yellow("提示: 粘贴多行内容请先输入 \"\"\" 或 multi"));
+        println();
+    }
+
+    public void printModeInfo(AgentMode mode) {
+        String modeColor = mode == AgentMode.CHAT ? ConsoleStyle.GREEN : ConsoleStyle.CYAN;
+        println(ConsoleStyle.apply(modeColor, "  [" + mode.getIcon() + " " + mode.getDisplayName() + "]"));
+        println(ConsoleStyle.gray("  " + mode.getDescription()));
         println();
     }
 

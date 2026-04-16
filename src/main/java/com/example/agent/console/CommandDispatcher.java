@@ -77,6 +77,7 @@ public class CommandDispatcher {
 
     private final AgentUi ui;
     private final Config config;
+    private final AgentContext context;
     private final InputHandler inputHandler;
     private final ConversationManager conversationManager;
     private final TokenMetricsCollector tokenMetricsCollector;
@@ -87,6 +88,7 @@ public class CommandDispatcher {
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler) {
         this.ui = ui;
         this.config = context.getConfig();
+        this.context = context;
         this.inputHandler = inputHandler;
         this.conversationManager = context.getConversationManager();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
@@ -97,6 +99,7 @@ public class CommandDispatcher {
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler, SessionStorage sessionStorage) {
         this.ui = ui;
         this.config = context.getConfig();
+        this.context = context;
         this.inputHandler = inputHandler;
         this.conversationManager = context.getConversationManager();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
@@ -176,6 +179,25 @@ public class CommandDispatcher {
 
         if (line.toLowerCase().startsWith("/mcp")) {
             return handleMcpCommand(line);
+        }
+
+        if ("/chat".equalsIgnoreCase(line) || "/mode chat".equalsIgnoreCase(line)) {
+            context.switchMode(com.example.agent.core.AgentMode.CHAT);
+            ui.printModeInfo(context.getCurrentMode());
+            return CommandResult.continueExecution();
+        }
+
+        if ("/builder".equalsIgnoreCase(line) || "/mode builder".equalsIgnoreCase(line)) {
+            context.switchMode(com.example.agent.core.AgentMode.BUILDER);
+            ui.printModeInfo(context.getCurrentMode());
+            return CommandResult.continueExecution();
+        }
+
+        if ("/mode".equalsIgnoreCase(line)) {
+            ui.printModeInfo(context.getCurrentMode());
+            ui.println(ConsoleStyle.gray("  使用 /chat 切换到聊天模式， /builder 切换到构建模式"));
+            ui.println();
+            return CommandResult.continueExecution();
         }
 
         return CommandResult.processInput(line);

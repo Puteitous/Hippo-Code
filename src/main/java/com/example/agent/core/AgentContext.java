@@ -100,6 +100,8 @@ public class AgentContext {
     private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
     private McpServiceManager mcpServiceManager;
+    private AgentMode currentMode = AgentMode.CHAT;
+    private final java.util.List<java.util.function.Consumer<AgentMode>> modeChangeListeners = new java.util.ArrayList<>();
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
@@ -108,7 +110,7 @@ public class AgentContext {
                 .build();
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
-                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools"))
+                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/builder", "/mode", "/mode chat", "/mode builder"))
                 .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                 .build();
     }
@@ -265,6 +267,23 @@ public class AgentContext {
 
     public McpServiceManager getMcpServiceManager() {
         return mcpServiceManager;
+    }
+
+    public AgentMode getCurrentMode() {
+        return currentMode;
+    }
+
+    public void switchMode(AgentMode newMode) {
+        if (currentMode != newMode) {
+            AgentMode oldMode = currentMode;
+            currentMode = newMode;
+            logger.info("模式切换: {} -> {}", oldMode.getDisplayName(), newMode.getDisplayName());
+            modeChangeListeners.forEach(listener -> listener.accept(newMode));
+        }
+    }
+
+    public void onModeChanged(java.util.function.Consumer<AgentMode> listener) {
+        modeChangeListeners.add(listener);
     }
 
     public void close() {

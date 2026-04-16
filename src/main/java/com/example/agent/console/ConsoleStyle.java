@@ -5,7 +5,22 @@ import org.jline.utils.AttributedStyle;
 
 public final class ConsoleStyle {
 
+    public static final String GREEN = "GREEN";
+    public static final String CYAN = "CYAN";
+
     private ConsoleStyle() {
+    }
+
+    public static String apply(String color, String text) {
+        if (text == null) {
+            return "";
+        }
+        if (GREEN.equals(color)) {
+            return green(text);
+        } else if (CYAN.equals(color)) {
+            return cyan(text);
+        }
+        return text;
     }
 
     public static String green(String text) {
