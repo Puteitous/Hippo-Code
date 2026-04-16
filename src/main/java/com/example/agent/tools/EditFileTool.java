@@ -273,31 +273,17 @@ public class EditFileTool implements ToolExecutor {
     private String diagnoseMismatch(String content, String oldText) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append("=== 匹配诊断 ===\n");
-        sb.append("old_text 长度: ").append(oldText.length()).append(" 字符");
-        if (oldText.endsWith("\n")) {
-            sb.append(", 末尾有换行符");
-        } else {
-            sb.append(", 末尾无换行符");
-        }
-        sb.append("\n");
-        
-        String contentEnd = content.length() > 200 
-            ? content.substring(content.length() - 200) 
-            : content;
-        sb.append("文件末尾: ").append(contentEnd.endsWith("\n") 
-            ? "有换行符" : "无换行符").append("\n");
+        sb.append("EditMismatchError: old_text not found in file\n");
         
         if (oldText.endsWith("\n") && !content.contains(oldText.replaceAll("[\\r\\n]+$", ""))) {
-            sb.append("⚠️  检测到：old_text 多出末尾换行符！建议移除后重试\n");
+            sb.append("EOL_MISMATCH: old_text has trailing newline\n");
         }
         
         String partial = findLongestMatchingSuffix(content, oldText);
         if (partial != null && partial.length() > 10) {
-            sb.append("💡 最长匹配片段: ").append(partial.length()).append(" 字符\n");
+            sb.append(String.format("PARTIAL_MATCH: %d chars\n", partial.length()));
         }
         
-        sb.append("\n");
         return sb.toString();
     }
 

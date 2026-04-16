@@ -88,34 +88,21 @@ public class SearchCodeTool implements ToolExecutor {
                 : DEFAULT_MAX_TOKENS;
 
         StringBuilder result = new StringBuilder();
-        result.append("代码库检索结果 (查询: '").append(query).append("'):\n");
-        result.append("────────────────────────────────────────\n");
+        result.append("SEARCH_CODE: '").append(query).append("'\n");
 
         if (codeIndex != null) {
             List<String> results = codeIndex.search(query, maxResults, maxTokens);
 
             if (results.isEmpty()) {
-                result.append("未找到相关代码文件\n");
-                result.append("\n建议：\n");
-                result.append("  - 使用更具体的关键词\n");
-                result.append("  - 先用 list_directory 了解项目结构\n");
-                result.append("  - 先用 glob 查找特定类型文件\n");
+                result.append("EMPTY\n");
             } else {
                 for (int i = 0; i < results.size(); i++) {
-                    result.append("\n[").append(i + 1).append("] ");
                     result.append(results.get(i)).append("\n");
                 }
             }
         } else {
-            result.append("检索功能暂不可用\n");
-            result.append("\n请尝试：\n");
-            result.append("  - 使用 glob 工具查找文件\n");
-            result.append("  - 使用 grep 工具搜索文本\n");
-            result.append("  - 使用 list_directory 浏览目录\n");
+            result.append("INDEX_NOT_AVAILABLE\n");
         }
-
-        result.append("────────────────────────────────────────\n");
-        result.append("\n💡 提示：找到感兴趣的文件后，使用 read_file 读取详细内容\n");
 
         return result.toString();
     }
