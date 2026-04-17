@@ -128,15 +128,19 @@ public class ConversationLoop {
 
         conversationLogger.logUserInput(userInput, inputTokens);
 
-        if (intentRecognizer != null && intentRecognizer.isEnabled()) {
-            lastIntentResult = recognizeIntent(userInput);
-            displayIntentInfo(lastIntentResult);
-        }
-
-        if (taskPlanner != null && taskPlanner.isEnabled() && lastIntentResult != null) {
-            lastExecutionPlan = createExecutionPlan(userInput, lastIntentResult);
-            displayPlanInfo(lastExecutionPlan);
-        }
+        // TEMPORARY DISABLED: Intent and Plan modules are not integrated into execution flow
+        // lastIntentResult = null;
+        // lastExecutionPlan = null;
+        //
+        // if (intentRecognizer != null && intentRecognizer.isEnabled()) {
+        //     lastIntentResult = recognizeIntent(userInput);
+        //     displayIntentInfo(lastIntentResult);
+        //
+        //     if (taskPlanner != null && taskPlanner.isEnabled()) {
+        //         lastExecutionPlan = createExecutionPlan(userInput, lastIntentResult);
+        //         displayPlanInfo(lastExecutionPlan);
+        //     }
+        // }
 
         conversationManager.addUserMessage(userInput);
         conversationManager.trimHistory((messageCount, tokenCount) -> {
@@ -151,14 +155,6 @@ public class ConversationLoop {
         ui.println();
 
         try {
-            IntentResult intent = recognizeIntent(userInput);
-
-            ExecutionPlan plan = null;
-            if (taskPlanner != null && intent != null) {
-                plan = createExecutionPlan(userInput, intent);
-                displayIntentInfo(intent);
-                displayPlanInfo(plan);
-            }
 
             processAgentLoop();
 

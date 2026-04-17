@@ -41,7 +41,7 @@ public class AgentUi {
         println(ConsoleStyle.bold("快捷命令:"));
         println(ConsoleStyle.green("  /chat    ") + ConsoleStyle.gray(" - 切换到聊天模式（只读探索）"));
         println(ConsoleStyle.cyan("  /builder ") + ConsoleStyle.gray(" - 切换到构建模式（全权限执行）"));
-        println(ConsoleStyle.yellow("  Shift+Tab ") + ConsoleStyle.gray(" - 快速切换两种模式（与 Claude Code 对齐）✨"));
+        println(ConsoleStyle.yellow("  Ctrl+B    ") + ConsoleStyle.gray(" - 快速切换两种模式✨"));
         println(ConsoleStyle.gray("  /mode    ") + ConsoleStyle.gray(" - 查看当前模式"));
         println(ConsoleStyle.green("  help     ") + ConsoleStyle.gray(" - 显示帮助"));
         println(ConsoleStyle.green("  multi    ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));

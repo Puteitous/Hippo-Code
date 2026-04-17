@@ -77,7 +77,8 @@ public class AgentContext {
     }
 
     private void registerModeSwitchShortcut() {
-        reader.getWidgets().put("toggle-mode", () -> {
+        final String WIDGET_NAME = "toggle-mode";
+        reader.getWidgets().put(WIDGET_NAME, () -> {
             AgentMode newMode = (currentMode == AgentMode.CHAT) 
                 ? AgentMode.BUILDER 
                 : AgentMode.CHAT;
@@ -87,18 +88,18 @@ public class AgentContext {
             terminal.puts(InfoCmp.Capability.carriage_return);
             terminal.writer().println();
             terminal.writer().println(ConsoleStyle.boldCyan(String.format(
-                "  ⌨️  Shift+Tab 切换到 %s", newMode.getFullDisplayName()
+                "  ⌨️  Ctrl+B 切换到 %s", newMode.getFullDisplayName()
             )));
             terminal.writer().flush();
             
             reader.callWidget(LineReader.REDRAW_LINE);
             return true;
         });
-        
-        reader.getKeyMaps().get(LineReader.MAIN).bind(
-            new Reference("toggle-mode"), 
-            "shift-tab"
-        );
+
+        org.jline.keymap.KeyMap<org.jline.reader.Binding> keyMap = reader.getKeyMaps().get(LineReader.MAIN);
+        keyMap.bind(new Reference(WIDGET_NAME), "\002");
+
+        logger.info("Ctrl+B 快捷键已注册");
     }
 
     public void initialize() {

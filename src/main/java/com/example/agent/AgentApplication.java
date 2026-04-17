@@ -82,14 +82,15 @@ public class AgentApplication {
 
             AgentTurnExecutor turnExecutor = new AgentTurnExecutor(context, toolCallProcessor, ui);
 
-            IntentRecognizer intentRecognizer = createIntentRecognizer(context);
-
-            TaskPlanner taskPlanner = createTaskPlanner(context);
-
-            PlanExecutor planExecutor = createPlanExecutor();
+            // TEMPORARY DISABLED: Intent and Plan modules are not integrated into execution flow
+            // IntentRecognizer intentRecognizer = createIntentRecognizer(context);
+            // TaskPlanner taskPlanner = createTaskPlanner(context);
+            // PlanExecutor planExecutor = createPlanExecutor();
 
             ConversationLoop conversationLoop = new ConversationLoop(
-                    context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor, sessionStorage
+                    context, turnExecutor, inputHandler, ui,
+                    null, null, null,  // intentRecognizer, taskPlanner, planExecutor
+                    sessionStorage
             );
 
             final AgentContext finalContext = context;

@@ -1,64 +1,39 @@
 prompts:
+  # ===========================================================================
+  # 基础模式层 - 已完全实现
+  # ===========================================================================
+  - type: BASE_CHAT
+    file: base/base_chat.md
+    version: "1.0.0"
+    enabled: true
+    priority: 100
+    description: "聊天模式 - 顾问角色，只读探索，提供建议但不执行"
+
   - type: BASE_CODING
     file: base/base_coding.md
     version: "1.0.0"
     enabled: true
     priority: 100
+    description: "构建模式 - 工程师角色，全权限执行，主动解决问题"
 
   - type: BASE_RESEARCH
-    file: base/base_research.md
+    file: base/base_coding.md
     version: "1.0.0"
     enabled: true
     priority: 100
-
-  - type: TASK_REFACTOR
-    file: task/task_refactor.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      intent: REFACTOR
-
-  - type: TASK_DEBUG
-    file: task/task_debug.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      intent: DEBUG
-
-  - type: TASK_CODEGEN
-    file: task/task_codegen.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      intent: CODE_GENERATION
-
-  - type: TASK_REVIEW
-    file: task/task_review.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      intent: CODE_REVIEW
-
-  - type: EXPERT_JAVA
-    file: expert/expert_java.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      keywords: ["java", "spring", "jdk", "maven"]
-
-  - type: EXPERT_TESTING
-    file: expert/expert_testing.md
-    version: "1.0.0"
-    enabled: true
-    autoInject:
-      keywords: ["test", "单元测试", "集成测试"]
-
-  - type: TOOL_EDIT_GUIDE
-    file: tool/tool_edit_guide.md
-    version: "1.0.0"
-    enabled: true
+    description: "研究模式 - 代码探索与架构分析"
 
 config:
   defaultBase: BASE_CODING
   maxExpertPrompts: 2
-  autoInjectEnabled: true
+  autoInjectEnabled: false
+
+# =============================================================================
+# 【预留占位 - 待未来实现】
+# =============================================================================
+# TASK_* 层 - 意图驱动的任务增强（需配合意图识别结果注入）
+# EXPERT_* 层 - 关键词触发的领域专家知识
+# TOOL_* 层 - 工具使用规范指南
+#
+# 以上分层待真实用户数据验证后再逐步落地
+# =============================================================================
