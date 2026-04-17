@@ -69,17 +69,10 @@ public class DagExecutor {
                 }
             }
 
-            if (compilationCheckEnabled && hasFileOperations(plan)) {
-                CompilationChecker.CompilationResult compileResult = compilationChecker.check();
-                if (!compileResult.isSuccess()) {
-                    transactionHandler.rollback();
-                    prependCompilationError(results, compileResult);
-                } else {
-                    transactionHandler.commit();
-                }
-            } else {
-                transactionHandler.commit();
-            }
+            // 移除隐式自动编译检查 + 自动回滚，遵循"框架执行，LLM决策"原则
+            // 编译检查由 LLM 通过 bash mvn compile 自主调用
+            // 回滚操作由用户通过命令手动触发，保留人类最终控制权
+            transactionHandler.commit();
 
         } catch (Exception e) {
             logger.error("DAG 执行异常，执行事务回滚并降级", e);
