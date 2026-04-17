@@ -51,7 +51,7 @@ class ModeSwitchShortcutTest {
             assertNotSame(initialMode, newMode, "执行后模式应该改变");
 
             AgentMode expectedMode = (initialMode == AgentMode.CHAT) 
-                ? AgentMode.BUILDER 
+                ? AgentMode.CODING 
                 : AgentMode.CHAT;
             assertEquals(expectedMode, newMode, "模式切换方向正确");
         }

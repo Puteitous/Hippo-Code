@@ -68,11 +68,11 @@ public class AgentContext {
                 .build();
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
-                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/builder", "/mode", "/mode chat", "/mode builder"))
+                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/coding", "/mode", "/mode chat", "/mode coding"))
                 .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
                 .build();
 
-        // ✅ 注册快捷键: Shift+Tab 一键切换 Builder/Chat 模式
+        // ✅ 注册快捷键: Shift+Tab 一键切换 Coding/Chat 模式
         registerModeSwitchShortcut();
     }
 
@@ -80,7 +80,7 @@ public class AgentContext {
         final String WIDGET_NAME = "toggle-mode";
         reader.getWidgets().put(WIDGET_NAME, () -> {
             AgentMode newMode = (currentMode == AgentMode.CHAT) 
-                ? AgentMode.BUILDER 
+                ? AgentMode.CODING 
                 : AgentMode.CHAT;
             
             switchMode(newMode);
@@ -175,7 +175,7 @@ public class AgentContext {
         onModeChanged(newMode -> {
             com.example.agent.prompt.model.TaskMode taskMode = switch (newMode) {
                 case CHAT -> com.example.agent.prompt.model.TaskMode.CHAT;
-                case BUILDER -> com.example.agent.prompt.model.TaskMode.CODING;
+                case CODING -> com.example.agent.prompt.model.TaskMode.CODING;
             };
             String prompt = promptService.getBasePrompt(taskMode);
             String enhancedPrompt = ruleManager.enhanceSystemPrompt(prompt);

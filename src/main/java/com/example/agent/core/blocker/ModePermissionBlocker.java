@@ -25,7 +25,7 @@ public class ModePermissionBlocker implements Blocker {
         AgentMode mode = context.getCurrentMode();
         if (!mode.isToolAllowed(toolName)) {
             String message = String.format(
-                "[%s] 模式下不允许使用工具 '%s'，请输入 /builder 切换到构建模式",
+                "[%s] 模式下不允许使用工具 '%s'，请输入 /coding 切换到编程模式",
                 mode.getDisplayName(), toolName
             );
             
