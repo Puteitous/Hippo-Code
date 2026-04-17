@@ -10,6 +10,7 @@ import com.example.agent.logging.ConversationLogger;
 import com.example.agent.progress.ToolCardRenderer;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimatorFactory;
+import com.example.agent.orchestrator.ToolOrchestrator;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ public class ToolCallProcessor {
     private static final Logger logger = LoggerFactory.getLogger(ToolCallProcessor.class);
 
     private final ConcurrentToolExecutor concurrentToolExecutor;
+    private final ToolOrchestrator toolOrchestrator;
     private final ConversationManager conversationManager;
     private final AgentUi ui;
     private final TruncationService truncationService;
@@ -36,6 +38,7 @@ public class ToolCallProcessor {
                              AgentUi ui) {
         this.context = context;
         this.concurrentToolExecutor = concurrentToolExecutor;
+        this.toolOrchestrator = context.getToolOrchestrator();
         this.conversationManager = conversationManager;
         this.ui = ui;
         this.truncationService = new TruncationService(TokenEstimatorFactory.getDefault());
@@ -84,7 +87,14 @@ public class ToolCallProcessor {
         
         renderer.renderHeader();
 
-        List<ToolExecutionResult> results = concurrentToolExecutor.executeConcurrently(validToolCalls);
+        if (toolOrchestrator != null && toolOrchestrator.isEnabled() && validToolCalls.size() > 1) {
+            ui.println(ConsoleStyle.gray("  │"));
+            ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.cyan("🔗 使用编排引擎分析依赖关系..."));
+        }
+
+        List<ToolExecutionResult> results = (toolOrchestrator != null && toolOrchestrator.isEnabled())
+                ? toolOrchestrator.executeConcurrently(validToolCalls)
+                : concurrentToolExecutor.executeConcurrently(validToolCalls);
 
         concurrentToolExecutor.removeCallback(renderer);
 

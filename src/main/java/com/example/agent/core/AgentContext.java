@@ -275,6 +275,10 @@ public class AgentContext {
         return codeIndex;
     }
 
+    public ToolOrchestrator getToolOrchestrator() {
+        return toolOrchestrator;
+    }
+
     public ThinkingEngine getThinkingEngine() {
         return thinkingEngine;
     }
