@@ -5,7 +5,7 @@ import com.example.agent.context.config.ContextConfig;
 import com.example.agent.core.di.CoreModule;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.rule.RuleManager;
-import com.example.agent.domain.cache.CacheManager;
+
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.EventMetricsCollector;
@@ -15,7 +15,7 @@ import com.example.agent.memory.MemorySystem;
 import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
 import com.example.agent.service.ConversationManager;
-import com.example.agent.service.FileContentService;
+
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.ToolRegistry;
@@ -54,7 +54,6 @@ public class AgentContext {
     private TokenMetricsCollector tokenMetricsCollector;
     private EventMetricsCollector eventMetricsCollector;
     private RuleManager ruleManager;
-    private CacheManager cacheManager;
     private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
     private McpServiceManager mcpServiceManager;
@@ -116,7 +115,6 @@ public class AgentContext {
         // ✅ 从 DI 容器获取所有依赖，再也不需要手动 new 了！
         this.llmClient = ServiceLocator.get(LlmClient.class);
         this.tokenEstimator = ServiceLocator.get(TokenEstimator.class);
-        this.cacheManager = ServiceLocator.get(CacheManager.class);
         this.ruleManager = ServiceLocator.get(RuleManager.class);
         this.codeIndex = ServiceLocator.get(CodeIndex.class);
         this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
@@ -132,16 +130,13 @@ public class AgentContext {
         this.ruleManager.loadMemoryMd();
         logger.info("RuleManager 初始化完成");
 
-        this.codeIndex.buildIndex();
-        logger.info("代码索引构建完成");
+        logger.info("代码检索：实时搜索模式（无预构建索引）");
 
         // 初始化 MCP 服务管理器
         this.mcpServiceManager = new McpServiceManager(config, toolRegistry);
         this.mcpServiceManager.initialize();
 
-        // 启动缓存监控
-        this.cacheManager.startMemoryMonitor();
-        logger.info("缓存监控线程已启动");
+
 
         // 初始化 ThinkingEngine
         this.thinkingEngine = ServiceLocator.get(ThinkingEngine.class);
@@ -263,13 +258,9 @@ public class AgentContext {
         return ruleManager;
     }
 
-    public CacheManager getCacheManager() {
-        return cacheManager;
-    }
 
-    public FileContentService getFileContentService() {
-        return ServiceLocator.get(FileContentService.class);
-    }
+
+
 
     public CodeIndex getCodeIndex() {
         return codeIndex;

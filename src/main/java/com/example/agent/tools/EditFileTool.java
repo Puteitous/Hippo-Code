@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.domain.cache.CacheManager;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,14 +18,7 @@ public class EditFileTool implements ToolExecutor {
     private static final Logger logger = LoggerFactory.getLogger(EditFileTool.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-    private final CacheManager cacheManager;
-
     public EditFileTool() {
-        this(null);
-    }
-
-    public EditFileTool(CacheManager cacheManager) {
-        this.cacheManager = cacheManager;
     }
 
     @Override
@@ -171,10 +164,7 @@ public class EditFileTool implements ToolExecutor {
             String absolutePath = path.toAbsolutePath() != null ? path.toAbsolutePath().toString() : path.toString();
             String relativePath = PathSecurityUtils.getRelativePath(path);
 
-            if (cacheManager != null) {
-                cacheManager.onFileChanged(absolutePath);
-                logger.debug("编辑文件后触发缓存失效: {}", absolutePath);
-            }
+
             
             return formatResult(relativePath, oldText, newText, content, newContent, adjustmentNote);
             

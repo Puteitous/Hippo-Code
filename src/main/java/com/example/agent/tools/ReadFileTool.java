@@ -1,6 +1,5 @@
 package com.example.agent.tools;
 
-import com.example.agent.service.FileContentService;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
@@ -11,22 +10,7 @@ import java.util.List;
 
 public class ReadFileTool implements ToolExecutor {
 
-    private static final int DEFAULT_MAX_TOKENS = 4000;
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-    private FileContentService fileContentService;
-
-    public ReadFileTool() {
-        this(null);
-    }
-
-    public ReadFileTool(FileContentService fileContentService) {
-        this.fileContentService = fileContentService;
-    }
-
-    public void setFileContentService(FileContentService fileContentService) {
-        this.fileContentService = fileContentService;
-    }
 
     @Override
     public String getName() {
@@ -35,7 +19,7 @@ public class ReadFileTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        return "读取指定路径的文件内容。支持缓存和智能截断。只能访问项目目录内的文件。";
+        return "读取指定路径的文件内容。只能访问项目目录内的文件。";
     }
 
     @Override
@@ -82,10 +66,6 @@ public class ReadFileTool implements ToolExecutor {
             throw new ToolExecutionException("path 参数不能为空");
         }
 
-        int maxTokens = arguments.has("max_tokens") && !arguments.get("max_tokens").isNull()
-                ? arguments.get("max_tokens").asInt()
-                : DEFAULT_MAX_TOKENS;
-
         Path path = PathSecurityUtils.validateAndResolve(filePath);
 
         if (!Files.exists(path)) {
@@ -107,17 +87,7 @@ public class ReadFileTool implements ToolExecutor {
                         String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
             }
 
-            String content;
-            if (fileContentService != null) {
-                content = fileContentService.readFile(filePath, maxTokens);
-            } else {
-                content = Files.readString(path);
-            }
-
-            if (content == null) {
-                throw new ToolExecutionException("读取文件内容失败: " + filePath);
-            }
-
+            String content = Files.readString(path);
             String relativePath = PathSecurityUtils.getRelativePath(path);
 
             StringBuilder result = new StringBuilder();
@@ -129,9 +99,6 @@ public class ReadFileTool implements ToolExecutor {
             result.append("(").append(content.length()).append(" 字符");
             if (!content.endsWith("\n")) {
                 result.append(", 文件末尾无换行符");
-            }
-            if (fileContentService != null) {
-                result.append(", 智能截断已启用");
             }
             result.append(")\n");
 

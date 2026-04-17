@@ -8,19 +8,19 @@ import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.core.todo.TodoManager;
 import com.example.agent.tools.TodoWriteTool;
-import com.example.agent.core.health.CacheHealthIndicator;
+
 import com.example.agent.core.health.ConfigHealthIndicator;
 import com.example.agent.core.health.HealthCheckRegistry;
 import com.example.agent.core.health.LlmHealthIndicator;
 import com.example.agent.core.health.SystemHealthIndicator;
-import com.example.agent.domain.cache.CacheManager;
+
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.domain.rule.RuleManager;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.client.LlmClientFactory;
 import com.example.agent.llm.retry.RetryPolicy;
 import com.example.agent.logging.CostMetricsCollector;
-import com.example.agent.service.FileContentService;
+
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.*;
@@ -50,9 +50,8 @@ public final class CoreModule {
         logger.info("✅ [Level 0] 基础设施: ObjectMapper");
 
         ServiceLocator.registerSingleton(Config.class, config);
-        ServiceLocator.registerSingleton(CacheManager.class, CacheManager.getInstance());
         ServiceLocator.registerSingleton(RetryPolicy.class, RetryPolicy.defaultPolicy());
-        logger.info("✅ [Level 1] 基础服务: Config, CacheManager, RetryPolicy");
+        logger.info("✅ [Level 1] 基础服务: Config, RetryPolicy");
 
         TokenEstimator tokenEstimator = TokenEstimatorFactory.create(config);
         ServiceLocator.registerSingleton(TokenEstimator.class, tokenEstimator);
@@ -65,7 +64,6 @@ public final class CoreModule {
         HealthCheckRegistry healthRegistry = new HealthCheckRegistry();
         healthRegistry.register(new SystemHealthIndicator());
         healthRegistry.register(new ConfigHealthIndicator(config));
-        healthRegistry.register(new CacheHealthIndicator(ServiceLocator.get(CacheManager.class)));
         ServiceLocator.registerSingleton(HealthCheckRegistry.class, healthRegistry);
         logger.info("✅ [Level 1] 基础服务: 健康检查注册中心 ({} 个检查器)", healthRegistry.getIndicatorNames().size());
 
@@ -73,11 +71,7 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(RuleManager.class, ruleManager);
         logger.info("✅ [Level 2] 领域服务: RuleManager");
 
-        FileContentService fileContentService = new FileContentService(ServiceLocator.get(CacheManager.class));
-        ServiceLocator.registerSingleton(FileContentService.class, fileContentService);
-        logger.info("✅ [Level 2] 领域服务: FileContentService");
-
-        CodeIndex codeIndex = new CodeIndex(tokenEstimator, config.getIndex(), ServiceLocator.get(CacheManager.class));
+        CodeIndex codeIndex = new CodeIndex(tokenEstimator, config.getIndex());
         ServiceLocator.registerSingleton(CodeIndex.class, codeIndex);
         logger.info("✅ [Level 2] 领域服务: CodeIndex");
 
@@ -89,7 +83,7 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(LlmClient.class, llmClient);
         logger.info("✅ [Level 2] 领域服务: LlmClient");
 
-        ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, fileContentService, codeIndex);
+        ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
         logger.info("✅ [Level 3] 工具层: ToolRegistry (10 个内置工具, 9 个 Blocker)");
 
@@ -108,14 +102,12 @@ public final class CoreModule {
     }
 
     private static ToolRegistry createConfiguredToolRegistry(ObjectMapper objectMapper,
-                                                             FileContentService fileContentService,
                                                              CodeIndex codeIndex) {
-        CacheManager cacheManager = ServiceLocator.get(CacheManager.class);
         ToolRegistry registry = new ToolRegistry(objectMapper);
 
-        registry.register(new ReadFileTool(fileContentService));
-        registry.register(new WriteFileTool(cacheManager));
-        registry.register(new EditFileTool(cacheManager));
+        registry.register(new ReadFileTool());
+        registry.register(new WriteFileTool());
+        registry.register(new EditFileTool());
         registry.register(new SearchCodeTool(codeIndex));
 
         registry.register(new ListDirectoryTool());

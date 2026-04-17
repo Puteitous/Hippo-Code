@@ -1,7 +1,6 @@
 package com.example.agent.domain.index;
 
 import com.example.agent.config.IndexConfig;
-import com.example.agent.domain.cache.CacheManager;
 import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
@@ -17,66 +16,40 @@ public class CodeIndex {
     private final TokenEstimator tokenEstimator;
     private final IndexConfig config;
     private CodeSearchStrategy searchEngine;
-    private final CacheManager cacheManager;
     private final TruncationService truncationService;
 
-    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config, CacheManager cacheManager) {
+    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
         if (tokenEstimator == null) {
             throw new IllegalArgumentException("TokenEstimator cannot be null");
         }
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new IndexConfig();
         this.searchEngine = SearchEngineFactory.getDefault();
-        this.cacheManager = cacheManager != null ? cacheManager : CacheManager.getInstance();
         this.truncationService = new TruncationService(tokenEstimator);
-        clearCache();
-    }
-
-    public CodeIndex(TokenEstimator tokenEstimator, IndexConfig config) {
-        this(tokenEstimator, config, null);
     }
 
     public CodeIndex(TokenEstimator tokenEstimator) {
-        this(tokenEstimator, null, null);
+        this(tokenEstimator, null);
     }
 
     public void setSearchEngine(CodeSearchStrategy searchEngine) {
         this.searchEngine = searchEngine;
-        cacheManager.invalidateSearch(null);
         if (searchEngine != null) {
             logger.info("检索引擎已切换为: {}", searchEngine.getClass().getSimpleName());
-        } else {
-            logger.info("检索引擎已设置为 null");
         }
-    }
-
-    public void buildIndex() {
-        long startTime = System.currentTimeMillis();
-        searchEngine.buildIndex();
-        logger.info("倒排索引构建完成，共索引 {} 个文件 (耗时: {}ms)",
-                searchEngine.getIndexSize(), System.currentTimeMillis() - startTime);
     }
 
     public List<String> search(String query, int maxResults, int maxTokens) {
         List<String> formattedResults = new ArrayList<>();
 
         if (query == null) {
-            logger.debug("查询为 null，返回空结果");
             return formattedResults;
         }
         if (maxResults <= 0 || maxTokens <= 0) {
-            logger.debug("参数无效 maxResults={}, maxTokens={}，返回空结果", maxResults, maxTokens);
             return formattedResults;
         }
 
         long startTime = System.currentTimeMillis();
-
-        List<String> cached = cacheManager.getSearch("global", query);
-        if (cached != null) {
-            logger.debug("检索缓存命中: '{}' (耗时: {}ms)", query, System.currentTimeMillis() - startTime);
-            return cached;
-        }
-
         List<SearchResult> results = searchEngine.search(query, maxResults);
         int totalTokens = 0;
 
@@ -93,7 +66,6 @@ public class CodeIndex {
                 int resultTokens = tokenEstimator.estimateTextTokens(preview);
 
                 if (totalTokens + resultTokens > maxTokens) {
-                    logger.debug("达到 token 上限 {}，截断结果", maxTokens);
                     break;
                 }
 
@@ -101,29 +73,11 @@ public class CodeIndex {
                 formattedResults.add(item.toString());
                 totalTokens += resultTokens;
             }
-        } else {
-            logger.debug("检索无结果: '{}'", query);
         }
 
-        cacheManager.putSearch("global", query, formattedResults);
-
-        logger.debug("检索完成: '{}' 返回 {} 个结果，约 {} tokens (耗时: {}ms)",
-                query, formattedResults.size(), totalTokens, System.currentTimeMillis() - startTime);
+        logger.debug("代码检索: '{}' 返回 {} 个结果 (耗时: {}ms)",
+                query, formattedResults.size(), System.currentTimeMillis() - startTime);
 
         return formattedResults;
-    }
-
-    public void cleanupCache() {
-        cacheManager.cleanup();
-        logger.debug("检索缓存已清理");
-    }
-
-    public void clearCache() {
-        cacheManager.invalidateSearch(null);
-        logger.debug("清空所有检索缓存");
-    }
-
-    public int getCacheSize() {
-        return cacheManager.size();
     }
 }

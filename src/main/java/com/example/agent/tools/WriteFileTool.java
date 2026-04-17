@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.domain.cache.CacheManager;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,14 +18,7 @@ public class WriteFileTool implements ToolExecutor {
     private static final Logger logger = LoggerFactory.getLogger(WriteFileTool.class);
     private static final long MAX_CONTENT_SIZE = 10 * 1024 * 1024;
 
-    private final CacheManager cacheManager;
-
     public WriteFileTool() {
-        this(null);
-    }
-
-    public WriteFileTool(CacheManager cacheManager) {
-        this.cacheManager = cacheManager;
     }
 
     @Override
@@ -114,10 +107,7 @@ public class WriteFileTool implements ToolExecutor {
             String relativePath = PathSecurityUtils.getRelativePath(path);
             String action = fileExisted ? "覆盖" : "创建";
 
-            if (cacheManager != null) {
-                cacheManager.onFileChanged(absolutePath);
-                logger.debug("写入文件后触发缓存失效: {}", absolutePath);
-            }
+
 
             return String.format("文件%s成功: %s (%d 字符)", action, relativePath, content.length());
         } catch (IOException e) {

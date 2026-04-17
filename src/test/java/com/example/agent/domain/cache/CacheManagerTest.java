@@ -3,18 +3,14 @@ package com.example.agent.domain.cache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * CacheManager 边界条件测试
- *
- * 测试重点：
- * - null 键值处理
- * - 过期机制边界
- * - 并发安全基础验证
- * - 空值/特殊值处理
- */
 class CacheManagerTest {
 
     private CacheManager cacheManager;
@@ -25,7 +21,7 @@ class CacheManagerTest {
     }
 
     @Test
-    @DisplayName("构造函数 - 默认 TTL 构造")
+    @DisplayName("构造函数 - 默认构造")
     void testDefaultConstructor() {
         CacheManager cm = new CacheManager();
         assertNotNull(cm);
@@ -33,136 +29,139 @@ class CacheManagerTest {
     }
 
     @Test
-    @DisplayName("构造函数 - 自定义 TTL 构造")
-    void testCustomTtlConstructor() {
-        CacheManager cm = new CacheManager(5000);
-        assertNotNull(cm);
-        assertEquals(0, cm.size());
-    }
-
-    @Test
-    @DisplayName("边界 - 获取不存在的 key 返回 null")
-    void testGetNonExistentKey() {
-        assertNull(cacheManager.get("nonexistent"));
-    }
-
-    @Test
-    @DisplayName("边界 - null key 获取")
-    void testGetNullKey() {
-        assertNull(cacheManager.get(null));
-    }
-
-    @Test
-    @DisplayName("边界 - 存入 null value")
-    void testPutNullValue() {
-        cacheManager.put("nullKey", null);
-        assertNull(cacheManager.get("nullKey"));
-    }
-
-    @Test
-    @DisplayName("边界 - null key 存入")
-    void testPutNullKey() {
-        cacheManager.put(null, "value");
+    @DisplayName("文件缓存 - 存入并正常获取")
+    void testFileCachePutAndGet() {
+        cacheManager.putFile("/path/to/file.java", "public class Test {}");
+        assertEquals("public class Test {}", cacheManager.getFile("/path/to/file.java"));
         assertEquals(1, cacheManager.size());
     }
 
     @Test
-    @DisplayName("边界 - 存入并正常获取")
-    void testPutAndGet() {
-        cacheManager.put("key1", "value1");
-        assertEquals("value1", cacheManager.get("key1"));
-        assertEquals(1, cacheManager.size());
+    @DisplayName("文件缓存 - 获取不存在的文件返回 null")
+    void testGetNonExistentFile() {
+        assertNull(cacheManager.getFile("/nonexistent.java"));
     }
 
     @Test
-    @DisplayName("边界 - 覆盖已有 key")
-    void testPutOverwrite() {
-        cacheManager.put("key1", "value1");
-        cacheManager.put("key1", "value2");
-        assertEquals("value2", cacheManager.get("key1"));
-        assertEquals(1, cacheManager.size());
-    }
-
-    @Test
-    @DisplayName("边界 - 手动失效缓存")
-    void testInvalidate() {
-        cacheManager.put("key1", "value1");
-        cacheManager.invalidate("key1");
-        assertNull(cacheManager.get("key1"));
+    @DisplayName("文件缓存 - 手动失效缓存")
+    void testInvalidateFile() {
+        cacheManager.putFile("/path/to/file.java", "content");
+        cacheManager.invalidateFile("/path/to/file.java");
+        assertNull(cacheManager.getFile("/path/to/file.java"));
         assertEquals(0, cacheManager.size());
     }
 
     @Test
-    @DisplayName("边界 - 失效不存在的 key 不报错")
-    void testInvalidateNonExistent() {
-        assertDoesNotThrow(() -> cacheManager.invalidate("nonexistent"));
+    @DisplayName("检索缓存 - 存入并正常获取")
+    void testSearchCachePutAndGet() {
+        cacheManager.putSearch("com.example", "query", List.of("result1", "result2"));
+        assertEquals(List.of("result1", "result2"), cacheManager.getSearch("com.example", "query"));
+        assertEquals(1, cacheManager.size());
     }
 
     @Test
-    @DisplayName("边界 - 失效 null key 不报错")
-    void testInvalidateNull() {
-        assertDoesNotThrow(() -> cacheManager.invalidate(null));
+    @DisplayName("检索缓存 - 获取不存在的返回 null")
+    void testGetNonExistentSearch() {
+        assertNull(cacheManager.getSearch("com.example", "nonexistent"));
     }
 
     @Test
-    @DisplayName("边界 - 清空所有缓存")
+    @DisplayName("检索缓存 - 按包名失效")
+    void testInvalidateSearchByPackage() {
+        cacheManager.putSearch("com.example", "query1", List.of("a"));
+        cacheManager.putSearch("com.other", "query2", List.of("b"));
+        cacheManager.invalidateSearch("com.example");
+        assertNull(cacheManager.getSearch("com.example", "query1"));
+        assertEquals(List.of("b"), cacheManager.getSearch("com.other", "query2"));
+    }
+
+    @Test
+    @DisplayName("检索缓存 - 清空所有")
+    void testInvalidateAllSearch() {
+        cacheManager.putSearch("com.example", "query1", List.of("a"));
+        cacheManager.putSearch("com.other", "query2", List.of("b"));
+        cacheManager.invalidateSearch(null);
+        assertNull(cacheManager.getSearch("com.example", "query1"));
+        assertNull(cacheManager.getSearch("com.other", "query2"));
+        assertEquals(0, cacheManager.size());
+    }
+
+    @Test
+    @DisplayName("文件变更 - 级联清理文件缓存")
+    void testOnFileChangedInvalidatesFileCache() {
+        cacheManager.putFile("/project/src/java/com/example/Test.java", "content");
+        cacheManager.onFileChanged("/project/src/java/com/example/Test.java");
+        assertNull(cacheManager.getFile("/project/src/java/com/example/Test.java"));
+    }
+
+    @Test
+    @DisplayName("文件变更 - 级联清理同包检索缓存")
+    void testOnFileChangedInvalidatesSearchCache() {
+        cacheManager.putSearch("com.example", "query", List.of("result"));
+        cacheManager.onFileChanged("/project/src/java/com/example/Test.java");
+        assertNull(cacheManager.getSearch("com.example", "query"));
+    }
+
+    @Test
+    @DisplayName("清空所有缓存")
     void testClear() {
-        cacheManager.put("key1", "value1");
-        cacheManager.put("key2", "value2");
+        cacheManager.putFile("/path/to/file.java", "content");
+        cacheManager.putSearch("com.example", "query", List.of("result"));
         assertEquals(2, cacheManager.size());
 
         cacheManager.clear();
         assertEquals(0, cacheManager.size());
-        assertNull(cacheManager.get("key1"));
-        assertNull(cacheManager.get("key2"));
+        assertNull(cacheManager.getFile("/path/to/file.java"));
+        assertNull(cacheManager.getSearch("com.example", "query"));
     }
 
     @Test
-    @DisplayName("边界 - 清理过期缓存")
+    @DisplayName("清理过期缓存不报错")
     void testCleanup() {
-        CacheManager shortTtlCache = new CacheManager(1);
-        shortTtlCache.put("key1", "value1");
-        assertEquals(1, shortTtlCache.size());
-
-        assertDoesNotThrow(() -> shortTtlCache.cleanup());
-    }
-
-    @Test
-    @DisplayName("边界 - 不同类型值缓存")
-    void testDifferentTypes() {
-        cacheManager.put("string", "hello");
-        cacheManager.put("int", 42);
-        cacheManager.put("bool", true);
-
-        assertEquals("hello", cacheManager.get("string"));
-        assertEquals(Integer.valueOf(42), cacheManager.get("int"));
-        assertEquals(Boolean.valueOf(true), cacheManager.get("bool"));
-        assertEquals(3, cacheManager.size());
-    }
-
-    @Test
-    @DisplayName("边界 - 空字符串 key")
-    void testEmptyStringKey() {
-        cacheManager.put("", "emptyKey");
-        assertEquals("emptyKey", cacheManager.get(""));
+        cacheManager.putFile("/path/to/file.java", "content");
         assertEquals(1, cacheManager.size());
+        assertDoesNotThrow(() -> cacheManager.cleanup());
     }
 
     @Test
-    @DisplayName("边界 - 极短 TTL 过期验证")
-    void testVeryShortTtl() throws InterruptedException {
-        CacheManager shortTtlCache = new CacheManager(1);
-        shortTtlCache.put("key1", "value1", 1);
-
-        Thread.sleep(10);
-        assertNull(shortTtlCache.get("key1"));
-    }
-
-    @Test
-    @DisplayName("边界 - 空缓存操作不报错")
+    @DisplayName("空缓存操作不报错")
     void testEmptyCacheOperations() {
         assertDoesNotThrow(() -> cacheManager.clear());
         assertDoesNotThrow(() -> cacheManager.cleanup());
         assertEquals(0, cacheManager.size());
+    }
+
+    @Test
+    @DisplayName("获取统计信息")
+    void testGetStats() {
+        String stats = cacheManager.getStats();
+        assertNotNull(stats);
+        assertTrue(stats.contains("文件"));
+        assertTrue(stats.contains("检索"));
+    }
+
+    @Test
+    @DisplayName("获取聚合统计")
+    void testGetAggregatedStats() {
+        assertNotNull(cacheManager.getAggregatedStats());
+    }
+
+    @Test
+    @DisplayName("监控初始状态未运行")
+    void testMonitorNotRunningInitially() {
+        assertFalse(cacheManager.isMonitorRunning());
+    }
+
+    @Test
+    @DisplayName("启动内存监控")
+    void testStartMemoryMonitor() {
+        cacheManager.startMemoryMonitor();
+        assertTrue(cacheManager.isMonitorRunning());
+    }
+
+    @Test
+    @DisplayName("内存使用率初始值为0")
+    void testGetLastMemoryUsage() {
+        assertEquals(0.0, cacheManager.getLastMemoryUsage());
     }
 }
