@@ -27,4 +27,8 @@ public interface ToolExecutor {
     default boolean requiresFileLock() {
         return false;
     }
+
+    default boolean shouldRunInBackground() {
+        return true;
+    }
 }

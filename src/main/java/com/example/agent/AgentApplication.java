@@ -56,6 +56,7 @@ public class AgentApplication {
 
             AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
             ServiceLocator.registerSingleton(AgentUi.class, ui);
+            ServiceLocator.registerSingleton(LineReader.class, context.getReader());
             
             // ✅ 初始化 Terminal 状态栏标题
             ui.updateTerminalTitle(context.getCurrentMode());

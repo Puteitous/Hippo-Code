@@ -1,6 +1,8 @@
 package com.example.agent.progress;
 
+import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
+import com.example.agent.core.di.ServiceLocator;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,15 +22,22 @@ public class ToolCallCard {
     private volatile Thread spinnerThread;
     private volatile String currentStatus = "";
     private volatile long startTime;
+    private final AgentUi ui;
 
     public ToolCallCard(String toolName, String toolCallId, int index, int total) {
         this.toolName = toolName;
         this.toolCallId = toolCallId;
         this.index = index;
         this.total = total;
+        this.ui = ServiceLocator.get(AgentUi.class);
     }
 
     public void start() {
+        if ("ask_user".equals(toolName)) {
+            running.set(false);
+            return;
+        }
+        
         running.set(true);
         startTime = System.currentTimeMillis();
         currentStatus = "执行中...";
@@ -53,6 +62,10 @@ public class ToolCallCard {
     }
 
     private void renderRunning(String spinner) {
+        if (!running.get()) {
+            return;
+        }
+        
         String prefix = String.format("[%d/%d]", index + 1, total);
         String content = String.format("  %s %s %s [%s] %s",
                 ConsoleStyle.gray(prefix),
@@ -65,11 +78,14 @@ public class ToolCallCard {
     }
 
     private void clearAndPrint(String content) {
+        if (ui == null) {
+            return;
+        }
         StringBuilder sb = new StringBuilder("\r");
         sb.append(" ".repeat(TERMINAL_WIDTH));
         sb.append("\r");
         sb.append(content);
-        System.out.print(sb);
+        ui.print(sb.toString());
     }
 
     public void updateStatus(String status) {
@@ -95,35 +111,45 @@ public class ToolCallCard {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+            spinnerThread = null;
         }
         clearLine();
     }
 
     private void clearLine() {
+        if (ui == null) {
+            return;
+        }
         StringBuilder sb = new StringBuilder("\r");
         sb.append(" ".repeat(TERMINAL_WIDTH));
         sb.append("\r");
-        System.out.print(sb);
+        ui.print(sb.toString());
     }
 
     private void renderFinal(String marker, java.util.function.Function<String, String> color, String status, String detail) {
+        if (ui == null) {
+            return;
+        }
+        
         String prefix = String.format("[%d/%d]", index + 1, total);
         String displayDetail = truncate(detail, 60);
 
-        System.out.print("  ");
-        System.out.print(ConsoleStyle.gray(prefix));
-        System.out.print(" ");
-        System.out.print(marker);
-        System.out.print(" ");
-        System.out.print(ConsoleStyle.boldYellow(toolName));
-        System.out.print(" ");
-        System.out.print(color.apply(status));
-        System.out.print(" ");
-        System.out.print(ConsoleStyle.gray(getElapsedTime()));
-        System.out.println();
+        StringBuilder line = new StringBuilder();
+        line.append("  ");
+        line.append(ConsoleStyle.gray(prefix));
+        line.append(" ");
+        line.append(marker);
+        line.append(" ");
+        line.append(ConsoleStyle.boldYellow(toolName));
+        line.append(" ");
+        line.append(color.apply(status));
+        line.append(" ");
+        line.append(ConsoleStyle.gray(getElapsedTime()));
+        
+        ui.println(line.toString());
 
         if (displayDetail != null && !displayDetail.isEmpty()) {
-            System.out.println("       └─ " + ConsoleStyle.dim(displayDetail));
+            ui.println("       └─ " + ConsoleStyle.dim(displayDetail));
         }
     }
 

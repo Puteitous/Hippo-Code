@@ -1,16 +1,19 @@
 package com.example.agent.tools;
 
+import com.example.agent.console.AgentUi;
+import com.example.agent.console.ConsoleStyle;
+import com.example.agent.core.di.ServiceLocator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.UserInterruptException;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Scanner;
 
 public class AskUserTool implements ToolExecutor {
-
-    private static final Scanner scanner = new Scanner(System.in);
 
     @Override
     public String getName() {
@@ -63,6 +66,11 @@ public class AskUserTool implements ToolExecutor {
     }
 
     @Override
+    public boolean shouldRunInBackground() {
+        return false;
+    }
+
+    @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
         if (!arguments.has("question") || arguments.get("question").isNull()) {
             throw new ToolExecutionException("缺少必需参数: question");
@@ -94,60 +102,64 @@ public class AskUserTool implements ToolExecutor {
         try {
             String answer = promptUser(question, options, allowCustomInput);
             return formatResult(question, answer);
+        } catch (UserInterruptException | EndOfFileException e) {
+            throw new ToolExecutionException("用户取消了输入", e);
         } catch (Exception e) {
             throw new ToolExecutionException("用户交互失败: " + e.getMessage(), e);
         }
     }
 
     private String promptUser(String question, List<String> options, boolean allowCustomInput) {
-        System.out.println();
-        System.out.println("┌─────────────────────────────────────────────────────────────┐");
-        System.out.println("│   Agent 需要您的确认                                      │");
-        System.out.println("└─────────────────────────────────────────────────────────────┘");
-        System.out.println();
-        System.out.println("问题: " + question);
-        System.out.println();
+        LineReader reader = ServiceLocator.get(LineReader.class);
+        AgentUi ui = ServiceLocator.get(AgentUi.class);
+
+        ui.println();
+        ui.println(ConsoleStyle.gray("┌─────────────────────────────────────────────────────────────┐"));
+        ui.println(ConsoleStyle.gray("│   ") + ConsoleStyle.boldYellow("Agent 需要您的确认") + ConsoleStyle.gray("                                      │"));
+        ui.println(ConsoleStyle.gray("└─────────────────────────────────────────────────────────────┘"));
+        ui.println();
+        ui.println(ConsoleStyle.bold("问题: ") + question);
+        ui.println();
 
         if (!options.isEmpty()) {
-            System.out.println("选项:");
+            ui.println(ConsoleStyle.bold("选项:"));
             for (int i = 0; i < options.size(); i++) {
-                System.out.println("  " + (i + 1) + ". " + options.get(i));
+                ui.println("  " + ConsoleStyle.cyan(String.valueOf(i + 1)) + ". " + options.get(i));
             }
             if (allowCustomInput) {
-                System.out.println("  0. 输入自定义答案");
+                ui.println("  " + ConsoleStyle.cyan("0") + ". 输入自定义答案");
             }
-            System.out.println();
-            System.out.print("请选择 (输入数字");
+            ui.println();
+            String prompt = ConsoleStyle.yellow("请选择 (输入数字");
 
             if (allowCustomInput) {
-                System.out.print("或直接输入答案");
+                prompt += "或直接输入答案";
             }
-            System.out.print("): ");
+            prompt += "): ";
 
-            String input = scanner.nextLine().trim();
+            String input = reader.readLine(prompt).trim();
 
             try {
                 int choice = Integer.parseInt(input);
                 if (choice >= 1 && choice <= options.size()) {
                     return options.get(choice - 1);
                 } else if (choice == 0 && allowCustomInput) {
-                    System.out.print("请输入您的答案: ");
-                    return scanner.nextLine().trim();
+                    return reader.readLine(ConsoleStyle.yellow("请输入您的答案: ")).trim();
                 } else {
-                    System.out.println("无效的选择，请重新输入。");
+                    ui.println(ConsoleStyle.yellow("无效的选择，请重新输入。"));
                     return promptUser(question, options, allowCustomInput);
                 }
             } catch (NumberFormatException e) {
                 if (allowCustomInput) {
                     return input;
                 } else {
-                    System.out.println("请输入有效的数字选项。");
+                    ui.println(ConsoleStyle.yellow("请输入有效的数字选项。"));
                     return promptUser(question, options, allowCustomInput);
                 }
             }
         } else {
-            System.out.print("您的回答: ");
-            return scanner.nextLine().trim();
+            String input = reader.readLine(ConsoleStyle.yellow("您的回答: "));
+            return input != null ? input.trim() : "";
         }
     }
 

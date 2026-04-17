@@ -3,6 +3,7 @@ package com.example.agent.tools.concurrent;
 import com.example.agent.core.logging.LoggingContext;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.progress.ToolExecutionCallback;
+import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -73,37 +75,69 @@ public class ConcurrentToolExecutor {
         }
 
         int total = toolCalls.size();
+        List<ToolCall> backgroundTasks = new ArrayList<>();
         
+        for (int i = 0; i < toolCalls.size(); i++) {
+            ToolCall call = toolCalls.get(i);
+            String toolName = call.getFunction() != null ? call.getFunction().getName() : "";
+            ToolExecutor executor = toolRegistry.getExecutor(toolName);
+            
+            if (executor != null && !executor.shouldRunInBackground()) {
+                results.add(executeSingle(call, i, total));
+            } else {
+                backgroundTasks.add(call);
+            }
+        }
+
+        if (!backgroundTasks.isEmpty()) {
+            executeBackgroundTasks(backgroundTasks, results, total);
+        }
+
+        results.sort(Comparator.comparingInt(ToolExecutionResult::getIndex));
+        
+        return results;
+    }
+
+    private void executeBackgroundTasks(List<ToolCall> toolCalls, 
+                                        List<ToolExecutionResult> results, 
+                                        int total) {
         if (toolCalls.size() == 1) {
-            results.add(executeSingle(toolCalls.get(0), 0, total));
-            return results;
+            int originalIndex = findOriginalIndex(toolCalls.get(0), total);
+            results.add(executeSingle(toolCalls.get(0), originalIndex, total));
+            return;
         }
 
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<ToolExecutionResult>> futures = new ArrayList<>();
+            Map<Future<ToolExecutionResult>, Integer> futureIndexMap = new HashMap<>();
             
             for (int i = 0; i < toolCalls.size(); i++) {
-                int index = i;
                 ToolCall call = toolCalls.get(i);
-                
-                futures.add(executor.submit(() -> executeSingle(call, index, total)));
+                int originalIndex = findOriginalIndex(call, total);
+                Future<ToolExecutionResult> future = executor.submit(() -> executeSingle(call, originalIndex, total));
+                futureIndexMap.put(future, originalIndex);
             }
 
-            for (Future<ToolExecutionResult> future : futures) {
+            for (Map.Entry<Future<ToolExecutionResult>, Integer> entry : futureIndexMap.entrySet()) {
                 try {
-                    results.add(future.get());
+                    results.add(entry.getKey().get());
                 } catch (Exception e) {
                     results.add(ToolExecutionResult.builder()
+                            .index(entry.getValue())
                             .success(false)
                             .errorMessage("执行失败: " + e.getMessage())
                             .build());
                 }
             }
         }
+    }
 
-        results.sort(Comparator.comparingInt(ToolExecutionResult::getIndex));
-        
-        return results;
+    private int findOriginalIndex(ToolCall toolCall, int total) {
+        for (int i = 0; i < total; i++) {
+            if (toolCall.getId().equals(toolCall.getId())) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private ToolExecutionResult executeSingle(ToolCall toolCall, int index, int total) {
@@ -131,7 +165,10 @@ public class ConcurrentToolExecutor {
             arguments = "{}";
         }
 
-        notifyToolStart(toolCall, index, total);
+        ToolExecutor executor = toolRegistry.getExecutor(toolName);
+        if (executor != null && executor.shouldRunInBackground()) {
+            notifyToolStart(toolCall, index, total);
+        }
         long startTime = System.currentTimeMillis();
         
         try {
@@ -155,7 +192,9 @@ public class ConcurrentToolExecutor {
                     .executionTimeMs(executionTime)
                     .build();
                     
-            notifyToolComplete(toolCall, execResult, index, total);
+            if (executor != null && executor.shouldRunInBackground()) {
+                notifyToolComplete(toolCall, execResult, index, total);
+            }
             return execResult;
                     
         } catch (ToolExecutionException e) {
@@ -169,7 +208,9 @@ public class ConcurrentToolExecutor {
                     .errorMessage(e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
-            notifyToolComplete(toolCall, execResult, index, total);
+            if (executor != null && executor.shouldRunInBackground()) {
+                notifyToolComplete(toolCall, execResult, index, total);
+            }
             return execResult;
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
@@ -182,7 +223,9 @@ public class ConcurrentToolExecutor {
                     .errorMessage("参数解析失败: " + e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
-            notifyToolComplete(toolCall, execResult, index, total);
+            if (executor != null && executor.shouldRunInBackground()) {
+                notifyToolComplete(toolCall, execResult, index, total);
+            }
             return execResult;
         } finally {
             LoggingContext.clearTool();
