@@ -18,8 +18,8 @@ class SchemaValidationBlockerTest {
     @BeforeEach
     void setUp() {
         toolRegistry = new ToolRegistry();
-        toolRegistry.register(new ReadFileTool(null));
-        toolRegistry.register(new EditFileTool(null));
+        toolRegistry.register(new ReadFileTool());
+        toolRegistry.register(new EditFileTool());
         blocker = new SchemaValidationBlocker(toolRegistry);
     }
 

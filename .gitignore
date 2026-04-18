@@ -31,3 +31,8 @@ dependency-reduced-pom.xml
 # Hippo 配置与记忆文件
 .hipporules
 MEMORY.md
+
+# LSP 配置
+.classpath
+.project
+.settings/

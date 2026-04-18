@@ -1,6 +1,7 @@
 package com.example.agent.config;
 
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.lsp.config.LspConfig;
 import com.example.agent.mcp.config.McpConfig;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -29,6 +30,7 @@ public class Config {
     private CacheConfig cache = new CacheConfig();
     private IndexConfig index = new IndexConfig();
     private McpConfig mcp = new McpConfig();
+    private LspConfig lsp = new LspConfig();
 
     private transient ConfigLoader configLoader;
 
@@ -120,6 +122,8 @@ public class Config {
                 this.rule = reloaded.rule;
                 this.cache = reloaded.cache;
                 this.index = reloaded.index;
+                this.mcp = reloaded.mcp;
+                this.lsp = reloaded.lsp;
                 this.loadFromEnvironment();
                 System.out.println("Configuration reloaded from: " + configFile.getAbsolutePath());
             } catch (IOException e) {
@@ -278,6 +282,17 @@ public class Config {
 
     public void setMcp(McpConfig mcp) {
         this.mcp = mcp;
+    }
+
+    public LspConfig getLsp() {
+        if (lsp == null) {
+            lsp = new LspConfig();
+        }
+        return lsp;
+    }
+
+    public void setLsp(LspConfig lsp) {
+        this.lsp = lsp;
     }
 
     @Deprecated

@@ -17,6 +17,7 @@ import com.example.agent.prompt.PromptService;
 import com.example.agent.service.ConversationManager;
 
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.lsp.LspServiceManager;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
@@ -57,6 +58,7 @@ public class AgentContext {
     private CodeIndex codeIndex;
     private ThinkingEngine thinkingEngine;
     private McpServiceManager mcpServiceManager;
+    private LspServiceManager lspServiceManager;
     private AgentMode currentMode = AgentMode.CHAT;
     private final java.util.List<java.util.function.Consumer<AgentMode>> modeChangeListeners = new java.util.ArrayList<>();
 
@@ -135,6 +137,10 @@ public class AgentContext {
         // 初始化 MCP 服务管理器
         this.mcpServiceManager = new McpServiceManager(config, toolRegistry);
         this.mcpServiceManager.initialize();
+
+        // 初始化 LSP 服务管理器
+        this.lspServiceManager = new LspServiceManager(config, toolRegistry);
+        this.lspServiceManager.initialize();
 
 
 
