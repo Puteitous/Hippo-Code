@@ -98,6 +98,10 @@ public class AgentTurnExecutor {
         }
 
         if (response.hasToolCalls()) {
+            if ((assistantMessage.getContent() == null || assistantMessage.getContent().isBlank()) && contentBuilder.length() > 0) {
+                assistantMessage.setContent(contentBuilder.toString());
+            }
+
             conversationManager.addAssistantMessage(assistantMessage);
 
             List<ToolCall> toolCalls = assistantMessage.getToolCalls();
@@ -125,7 +129,11 @@ public class AgentTurnExecutor {
             ui.println(ConsoleStyle.gray("  │"));
             return AgentTurnResult.CONTINUE;
         } else {
-            if (!response.hasContent() && contentBuilder.length() == 0) {
+            if ((assistantMessage.getContent() == null || assistantMessage.getContent().isBlank()) && contentBuilder.length() > 0) {
+                assistantMessage.setContent(contentBuilder.toString());
+            }
+
+            if ((assistantMessage.getContent() == null || assistantMessage.getContent().isBlank()) && contentBuilder.length() == 0) {
                 if (conversationLogger != null) {
                     conversationLogger.logDebug("空响应检测: " + responseToString(response));
                 }

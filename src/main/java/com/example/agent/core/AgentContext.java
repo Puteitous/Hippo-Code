@@ -166,11 +166,13 @@ public class AgentContext {
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
 
-        // 启用优先级记忆策略（可通过配置关闭）
-        if (memorySystem.isEnabled()) {
-            this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
-            logger.info("优先级记忆策略已启用 ✅");
-        }
+        // TEMPORARY DISABLED: PriorityTrimPolicy 会打乱消息时序导致对话错位
+        // 暂时使用默认的 SlidingWindowPolicy
+        // if (memorySystem.isEnabled()) {
+        //     this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
+        //     logger.info("优先级记忆策略已启用 ✅");
+        // }
+        logger.info("使用滑动窗口记忆策略");
 
         // 模式切换监听器：自动切换 System Prompt + 状态栏，无缝保留上下文
         onModeChanged(newMode -> {

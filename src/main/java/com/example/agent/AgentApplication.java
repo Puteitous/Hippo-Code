@@ -10,14 +10,7 @@ import com.example.agent.core.blocker.EditConfirmationBlocker;
 import com.example.agent.execute.AgentTurnExecutor;
 import com.example.agent.execute.ConversationLoop;
 import com.example.agent.execute.ToolCallProcessor;
-import com.example.agent.intent.HybridIntentRecognizer;
-import com.example.agent.intent.IntentRecognizer;
-import com.example.agent.plan.CompositeTaskPlanner;
-import com.example.agent.plan.LlmTaskPlanner;
-import com.example.agent.plan.PlanExecutor;
-import com.example.agent.plan.SequentialPlanExecutor;
-import com.example.agent.plan.SimpleTaskPlanner;
-import com.example.agent.plan.TaskPlanner;
+
 import com.example.agent.progress.EditConfirmationHandler;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
@@ -37,8 +30,7 @@ public class AgentApplication {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentApplication.class);
 
-    private boolean intentRecognitionEnabled = true;
-    private boolean planningEnabled = true;
+
 
     public static void main(String[] args) {
         AgentApplication app = new AgentApplication();
@@ -83,14 +75,8 @@ public class AgentApplication {
 
             AgentTurnExecutor turnExecutor = new AgentTurnExecutor(context, toolCallProcessor, ui);
 
-            // TEMPORARY DISABLED: Intent and Plan modules are not integrated into execution flow
-            // IntentRecognizer intentRecognizer = createIntentRecognizer(context);
-            // TaskPlanner taskPlanner = createTaskPlanner(context);
-            // PlanExecutor planExecutor = createPlanExecutor();
-
             ConversationLoop conversationLoop = new ConversationLoop(
                     context, turnExecutor, inputHandler, ui,
-                    null, null, null,  // intentRecognizer, taskPlanner, planExecutor
                     sessionStorage
             );
 
@@ -228,31 +214,16 @@ public class AgentApplication {
                 conversationLoop.resumeSession(session);
             } else {
                 sessionStorage.markAsIgnored(session.getSessionId());
+                conversationLoop.startNewConversation();
                 ui.println(ConsoleStyle.gray("开始新会话..."));
                 ui.println();
             }
         } catch (Exception e) {
             sessionStorage.markAsIgnored(session.getSessionId());
+            conversationLoop.startNewConversation();
             ui.println(ConsoleStyle.gray("开始新会话..."));
             ui.println();
         }
-    }
-
-    private IntentRecognizer createIntentRecognizer(AgentContext context) {
-        if (!intentRecognitionEnabled) {
-            return null;
-        }
-
-        HybridIntentRecognizer recognizer = new HybridIntentRecognizer(context.getLlmClient());
-        recognizer.setPreferLlm(false);
-        
-        // Phase 2: 注入 ThinkingEngine，启用代码库探索能力
-        if (context.getThinkingEngine() != null) {
-            recognizer.setThinkingEngine(context.getThinkingEngine());
-            logger.info("意图识别器已装备 ThinkingEngine ✅");
-        }
-
-        return recognizer;
     }
 
     private void registerShutdownHook(AgentContext context) {
@@ -274,42 +245,6 @@ public class AgentApplication {
         }, "agent-shutdown-hook"));
 
         logger.debug("ShutdownHook 已注册");
-    }
-
-    private TaskPlanner createTaskPlanner(AgentContext context) {
-        if (!planningEnabled) {
-            return null;
-        }
-
-        SimpleTaskPlanner simplePlanner = new SimpleTaskPlanner();
-        LlmTaskPlanner llmPlanner = new LlmTaskPlanner(context.getLlmClient());
-
-        // Phase 1: 注入 ThinkingEngine，启用规划前探索
-        if (context.getThinkingEngine() != null) {
-            llmPlanner.setThinkingEngine(context.getThinkingEngine());
-            logger.info("任务规划器已装备 ThinkingEngine ✅");
-        }
-
-        CompositeTaskPlanner compositePlanner = new CompositeTaskPlanner(simplePlanner, llmPlanner);
-        compositePlanner.setPreferLlm(false);
-
-        return compositePlanner;
-    }
-
-    private PlanExecutor createPlanExecutor() {
-        if (!planningEnabled) {
-            return null;
-        }
-
-        return new SequentialPlanExecutor();
-    }
-
-    public void setIntentRecognitionEnabled(boolean enabled) {
-        this.intentRecognitionEnabled = enabled;
-    }
-
-    public void setPlanningEnabled(boolean enabled) {
-        this.planningEnabled = enabled;
     }
 
     private void setupEditConfirmation(AgentContext context, AgentUi ui, LineReader reader) {

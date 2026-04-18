@@ -4,22 +4,14 @@ import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.console.InputHandler;
 import com.example.agent.core.AgentContext;
-import com.example.agent.intent.IntentRecognizer;
-import com.example.agent.intent.IntentResult;
-import com.example.agent.intent.IntentType;
 import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.exception.LlmTimeoutException;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.logging.LogDirectoryManager;
-import com.example.agent.plan.ExecutionContext;
-import com.example.agent.plan.ExecutionPlan;
-import com.example.agent.plan.PlanningContext;
-import com.example.agent.plan.TaskPlanner;
-import com.example.agent.plan.PlanExecutor;
-import com.example.agent.plan.PlanResult;
 import com.example.agent.service.ConversationManager;
+import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
@@ -43,50 +35,20 @@ public class ConversationLoop {
     private final TokenEstimator tokenEstimator;
     private final InputHandler inputHandler;
     private final AgentUi ui;
-    private final IntentRecognizer intentRecognizer;
-    private final TaskPlanner taskPlanner;
-    private final PlanExecutor planExecutor;
     private final SessionStorage sessionStorage;
 
-    private int conversationRound = 0;
+    private int conversationRound = 1;
     private String currentConversationId;
     private ConversationLogger conversationLogger;
-    private IntentResult lastIntentResult;
-    private ExecutionPlan lastExecutionPlan;
-    private PlanResult lastPlanResult;
     private volatile boolean processing = false;
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
                             InputHandler inputHandler, AgentUi ui) {
-        this(context, turnExecutor, inputHandler, ui, null, null, null, null);
+        this(context, turnExecutor, inputHandler, ui, null);
     }
 
     public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
-                            InputHandler inputHandler, AgentUi ui, 
-                            IntentRecognizer intentRecognizer) {
-        this(context, turnExecutor, inputHandler, ui, intentRecognizer, null, null, null);
-    }
-
-    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
-                            InputHandler inputHandler, AgentUi ui, 
-                            IntentRecognizer intentRecognizer,
-                            TaskPlanner taskPlanner) {
-        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, null, null);
-    }
-
-    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
-                            InputHandler inputHandler, AgentUi ui, 
-                            IntentRecognizer intentRecognizer,
-                            TaskPlanner taskPlanner,
-                            PlanExecutor planExecutor) {
-        this(context, turnExecutor, inputHandler, ui, intentRecognizer, taskPlanner, planExecutor, null);
-    }
-
-    public ConversationLoop(AgentContext context, AgentTurnExecutor turnExecutor,
-                            InputHandler inputHandler, AgentUi ui, 
-                            IntentRecognizer intentRecognizer,
-                            TaskPlanner taskPlanner,
-                            PlanExecutor planExecutor,
+                            InputHandler inputHandler, AgentUi ui,
                             SessionStorage sessionStorage) {
         this.context = context;
         this.turnExecutor = turnExecutor;
@@ -94,10 +56,28 @@ public class ConversationLoop {
         this.tokenEstimator = context.getTokenEstimator();
         this.inputHandler = inputHandler;
         this.ui = ui;
-        this.intentRecognizer = intentRecognizer;
-        this.taskPlanner = taskPlanner;
-        this.planExecutor = planExecutor;
         this.sessionStorage = sessionStorage != null ? sessionStorage : new SessionStorage();
+    }
+
+    private void ensureConversationInitialized() {
+        boolean managerWasReset = conversationManager.getMessageCount() == 1 
+                && conversationManager.getHistory().get(0).isSystem();
+        
+        if (currentConversationId == null || conversationLogger == null || managerWasReset) {
+            startNewConversation();
+        }
+    }
+
+    public void startNewConversation() {
+        String sessionId = String.valueOf(System.currentTimeMillis());
+        currentConversationId = sessionId;
+        conversationRound = 1;
+        conversationManager.reset();
+
+        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
+        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
+        conversationLogger = new ConversationLogger(currentConversationId, logFile);
+        logger.info("新会话已启动: {}", currentConversationId);
     }
 
     public void processUserInput(String userInput) {
@@ -107,15 +87,9 @@ public class ConversationLoop {
 
         processing = true;
         turnExecutor.setInterrupted(false);
-        conversationRound++;
 
-        String sessionId = String.valueOf(System.currentTimeMillis());
-        currentConversationId = sessionId;
-        
-        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
+        ensureConversationInitialized();
         MDC.put("turn", String.valueOf(conversationRound));
-        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
-        conversationLogger = new ConversationLogger(currentConversationId, logFile);
 
         int inputTokens = tokenEstimator.estimateTextTokens(userInput);
         if (inputTokens > inputHandler.getMaxInputTokens()) {
@@ -127,20 +101,6 @@ public class ConversationLoop {
         }
 
         conversationLogger.logUserInput(userInput, inputTokens);
-
-        // TEMPORARY DISABLED: Intent and Plan modules are not integrated into execution flow
-        // lastIntentResult = null;
-        // lastExecutionPlan = null;
-        //
-        // if (intentRecognizer != null && intentRecognizer.isEnabled()) {
-        //     lastIntentResult = recognizeIntent(userInput);
-        //     displayIntentInfo(lastIntentResult);
-        //
-        //     if (taskPlanner != null && taskPlanner.isEnabled()) {
-        //         lastExecutionPlan = createExecutionPlan(userInput, lastIntentResult);
-        //         displayPlanInfo(lastExecutionPlan);
-        //     }
-        // }
 
         conversationManager.addUserMessage(userInput);
         conversationManager.trimHistory((messageCount, tokenCount) -> {
@@ -159,6 +119,7 @@ public class ConversationLoop {
             processAgentLoop();
 
         } finally {
+            conversationRound++;
             processing = false;
             MDC.clear();
         }
@@ -166,55 +127,6 @@ public class ConversationLoop {
 
     public boolean isProcessing() {
         return processing;
-    }
-
-    private IntentResult recognizeIntent(String userInput) {
-        try {
-            IntentResult result = intentRecognizer.recognize(userInput, conversationManager.getHistory());
-            logger.info("意图识别结果: {}", result);
-            return result;
-        } catch (Exception e) {
-            logger.warn("意图识别失败: {}", e.getMessage());
-            return IntentResult.unknown();
-        }
-    }
-
-    private ExecutionPlan createExecutionPlan(String userInput, IntentResult intent) {
-        try {
-            PlanningContext planningContext = PlanningContext.builder()
-                    .userInput(userInput)
-                    .conversationHistory(conversationManager.getHistory())
-                    .conversationManager(conversationManager)
-                    .currentRound(conversationRound)
-                    .build();
-
-            ExecutionPlan plan = taskPlanner.plan(intent, planningContext);
-            logger.info("执行计划: {}", plan);
-            return plan;
-        } catch (Exception e) {
-            logger.warn("规划失败: {}", e.getMessage());
-            return ExecutionPlan.empty(intent);
-        }
-    }
-
-    private void displayIntentInfo(IntentResult intent) {
-        if (intent == null || intent.getType() == IntentType.UNKNOWN) {
-            return;
-        }
-
-        ui.println(ConsoleStyle.dim("  [意图: " + intent.getType().getDisplayName() + 
-                " | 置信度: " + String.format("%.0f%%", intent.getConfidence() * 100) + "]"));
-        ui.println();
-    }
-
-    private void displayPlanInfo(ExecutionPlan plan) {
-        if (plan == null || plan.isEmpty()) {
-            return;
-        }
-
-        ui.println(ConsoleStyle.dim("  [计划: " + plan.getStepCount() + " 个步骤 | 策略: " + 
-                plan.getStrategy().getDisplayName() + "]"));
-        ui.println();
     }
 
     private void processAgentLoop() {
@@ -367,18 +279,6 @@ public class ConversationLoop {
         return currentConversationId;
     }
 
-    public IntentResult getLastIntentResult() {
-        return lastIntentResult;
-    }
-
-    public ExecutionPlan getLastExecutionPlan() {
-        return lastExecutionPlan;
-    }
-
-    public PlanResult getLastPlanResult() {
-        return lastPlanResult;
-    }
-
     public SessionStorage getSessionStorage() {
         return sessionStorage;
     }
@@ -393,6 +293,12 @@ public class ConversationLoop {
         
         currentConversationId = session.getSessionId();
         conversationRound = countUserMessages(session.getMessages());
+        
+        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
+        conversationLogger = new ConversationLogger(currentConversationId, logFile);
+        MDC.put("sessionId", currentConversationId.substring(0, Math.min(12, currentConversationId.length())));
+        
+        logger.info("会话已恢复: {}, 轮次: {}", currentConversationId, conversationRound);
         
         String shortId = session.getSessionId().substring(0, Math.min(12, session.getSessionId().length()));
         String time = session.getLastActiveAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"));

@@ -1,6 +1,5 @@
 package com.example.agent.prompt;
 
-import com.example.agent.intent.IntentType;
 import com.example.agent.prompt.model.Prompt;
 import com.example.agent.prompt.model.TaskMode;
 import org.slf4j.Logger;
@@ -12,21 +11,16 @@ public class PromptService {
 
     public record TaskContext(
             TaskMode mode,
-            IntentType intentType,
             String userInput,
             boolean needsToolEnhancement,
             int maxPromptTokens
     ) {
         public static TaskContext defaultContext() {
-            return new TaskContext(TaskMode.CODING, null, null, false, 8000);
+            return new TaskContext(TaskMode.CODING, null, false, 8000);
         }
 
         public static TaskContext forMode(TaskMode mode) {
-            return new TaskContext(mode, null, null, false, 8000);
-        }
-
-        public static TaskContext withIntent(IntentType intentType) {
-            return new TaskContext(TaskMode.CODING, intentType, null, false, 8000);
+            return new TaskContext(mode, null, false, 8000);
         }
     }
 

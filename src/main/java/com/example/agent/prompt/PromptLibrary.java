@@ -1,6 +1,6 @@
 package com.example.agent.prompt;
 
-import com.example.agent.intent.IntentType;
+
 import com.example.agent.prompt.loader.ClasspathPromptLoader;
 import com.example.agent.prompt.loader.PromptLoader;
 import com.example.agent.prompt.model.Prompt;
@@ -62,14 +62,6 @@ public class PromptLibrary {
             sb.append(getFallbackPrompt());
         }
 
-        if (context.intentType() != null) {
-            getTaskPrompt(context.intentType()).ifPresent(taskPrompt -> {
-                sb.append("\n\n");
-                sb.append("===== 任务模式: ").append(taskPrompt.getType().getDisplayName()).append(" =====\n");
-                sb.append(taskPrompt.getContent());
-            });
-        }
-
         return sb.toString();
     }
 
@@ -78,20 +70,6 @@ public class PromptLibrary {
         return promptCache.get(type);
     }
 
-    public Optional<Prompt> getTaskPrompt(IntentType intentType) {
-        if (intentType == null) {
-            return Optional.empty();
-        }
-
-        return switch (intentType) {
-            case CODE_MODIFICATION -> Optional.ofNullable(promptCache.get(PromptType.TASK_REFACTOR));
-            case DEBUGGING -> Optional.ofNullable(promptCache.get(PromptType.TASK_DEBUG));
-            case CODE_GENERATION -> Optional.ofNullable(promptCache.get(PromptType.TASK_CODEGEN));
-            case CODE_REVIEW -> Optional.ofNullable(promptCache.get(PromptType.TASK_REVIEW));
-            case PROJECT_ANALYSIS -> Optional.ofNullable(promptCache.get(PromptType.TASK_ARCHITECTURE));
-            default -> Optional.empty();
-        };
-    }
 
     public Optional<Prompt> getPrompt(PromptType type) {
         return Optional.ofNullable(promptCache.get(type));
