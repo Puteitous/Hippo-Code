@@ -11,13 +11,17 @@ public class SearchCodeTool implements ToolExecutor {
     private static final int DEFAULT_MAX_RESULTS = 3;
     private static final int DEFAULT_MAX_TOKENS = 5000;
 
-    private final CodeIndex codeIndex;
+    private CodeIndex codeIndex;
 
     public SearchCodeTool() {
         this(null);
     }
 
     public SearchCodeTool(CodeIndex codeIndex) {
+        this.codeIndex = codeIndex;
+    }
+
+    public void setCodeIndex(CodeIndex codeIndex) {
         this.codeIndex = codeIndex;
     }
 

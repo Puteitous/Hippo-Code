@@ -48,6 +48,21 @@ public class MockLlmClient implements LlmClient {
         return new ArrayList<>(recordedRequests);
     }
 
+    @Override
+    public String getProviderName() {
+        return "mock";
+    }
+
+    @Override
+    public String getBaseUrl() {
+        return "http://mock-api.example.com";
+    }
+
+    @Override
+    public String getModel() {
+        return "mock-model";
+    }
+
     public List<List<Message>> getRecordedMessages() {
         return new ArrayList<>(recordedMessages);
     }

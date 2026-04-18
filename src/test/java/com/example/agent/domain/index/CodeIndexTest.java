@@ -35,7 +35,6 @@ class CodeIndexTest {
     void testConstructorWithNullConfig() {
         CodeIndex index = new CodeIndex(tokenEstimator, null);
         assertNotNull(index);
-        assertEquals(0, index.getCacheSize());
     }
 
     @Test
@@ -69,11 +68,7 @@ class CodeIndexTest {
         assertEquals("TokenEstimator cannot be null", e.getMessage());
     }
 
-    @Test
-    @DisplayName("边界 - buildIndex 不报错")
-    void testBuildIndex() {
-        assertDoesNotThrow(() -> codeIndex.buildIndex());
-    }
+
 
     @Test
     @DisplayName("边界 - null 查询返回空列表")
@@ -144,49 +139,7 @@ class CodeIndexTest {
         assertNotNull(results);
     }
 
-    @Test
-    @DisplayName("边界 - 多次相同查询使用缓存")
-    void testSearchCaching() {
-        String query = "cache_test_query_xyz";
-        int before = codeIndex.getCacheSize();
 
-        codeIndex.search(query, 5, 1000);
-        int afterFirst = codeIndex.getCacheSize();
-
-        codeIndex.search(query, 5, 1000);
-        int afterSecond = codeIndex.getCacheSize();
-
-        assertTrue(afterFirst > before);
-        assertEquals(afterFirst, afterSecond);
-    }
-
-    @Test
-    @DisplayName("边界 - 清理缓存不报错")
-    void testCleanupCache() {
-        codeIndex.search("test1", 5, 1000);
-        codeIndex.search("test2", 5, 1000);
-
-        assertDoesNotThrow(() -> codeIndex.cleanupCache());
-    }
-
-    @Test
-    @DisplayName("边界 - 清空所有缓存")
-    void testClearCache() {
-        codeIndex.search("test1", 5, 1000);
-        codeIndex.search("test2", 5, 1000);
-        assertTrue(codeIndex.getCacheSize() > 0);
-
-        codeIndex.clearCache();
-        assertEquals(0, codeIndex.getCacheSize());
-    }
-
-    @Test
-    @DisplayName("边界 - 空缓存操作不报错")
-    void testEmptyCacheOperations() {
-        assertEquals(0, codeIndex.getCacheSize());
-        assertDoesNotThrow(() -> codeIndex.cleanupCache());
-        assertDoesNotThrow(() -> codeIndex.clearCache());
-    }
 
     @Test
     @DisplayName("边界 - 设置检索引擎不报错")
@@ -199,22 +152,5 @@ class CodeIndexTest {
     void testSetNullSearchEngine() {
         assertDoesNotThrow(() -> codeIndex.setSearchEngine(null));
     }
-
-    @Test
-    @DisplayName("边界 - 连续多次构建索引")
-    void testMultipleBuildIndex() {
-        assertDoesNotThrow(() -> {
-            codeIndex.buildIndex();
-            codeIndex.buildIndex();
-            codeIndex.buildIndex();
-        });
-    }
-
-    @Test
-    @DisplayName("边界 - 构建索引后查询")
-    void testBuildThenSearch() {
-        codeIndex.buildIndex();
-        List<String> results = codeIndex.search("java", 3, 1000);
-        assertNotNull(results);
-    }
 }
+

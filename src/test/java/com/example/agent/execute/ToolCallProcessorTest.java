@@ -1,6 +1,7 @@
 package com.example.agent.execute;
 
 import com.example.agent.console.AgentUi;
+import com.example.agent.core.AgentContext;
 import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
@@ -35,15 +36,17 @@ class ToolCallProcessorTest {
     private ConcurrentToolExecutor executor;
     private ConversationManager conversationManager;
     private AgentUi ui;
+    private AgentContext context;
     private ToolCallProcessor processor;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         toolRegistry = new ToolRegistry();
         executor = new ConcurrentToolExecutor(toolRegistry);
         conversationManager = mock(ConversationManager.class);
         ui = mock(AgentUi.class);
-        processor = new ToolCallProcessor(executor, conversationManager, ui);
+        context = mock(AgentContext.class);
+        processor = new ToolCallProcessor(context, executor, conversationManager, ui);
     }
 
     private ToolCall createToolCall(String id, String name, String arguments) {
