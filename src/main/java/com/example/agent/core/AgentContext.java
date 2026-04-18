@@ -11,7 +11,6 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.logging.EventMetricsCollector;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
-import com.example.agent.memory.MemorySystem;
 import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
 import com.example.agent.service.ConversationManager;
@@ -156,22 +155,12 @@ public class AgentContext {
         ServiceLocator.registerSingleton(PromptLibrary.class, PromptLibrary.getInstance());
         logger.info("PromptLibrary 初始化完成 ✅");
 
-        // 初始化 MemorySystem - 优先级记忆系统
-        MemorySystem memorySystem = new MemorySystem(tokenEstimator);
-        ServiceLocator.registerSingleton(MemorySystem.class, memorySystem);
-        logger.info("MemorySystem 初始化完成 ✅ - {}", memorySystem.getStats());
-
         // 增强系统提示词（使用 PromptLibrary）
         String basePrompt = promptService.getBasePrompt(null);
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
         this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
 
-        // TEMPORARY DISABLED: PriorityTrimPolicy 会打乱消息时序导致对话错位
-        // 暂时使用默认的 SlidingWindowPolicy
-        // if (memorySystem.isEnabled()) {
-        //     this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
-        //     logger.info("优先级记忆策略已启用 ✅");
-        // }
+        // 默认使用 SlidingWindowPolicy
         logger.info("使用滑动窗口记忆策略");
 
         // 模式切换监听器：自动切换 System Prompt + 状态栏，无缝保留上下文
@@ -204,7 +193,6 @@ public class AgentContext {
 
     public void resetConversation() {
         PromptService promptService = ServiceLocator.get(PromptService.class);
-        MemorySystem memorySystem = ServiceLocator.getOrNull(MemorySystem.class);
         String basePrompt = promptService.getBasePrompt(null);
 
         // 重新加载规则（确保文件有更新时能重新加载）
@@ -214,11 +202,6 @@ public class AgentContext {
             this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
         } else {
             this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, config.getContext());
-        }
-
-        // 重置记忆策略
-        if (memorySystem != null && memorySystem.isEnabled()) {
-            this.conversationManager.setTrimPolicy(memorySystem.getTrimPolicy());
         }
     }
 
