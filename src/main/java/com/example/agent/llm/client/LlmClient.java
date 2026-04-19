@@ -27,6 +27,15 @@ public interface LlmClient {
     ChatResponse continueWithToolResult(ChatResponse previousResponse, List<Message> messages, 
                                         String toolCallId, String toolName, String toolResult) throws LlmException;
 
+    default String generateSync(String prompt) throws LlmException {
+        List<Message> messages = List.of(Message.user(prompt));
+        ChatResponse response = chat(messages);
+        if (response != null && response.getMessage() != null) {
+            return response.getMessage().getContent();
+        }
+        return prompt.substring(0, Math.min(prompt.length(), 500)) + " [生成失败]";
+    }
+
     ChatResponse continueWithToolResults(ChatResponse previousResponse, List<Message> messages, 
                                          List<ToolResult> toolResults) throws LlmException;
 

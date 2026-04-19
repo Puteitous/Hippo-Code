@@ -11,4 +11,8 @@ public interface TokenEstimator {
     int estimateMessageTokens(Message msg);
 
     int estimateTextTokens(String text);
+
+    default int estimate(List<Message> messages) {
+        return estimateConversationTokens(messages);
+    }
 }

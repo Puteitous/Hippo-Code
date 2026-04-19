@@ -76,6 +76,10 @@ public class ChatResponse {
         return firstChoice.getMessage();
     }
 
+    public Message getMessage() {
+        return getFirstMessage();
+    }
+
     public boolean hasToolCalls() {
         Message message = getFirstMessage();
         if (message == null) {
