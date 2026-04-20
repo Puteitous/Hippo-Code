@@ -69,7 +69,7 @@ public class AgentContext {
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
                 .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/coding", "/mode", "/mode chat", "/mode coding"))
-                .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".agent_history"))
+                .variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(".hippo", "cli-history"))
                 .build();
 
         // ✅ 注册快捷键: Shift+Tab 一键切换 Coding/Chat 模式

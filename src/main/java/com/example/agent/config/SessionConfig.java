@@ -10,12 +10,17 @@ public class SessionConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionConfig.class);
     private static final int DEFAULT_MAX_HISTORY = 50;
-    private static final String DEFAULT_HISTORY_FILE = ".agent_history";
-    private static final int DEFAULT_MAX_SAVED_SESSIONS = 10;
+    private static final String DEFAULT_HISTORY_FILE = ".hippo/cli-history";
+    private static final int DEFAULT_MAX_SAVED_SESSIONS = 1000;
     private static final String DEFAULT_SESSION_DIRECTORY = "logs/sessions";
     private static final int DEFAULT_RESUME_TIMEOUT_HOURS = 72;
     private static final int MIN_MAX_SAVED_SESSIONS = 0;
     private static final int MAX_MAX_SAVED_SESSIONS = 1000;
+    private static final int DEFAULT_CLEANUP_PERIOD_DAYS = 30;
+    private static final boolean DEFAULT_ENABLE_BACKGROUND_CLEANUP = true;
+    private static final int DEFAULT_TOMBSTONE_THRESHOLD_MB = 50;
+    private static final int MIN_CLEANUP_PERIOD_DAYS = 1;
+    private static final int MAX_CLEANUP_PERIOD_DAYS = 365;
 
     @JsonProperty("auto_save")
     private boolean autoSave = true;
@@ -43,6 +48,15 @@ public class SessionConfig {
     
     @JsonProperty("resume_timeout_hours")
     private int resumeTimeoutHours = DEFAULT_RESUME_TIMEOUT_HOURS;
+
+    @JsonProperty("cleanup_period_days")
+    private int cleanupPeriodDays = DEFAULT_CLEANUP_PERIOD_DAYS;
+
+    @JsonProperty("enable_background_cleanup")
+    private boolean enableBackgroundCleanup = DEFAULT_ENABLE_BACKGROUND_CLEANUP;
+
+    @JsonProperty("tombstone_threshold_mb")
+    private int tombstoneThresholdMb = DEFAULT_TOMBSTONE_THRESHOLD_MB;
 
     public SessionConfig() {
     }
@@ -147,6 +161,41 @@ public class SessionConfig {
         }
     }
 
+    public int getCleanupPeriodDays() {
+        return cleanupPeriodDays;
+    }
+
+    public void setCleanupPeriodDays(int cleanupPeriodDays) {
+        if (cleanupPeriodDays < MIN_CLEANUP_PERIOD_DAYS || cleanupPeriodDays > MAX_CLEANUP_PERIOD_DAYS) {
+            logger.warn("cleanupPeriodDays 超出范围 [{}, {}]，使用默认值: {}",
+                MIN_CLEANUP_PERIOD_DAYS, MAX_CLEANUP_PERIOD_DAYS, DEFAULT_CLEANUP_PERIOD_DAYS);
+            this.cleanupPeriodDays = DEFAULT_CLEANUP_PERIOD_DAYS;
+        } else {
+            this.cleanupPeriodDays = cleanupPeriodDays;
+        }
+    }
+
+    public boolean isEnableBackgroundCleanup() {
+        return enableBackgroundCleanup;
+    }
+
+    public void setEnableBackgroundCleanup(boolean enableBackgroundCleanup) {
+        this.enableBackgroundCleanup = enableBackgroundCleanup;
+    }
+
+    public int getTombstoneThresholdMb() {
+        return tombstoneThresholdMb;
+    }
+
+    public void setTombstoneThresholdMb(int tombstoneThresholdMb) {
+        if (tombstoneThresholdMb < 1) {
+            logger.warn("tombstoneThresholdMb 不能小于 1，使用默认值: {}", DEFAULT_TOMBSTONE_THRESHOLD_MB);
+            this.tombstoneThresholdMb = DEFAULT_TOMBSTONE_THRESHOLD_MB;
+        } else {
+            this.tombstoneThresholdMb = tombstoneThresholdMb;
+        }
+    }
+
     public void validate() {
         if (maxHistory < 0) {
             logger.warn("配置验证: maxHistory 为负数，已重置为默认值");
@@ -171,6 +220,16 @@ public class SessionConfig {
         if (maxSavedSessions == 0 && persistSessions) {
             logger.warn("配置验证: maxSavedSessions 为 0 但 persistSessions 为 true，会话持久化将被禁用");
         }
+
+        if (cleanupPeriodDays < MIN_CLEANUP_PERIOD_DAYS || cleanupPeriodDays > MAX_CLEANUP_PERIOD_DAYS) {
+            logger.warn("配置验证: cleanupPeriodDays 超出范围，已重置为默认值");
+            cleanupPeriodDays = DEFAULT_CLEANUP_PERIOD_DAYS;
+        }
+
+        if (tombstoneThresholdMb < 1) {
+            logger.warn("配置验证: tombstoneThresholdMb 不能小于1，已重置为默认值");
+            tombstoneThresholdMb = DEFAULT_TOMBSTONE_THRESHOLD_MB;
+        }
         
         logger.debug("配置验证完成: {}", this);
     }
@@ -187,6 +246,9 @@ public class SessionConfig {
                 ", sessionDirectory='" + sessionDirectory + '\'' +
                 ", autoResume=" + autoResume +
                 ", resumeTimeoutHours=" + resumeTimeoutHours +
+                ", cleanupPeriodDays=" + cleanupPeriodDays +
+                ", enableBackgroundCleanup=" + enableBackgroundCleanup +
+                ", tombstoneThresholdMb=" + tombstoneThresholdMb +
                 '}';
     }
 }

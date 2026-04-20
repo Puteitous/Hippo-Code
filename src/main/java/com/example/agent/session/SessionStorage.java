@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -26,21 +27,33 @@ public class SessionStorage {
     private static final String SESSION_FILE_PREFIX = "session_";
     private static final String SESSION_FILE_SUFFIX = ".json";
     private static final String INVALID_FILENAME_CHARS = "<>:\"/\\|?*";
+    private static final long TOMBSTONE_THRESHOLD_BYTES = 50L * 1024 * 1024;
+    private static final long READ_SKIP_THRESHOLD_BYTES = 50L * 1024 * 1024;
+    private static final int DEFAULT_EXPIRE_HOURS = 24 * 30;
+    private static final long BACKGROUND_CLEANUP_DELAY_MS = 5000;
 
     private final Path storageDirectory;
     private final ObjectMapper objectMapper;
     private final int maxSavedSessions;
+    private final int expireHours;
+    private final long tombstoneThresholdBytes;
     private volatile boolean directoryAvailable = false;
     private volatile boolean initializationComplete = false;
     private final Object initLock = new Object();
 
     public SessionStorage() {
-        this(Paths.get("logs", "sessions"), 10);
+        this(Paths.get("logs", "sessions"), 10, DEFAULT_EXPIRE_HOURS, TOMBSTONE_THRESHOLD_BYTES);
     }
 
     public SessionStorage(Path storageDirectory, int maxSavedSessions) {
+        this(storageDirectory, maxSavedSessions, DEFAULT_EXPIRE_HOURS, TOMBSTONE_THRESHOLD_BYTES);
+    }
+
+    public SessionStorage(Path storageDirectory, int maxSavedSessions, int expireHours, long tombstoneThresholdBytes) {
         this.storageDirectory = storageDirectory;
         this.maxSavedSessions = maxSavedSessions;
+        this.expireHours = expireHours > 0 ? expireHours : DEFAULT_EXPIRE_HOURS;
+        this.tombstoneThresholdBytes = tombstoneThresholdBytes > 0 ? tombstoneThresholdBytes : TOMBSTONE_THRESHOLD_BYTES;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.findAndRegisterModules();
         this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -97,6 +110,16 @@ public class SessionStorage {
                 session.setSessionId(sessionId);
             }
 
+            Path existingFile = getSessionFilePath(sessionId);
+            if (Files.exists(existingFile)) {
+                long fileSize = Files.size(existingFile);
+                if (fileSize > tombstoneThresholdBytes) {
+                    logger.warn("会话文件超过墓碑阈值({}MB)，不再重写以保护稳定性: {}", 
+                        fileSize / 1024 / 1024, sessionId);
+                    return session;
+                }
+            }
+
             if (updateTimestamp) {
                 session.touch();
             }
@@ -150,6 +173,13 @@ public class SessionStorage {
         }
 
         try {
+            long fileSize = Files.size(sessionFile);
+            if (fileSize > READ_SKIP_THRESHOLD_BYTES) {
+                logger.warn("会话文件过大({}MB)，跳过加载避免OOM: {}", 
+                    fileSize / 1024 / 1024, sessionId);
+                return Optional.empty();
+            }
+
             SessionData session = objectMapper.readValue(sessionFile.toFile(), SessionData.class);
             logger.info("会话已加载: {} (状态: {}, 消息数: {})", 
                 sessionId, session.getStatus(), session.getMessageCount());
@@ -258,6 +288,10 @@ public class SessionStorage {
         return true;
     }
 
+    public void cleanupExpiredSessions() {
+        cleanupExpiredSessions(this.expireHours);
+    }
+
     public void cleanupExpiredSessions(int timeoutHours) {
         if (timeoutHours <= 0) {
             return;
@@ -265,15 +299,39 @@ public class SessionStorage {
 
         List<SessionData> sessions = listSessions();
         LocalDateTime cutoff = LocalDateTime.now().minusHours(timeoutHours);
+        int cleanedCount = 0;
         
-        sessions.stream()
-            .filter(s -> s.getStatus() == SessionData.Status.INTERRUPTED)
-            .filter(s -> s.getLastActiveAt().isBefore(cutoff))
-            .forEach(session -> {
-                session.setStatus(SessionData.Status.IGNORED);
-                saveSession(session, false);
-                logger.info("过期会话已标记为忽略: {}", session.getSessionId());
-            });
+        for (SessionData session : sessions) {
+            if (session.getLastActiveAt().isBefore(cutoff)) {
+                deleteSession(session.getSessionId());
+                cleanedCount++;
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            logger.info("时间驱动清理：删除了 {} 个超过 {} 天未活动的会话", 
+                cleanedCount, timeoutHours / 24);
+        }
+    }
+
+    public void startBackgroundCleanup() {
+        CompletableFuture.runAsync(() -> {
+            try {
+                Thread.sleep(BACKGROUND_CLEANUP_DELAY_MS);
+                ensureDirectoryExists();
+                if (directoryAvailable) {
+                    logger.info("后台过期会话清理任务启动...");
+                    cleanupExpiredSessions();
+                    logger.info("后台过期会话清理完成");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.info("后台清理任务被中断");
+            } catch (Exception e) {
+                logger.warn("后台清理任务执行异常，已忽略", e);
+            }
+        });
+        logger.debug("后台清理任务已调度，将在{}ms后执行", BACKGROUND_CLEANUP_DELAY_MS);
     }
 
     private String generateSessionId() {
