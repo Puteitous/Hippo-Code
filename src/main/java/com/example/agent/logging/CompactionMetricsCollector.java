@@ -18,8 +18,9 @@ public class CompactionMetricsCollector {
         TENGU_SM_COMPACT_SUCCESS("tengu_sm_compact_success", "会话记忆压缩成功"),
         TENGU_SM_COMPACT_NO_SESSION_MEMORY("tengu_sm_compact_no_session_memory", "文件不存在"),
         TENGU_SM_COMPACT_EMPTY_TEMPLATE("tengu_sm_compact_empty_template", "文件存在但空模板"),
-        TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND("tengu_sm_compact_summarized_id_not_found", "边界ID无效"),
+        TENGU_SM_COMPACT_RESUMED_SESSION("tengu_sm_compact_resumed_session", "恢复会话-边界重建"),
         TENGU_SM_COMPACT_THRESHOLD_EXCEEDED("tengu_sm_compact_threshold_exceeded", "压缩后仍超阈值"),
+        TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND("tengu_sm_compact_summarized_id_not_found", "边界ID不存在"),
         TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS("tengu_sm_compact_tool_call_in_progress", "存在未完成工具调用"),
         TENGU_SM_COMPACT_ERROR("tengu_sm_compact_error", "压缩异常");
 
@@ -53,7 +54,7 @@ public class CompactionMetricsCollector {
                 break;
             case TENGU_SM_COMPACT_NO_SESSION_MEMORY:
             case TENGU_SM_COMPACT_EMPTY_TEMPLATE:
-            case TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND:
+            case TENGU_SM_COMPACT_RESUMED_SESSION:
             case TENGU_SM_COMPACT_THRESHOLD_EXCEEDED:
             case TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS:
             case TENGU_SM_COMPACT_ERROR:

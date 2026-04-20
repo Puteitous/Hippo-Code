@@ -2,7 +2,6 @@ package com.example.agent.context;
 
 public class SessionCompactionState {
 
-    private String lastCompactedBoundaryId;
     private String lastSummarizedMessageId;
     private int compactionCount;
     private long lastCompactionTime;
@@ -16,8 +15,7 @@ public class SessionCompactionState {
     }
 
     public boolean canIncrementalCompact() {
-        return lastCompactedBoundaryId != null 
-            && !lastCompactedBoundaryId.isEmpty();
+        return hasValidSummaryBoundary();
     }
 
     public boolean hasValidSummaryBoundary() {
@@ -25,8 +23,7 @@ public class SessionCompactionState {
             && !lastSummarizedMessageId.isEmpty();
     }
 
-    public void recordCompaction(String newBoundaryId) {
-        this.lastCompactedBoundaryId = newBoundaryId;
+    public void recordCompaction() {
         this.compactionCount++;
         this.lastCompactionTime = System.currentTimeMillis();
     }
@@ -37,19 +34,10 @@ public class SessionCompactionState {
     }
 
     public void reset() {
-        this.lastCompactedBoundaryId = null;
         this.lastSummarizedMessageId = null;
         this.compactionCount = 0;
         this.lastCompactionTime = 0;
         this.lastExtractionTime = 0;
-    }
-
-    public String getLastCompactedBoundaryId() {
-        return lastCompactedBoundaryId;
-    }
-
-    public void setLastCompactedBoundaryId(String lastCompactedBoundaryId) {
-        this.lastCompactedBoundaryId = lastCompactedBoundaryId;
     }
 
     public String getLastSummarizedMessageId() {

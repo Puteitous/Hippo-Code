@@ -13,7 +13,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackgroundExtractor {
 
-    private static final int TOKEN_THRESHOLD = 5000;
+    private static final int INITIAL_TOKEN_THRESHOLD = 10000;
+    private static final int TOKEN_GROWTH_THRESHOLD = 5000;
     private static final int TOOL_CALL_THRESHOLD = 3;
 
     private final SessionMemoryManager memoryManager;
@@ -21,10 +22,10 @@ public class BackgroundExtractor {
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
 
-    private final AtomicInteger toolCallCount = new AtomicInteger(0);
+    private final AtomicInteger toolCallCountSinceLastExtraction = new AtomicInteger(0);
     private final AtomicBoolean extractionInProgress = new AtomicBoolean(false);
+    private int lastExtractedTokenCount = 0;
     private String lastExtractedMessageId;
-
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
 
     private static final String EXTRACTION_PROMPT = """
@@ -76,7 +77,7 @@ public class BackgroundExtractor {
 
     public void onMessageAdded(Message message, List<Message> fullConversation) {
         if (message.isTool() || message.getRole().equals("tool")) {
-            toolCallCount.incrementAndGet();
+            toolCallCountSinceLastExtraction.incrementAndGet();
         }
 
         checkAndExtract(fullConversation);
@@ -105,10 +106,17 @@ public class BackgroundExtractor {
 
         int currentTokens = tokenEstimator.estimate(fullConversation);
 
-        boolean tokenTrigger = currentTokens >= TOKEN_THRESHOLD;
-        boolean toolTrigger = toolCallCount.get() >= TOOL_CALL_THRESHOLD;
+        boolean hasReachedInitialThreshold = currentTokens >= INITIAL_TOKEN_THRESHOLD;
+        if (!hasReachedInitialThreshold) {
+            return false;
+        }
 
-        return tokenTrigger || toolTrigger;
+        boolean hasMetTokenGrowth = currentTokens - lastExtractedTokenCount >= TOKEN_GROWTH_THRESHOLD;
+        boolean hasMetToolCallThreshold = toolCallCountSinceLastExtraction.get() >= TOOL_CALL_THRESHOLD;
+        boolean atNaturalPause = !hasToolCallsInLastAssistantTurn(fullConversation);
+
+        return hasMetTokenGrowth
+            && (hasMetToolCallThreshold || atNaturalPause);
     }
 
     private void performExtraction(List<Message> fullConversation) {
@@ -124,7 +132,8 @@ public class BackgroundExtractor {
 
             memoryManager.write(finalMemory);
 
-            toolCallCount.set(0);
+            toolCallCountSinceLastExtraction.set(0);
+            lastExtractedTokenCount = tokenEstimator.estimate(fullConversation);
 
             updateLastSummarizedMessageIdIfSafe(fullConversation);
 
@@ -193,7 +202,7 @@ public class BackgroundExtractor {
     }
 
     public int getToolCallCount() {
-        return toolCallCount.get();
+        return toolCallCountSinceLastExtraction.get();
     }
 
     public boolean isExtractionInProgress() {

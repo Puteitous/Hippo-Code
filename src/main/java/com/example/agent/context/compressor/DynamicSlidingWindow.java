@@ -57,9 +57,12 @@ public class DynamicSlidingWindow {
         List<ConversationTurn> turns = groupIntoCompleteTurns(conversationMessages);
         int originalTokenCount = tokenEstimator.estimateConversationTokens(messages);
 
-        int startIndex = findSummaryBoundary(messages, state);
+        BoundaryResult boundary = findSummaryBoundaryWithValidation(messages, state);
+        int anchorTurnIndex = findTurnIndexForMessage(turns, boundary.startIndex);
 
-        SelectionResult selected = selectTurnsDynamically(turns, targetTokens, startIndex);
+        List<ConversationTurn> turnsAfterAnchor = turns.subList(anchorTurnIndex, turns.size());
+
+        SelectionResult selected = buildSlidingWindowFromAnchor(turnsAfterAnchor, targetTokens);
 
         List<Message> truncatedMessages = reassemble(null, selected.turns);
 
@@ -94,6 +97,19 @@ public class DynamicSlidingWindow {
             usedSessionMemory,
             usedLlmSummary
         );
+    }
+
+    private int findTurnIndexForMessage(List<ConversationTurn> turns, int messageIndex) {
+        int currentMsgIdx = 0;
+        for (int i = 0; i < turns.size(); i++) {
+            ConversationTurn turn = turns.get(i);
+            int turnSize = turn.getMessages().size();
+            if (currentMsgIdx + turnSize > messageIndex) {
+                return i;
+            }
+            currentMsgIdx += turnSize;
+        }
+        return Math.max(0, turns.size() - 1);
     }
 
     private Message createSummaryHeader(List<ConversationTurn> deletedTurns) {
@@ -187,14 +203,10 @@ public class DynamicSlidingWindow {
                     return new BoundaryResult(i + 1, true, "found");
                 }
             }
-            return new BoundaryResult(0, false, "summarized_id_not_found");
+            return new BoundaryResult(messages.size(), false, "resumed_session");
         }
 
         return new BoundaryResult(0, true, "no_boundary");
-    }
-
-    private int findSummaryBoundary(List<Message> messages, SessionCompactionState state) {
-        return findSummaryBoundaryWithValidation(messages, state).startIndex;
     }
 
     private boolean hasToolCallsInLastAssistantTurn(List<Message> messages) {
@@ -210,18 +222,28 @@ public class DynamicSlidingWindow {
         return false;
     }
 
-    private SelectionResult selectTurnsDynamically(List<ConversationTurn> turns, int targetMax, int startTurnIndex) {
+    private SelectionResult buildSlidingWindowFromAnchor(List<ConversationTurn> turnsAfterAnchor, int targetMax) {
         List<ConversationTurn> selected = new ArrayList<>();
         int runningTokens = 0;
         int textBlockCount = 0;
         boolean withinRange = false;
 
-        for (int i = turns.size() - 1; i >= startTurnIndex; i--) {
-            ConversationTurn turn = turns.get(i);
+        int effectiveMin = minTokens;
+        int effectiveMax = Math.min(maxTokens, targetMax);
+
+        int startIdx;
+        if (turnsAfterAnchor.isEmpty()) {
+            startIdx = expandWindowFromTail(turnsAfterAnchor, effectiveMin, effectiveMax);
+        } else {
+            startIdx = adjustStartIndexToPreserveInvariants(turnsAfterAnchor, 0);
+        }
+
+        for (int i = startIdx; i < turnsAfterAnchor.size(); i++) {
+            ConversationTurn turn = turnsAfterAnchor.get(i);
             int turnTokens = turn.getTokenCount();
 
-            if (i >= turns.size() - 3) {
-                selected.add(0, turn);
+            if (i >= turnsAfterAnchor.size() - 3) {
+                selected.add(turn);
                 runningTokens += turnTokens;
                 if (turn.hasSignificantText()) {
                     textBlockCount++;
@@ -230,7 +252,7 @@ public class DynamicSlidingWindow {
             }
 
             if (textBlockCount < minTextBlockMessages) {
-                selected.add(0, turn);
+                selected.add(turn);
                 runningTokens += turnTokens;
                 if (turn.hasSignificantText()) {
                     textBlockCount++;
@@ -238,26 +260,74 @@ public class DynamicSlidingWindow {
                 continue;
             }
 
-            int effectiveMax = Math.min(maxTokens, targetMax);
-            
-            if (runningTokens + turnTokens > effectiveMax && runningTokens >= minTokens) {
+            if (runningTokens + turnTokens > effectiveMax && runningTokens >= effectiveMin) {
                 withinRange = true;
                 break;
             }
 
-            selected.add(0, turn);
+            selected.add(turn);
             runningTokens += turnTokens;
             if (turn.hasSignificantText()) {
                 textBlockCount++;
             }
 
             if (runningTokens >= effectiveMax) {
-                withinRange = runningTokens >= minTokens;
+                withinRange = runningTokens >= effectiveMin;
                 break;
             }
         }
 
         return new SelectionResult(selected, withinRange, textBlockCount);
+    }
+
+    private int expandWindowFromTail(List<ConversationTurn> turns, int minTokens, int maxTokens) {
+        if (turns.size() <= 3) {
+            return 0;
+        }
+
+        int runningTokens = 0;
+        int textBlockCount = 0;
+        int startIdx = turns.size();
+
+        while (startIdx > 0) {
+            startIdx--;
+            ConversationTurn turn = turns.get(startIdx);
+            runningTokens += turn.getTokenCount();
+            if (turn.hasSignificantText()) {
+                textBlockCount++;
+            }
+
+            if (runningTokens >= minTokens && textBlockCount >= minTextBlockMessages) {
+                break;
+            }
+
+            if (runningTokens >= maxTokens) {
+                break;
+            }
+        }
+
+        return adjustStartIndexToPreserveInvariants(turns, startIdx);
+    }
+
+    private int adjustStartIndexToPreserveInvariants(List<ConversationTurn> turns, int proposedStart) {
+        if (turns.isEmpty()) {
+            return 0;
+        }
+
+        int safeStart = proposedStart;
+
+        while (safeStart < turns.size() && turns.get(safeStart).hasToolPair()) {
+            safeStart++;
+        }
+
+        while (safeStart > 0) {
+            safeStart--;
+            if (!turns.get(safeStart).hasToolPair()) {
+                break;
+            }
+        }
+
+        return Math.max(0, safeStart);
     }
 
     private List<ConversationTurn> groupIntoCompleteTurns(List<Message> messages) {

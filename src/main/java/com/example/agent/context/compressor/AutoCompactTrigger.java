@@ -77,7 +77,7 @@ public class AutoCompactTrigger implements BudgetListener {
         List<Message> compacted = autoCompact.compact(currentMessages, targetTokens);
         contextWindow.clearInjectedWarnings();
         contextWindow.replaceMessages(compacted);
-        state.recordCompaction("llm_summary_" + System.currentTimeMillis());
+        state.recordCompaction();
 
         AutoCompact.CompactionResult llmResult = autoCompact.getLastResult();
         injectLLMCompaction(llmResult, currentTokens, maxTokens);
@@ -85,12 +85,6 @@ public class AutoCompactTrigger implements BudgetListener {
 
     private DynamicSlidingWindow.CompactionResult tryIncrementalCompact(
             List<Message> messages, int targetTokens, int maxTokens) {
-        String boundary = state.getLastCompactedBoundaryId();
-
-        if (boundary == null) {
-            return null;
-        }
-
         return trySlidingWindowFirst(messages, targetTokens, maxTokens);
     }
 
@@ -137,15 +131,19 @@ public class AutoCompactTrigger implements BudgetListener {
         DynamicSlidingWindow.BoundaryResult boundary = 
             slidingWindow.findSummaryBoundaryWithValidation(messages, state);
 
-        if (!boundary.isValid && "summarized_id_not_found".equals(boundary.reason)) {
-            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND,
+        if (!boundary.isValid && "resumed_session".equals(boundary.reason)) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_RESUMED_SESSION,
                 "边界ID在当前会话中不存在 → 恢复旧会话场景，优雅降级");
-            return null;
         }
 
         if ("tool_call_in_progress".equals(boundary.reason)) {
             metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS,
                 "检测到未完成工具调用，冻结截断边界");
+        }
+
+        if ("resumed_session".equals(boundary.reason)) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_RESUMED_SESSION,
+                "恢复会话模式：锚点ID不存在，从尾部向左重建窗口");
         }
 
         DynamicSlidingWindow.CompactionResult result = slidingWindow.compact(messages, targetTokens, state);
@@ -168,7 +166,7 @@ public class AutoCompactTrigger implements BudgetListener {
     private void applyResult(DynamicSlidingWindow.CompactionResult result, boolean incremental) {
         contextWindow.clearInjectedWarnings();
         contextWindow.replaceMessages(result.getMessages());
-        state.recordCompaction("turn_" + (result.getTotalTurns() - result.getRemovedTurns()));
+        state.recordCompaction();
         injectSlidingWindowSuccess(result, incremental);
     }
 
