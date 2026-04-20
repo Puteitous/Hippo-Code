@@ -4,70 +4,65 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * @deprecated 已废弃，请使用 WorkspaceManager 替代
+ * 此类仅用于向后兼容，将在 v1.0 移除
+ */
+@Deprecated
 public class LogDirectoryManager {
     
     private static final Logger logger = LoggerFactory.getLogger(LogDirectoryManager.class);
-    
-    private static final Path LOG_ROOT = Paths.get("logs");
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
+    /** @deprecated */
+    @Deprecated
     public static Path getLogRoot() {
-        return LOG_ROOT;
+        return WorkspaceManager.HIPPO_ROOT;
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getSystemLogDir() {
-        return LOG_ROOT.resolve("system");
+        return WorkspaceManager.getGlobalDebugDir();
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getConversationLogDir(LocalDate date) {
-        return LOG_ROOT.resolve("conversations")
-                      .resolve(date.format(DATE_FORMAT));
+        return WorkspaceManager.getCurrentProjectDir().resolve("sessions");
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getMetricsDir() {
-        return LOG_ROOT.resolve("metrics");
+        return WorkspaceManager.getGlobalMetricsDir();
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getConversationLogFile(String conversationId, LocalDate date) {
-        return getConversationLogDir(date).resolve("conv_" + conversationId + ".log");
+        return WorkspaceManager.getSessionLogFile(WorkspaceManager.getCurrentProjectKey(), conversationId);
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getTokenMetricsFile(LocalDate date) {
-        return getMetricsDir().resolve("tokens_" + date.format(DATE_FORMAT) + ".csv");
+        return WorkspaceManager.getTokenMetricsFile(date);
     }
     
+    /** @deprecated */
+    @Deprecated
     public static Path getToolMetricsFile(LocalDate date) {
-        return getMetricsDir().resolve("tools_" + date.format(DATE_FORMAT) + ".csv");
+        return WorkspaceManager.getToolMetricsFile(date);
     }
     
     public static void ensureDirectoriesExist() {
-        try {
-            Path systemDir = getSystemLogDir();
-            Path conversationDir = getConversationLogDir(LocalDate.now());
-            Path metricsDir = getMetricsDir();
-            
-            if (!java.nio.file.Files.exists(systemDir)) {
-                java.nio.file.Files.createDirectories(systemDir);
-                logger.debug("创建系统日志目录: {}", systemDir);
-            }
-            
-            if (!java.nio.file.Files.exists(conversationDir)) {
-                java.nio.file.Files.createDirectories(conversationDir);
-                logger.debug("创建对话日志目录: {}", conversationDir);
-            }
-            
-            if (!java.nio.file.Files.exists(metricsDir)) {
-                java.nio.file.Files.createDirectories(metricsDir);
-                logger.debug("创建指标日志目录: {}", metricsDir);
-            }
-            
-            logger.info("日志目录初始化完成");
-        } catch (Exception e) {
-            logger.error("创建日志目录失败", e);
-        }
+        logger.warn("⚠️ LogDirectoryManager 已废弃，请使用 WorkspaceManager");
+        // 委托给新的 WorkspaceManager
+        String projectKey = WorkspaceManager.getCurrentProjectKey();
+        WorkspaceManager.ensureProjectDirectories(projectKey);
     }
 }
