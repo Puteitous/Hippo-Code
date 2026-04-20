@@ -15,6 +15,7 @@ import com.example.agent.progress.EditConfirmationHandler;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
+import com.example.agent.session.SessionStorageFactory;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
@@ -56,7 +57,11 @@ public class AgentApplication {
             TokenEstimator tokenEstimator = context.getTokenEstimator();
             InputHandler inputHandler = new InputHandler(context.getReader(), tokenEstimator);
             
-            SessionStorage sessionStorage = new SessionStorage();
+            SessionStorage sessionStorage = SessionStorageFactory.create(context.getConfig().getSession());
+
+            if (context.getConfig().getSession().isEnableBackgroundCleanup()) {
+                sessionStorage.startBackgroundCleanup();
+            }
 
             CommandDispatcher dispatcher = new CommandDispatcher(context, ui, inputHandler, sessionStorage);
 
@@ -119,7 +124,7 @@ public class AgentApplication {
                         SessionData session = result.getSessionToResume();
                         if (session != null) {
                             conversationLoop.resumeSession(session);
-                            dispatcher.setCurrentConversationId(session.getSessionId());
+                            dispatcher.setCurrentSessionId(session.getSessionId());
                         }
                         continue;
                     }
@@ -127,7 +132,7 @@ public class AgentApplication {
                     if (result.getType() == CommandDispatcher.CommandResult.Type.PROCESS_INPUT) {
                         String actualInput = result.getInput();
                         conversationLoop.processUserInput(actualInput);
-                        dispatcher.setCurrentConversationId(conversationLoop.getCurrentConversationId());
+                        dispatcher.setCurrentSessionId(conversationLoop.getCurrentSessionId());
                     }
 
                 } catch (UserInterruptException e) {

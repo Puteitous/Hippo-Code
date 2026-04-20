@@ -9,7 +9,7 @@ import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.exception.LlmTimeoutException;
 import com.example.agent.logging.ConversationLogger;
-import com.example.agent.logging.LogDirectoryManager;
+import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
@@ -22,7 +22,6 @@ import org.slf4j.MDC;
 
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
-import java.time.LocalDate;
 
 public class ConversationLoop {
 
@@ -38,7 +37,7 @@ public class ConversationLoop {
     private final SessionStorage sessionStorage;
 
     private int conversationRound = 1;
-    private String currentConversationId;
+    private String currentSessionId;
     private ConversationLogger conversationLogger;
     private volatile boolean processing = false;
 
@@ -63,21 +62,23 @@ public class ConversationLoop {
         boolean managerWasReset = conversationManager.getMessageCount() == 1 
                 && conversationManager.getHistory().get(0).isSystem();
         
-        if (currentConversationId == null || conversationLogger == null || managerWasReset) {
+        if (currentSessionId == null || conversationLogger == null || managerWasReset) {
             startNewConversation();
         }
     }
 
     public void startNewConversation() {
         String sessionId = String.valueOf(System.currentTimeMillis());
-        currentConversationId = sessionId;
+        currentSessionId = sessionId;
         conversationRound = 1;
         conversationManager.reset();
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
-        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
-        conversationLogger = new ConversationLogger(currentConversationId, logFile);
-        logger.info("新会话已启动: {}", currentConversationId);
+        Path logFile = WorkspaceManager.getSessionLogFile(
+            WorkspaceManager.getCurrentProjectKey(), sessionId
+        );
+        conversationLogger = new ConversationLogger(sessionId, logFile);
+        logger.info("新会话已启动: {}", sessionId);
     }
 
     public void processUserInput(String userInput) {
@@ -136,7 +137,7 @@ public class ConversationLoop {
         try {
             while (!turnExecutor.isInterrupted()) {
                 try {
-                    AgentTurnResult result = turnExecutor.execute(conversationLogger, currentConversationId);
+                    AgentTurnResult result = turnExecutor.execute(conversationLogger, currentSessionId);
 
                     if (result == AgentTurnResult.EMPTY_RESPONSE) {
                         emptyResponseRetries++;
@@ -206,17 +207,17 @@ public class ConversationLoop {
         
         try {
             SessionData.Status status = completed ? SessionData.Status.COMPLETED : SessionData.Status.INTERRUPTED;
-            SessionData sessionData = conversationManager.exportSession(currentConversationId, status);
+            SessionData sessionData = conversationManager.exportSession(currentSessionId, status);
             SessionData saved = sessionStorage.saveSession(sessionData);
             
             if (saved != null) {
-                logger.debug("会话已保存: {}, 状态: {}", currentConversationId, status);
+                logger.debug("会话已保存: {}, 状态: {}", currentSessionId, status);
             } else {
                 ui.println();
                 ui.println(ConsoleStyle.yellow("  ⚠ 会话保存失败，历史记录可能丢失"));
                 ui.println(ConsoleStyle.gray("    提示: 请检查磁盘空间或会话存储目录权限"));
                 ui.println();
-                logger.warn("会话保存失败: {}", currentConversationId);
+                logger.warn("会话保存失败: {}", currentSessionId);
             }
         } catch (Exception e) {
             logger.warn("保存会话失败: {}", e.getMessage());
@@ -275,8 +276,8 @@ public class ConversationLoop {
         turnExecutor.setInterrupted(true);
     }
 
-    public String getCurrentConversationId() {
-        return currentConversationId;
+    public String getCurrentSessionId() {
+        return currentSessionId;
     }
 
     public SessionStorage getSessionStorage() {
@@ -291,14 +292,17 @@ public class ConversationLoop {
         conversationManager.importSession(session);
         conversationManager.fixUnfinishedToolCall();
         
-        currentConversationId = session.getSessionId();
+        String sessionId = session.getSessionId();
+        currentSessionId = sessionId;
         conversationRound = countUserMessages(session.getMessages());
         
-        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
-        conversationLogger = new ConversationLogger(currentConversationId, logFile);
-        MDC.put("sessionId", currentConversationId.substring(0, Math.min(12, currentConversationId.length())));
+        Path logFile = WorkspaceManager.getSessionLogFile(
+            WorkspaceManager.getCurrentProjectKey(), sessionId
+        );
+        conversationLogger = new ConversationLogger(sessionId, logFile);
+        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         
-        logger.info("会话已恢复: {}, 轮次: {}", currentConversationId, conversationRound);
+        logger.info("会话已恢复: {}, 轮次: {}", sessionId, conversationRound);
         
         String shortId = session.getSessionId().substring(0, Math.min(12, session.getSessionId().length()));
         String time = session.getLastActiveAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"));
