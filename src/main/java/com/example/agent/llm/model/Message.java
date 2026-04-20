@@ -11,6 +11,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Message {
 
+    private String id;
     private String role;
     private String content;
     
@@ -32,6 +33,7 @@ public class Message {
         // 使用LLM标准role作为默认值，避免发送API不识别的"unknown"
         this.role = (role != null && !role.trim().isEmpty()) ? role.trim() : "user";
         this.content = content != null ? content : "";
+        this.id = java.util.UUID.randomUUID().toString();
     }
 
     public static Message system(String content) {
@@ -148,6 +150,19 @@ public class Message {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Message withId(String id) {
+        this.id = id;
+        return this;
     }
 
     @Override
