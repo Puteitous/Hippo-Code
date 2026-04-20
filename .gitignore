@@ -25,6 +25,9 @@ Thumbs.db
 *.log
 logs/
 
+# Hippo 工作空间（包含会话、缓存、凭证）
+.hippo/
+
 # Maven
 dependency-reduced-pom.xml
 
