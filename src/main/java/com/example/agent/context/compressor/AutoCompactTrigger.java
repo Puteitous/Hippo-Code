@@ -4,8 +4,10 @@ import com.example.agent.context.ContextWindow;
 import com.example.agent.context.SessionCompactionState;
 import com.example.agent.context.budget.BudgetListener;
 import com.example.agent.context.budget.BudgetThreshold;
+import com.example.agent.logging.CompactionMetricsCollector;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
 
 import java.util.List;
@@ -17,13 +19,23 @@ public class AutoCompactTrigger implements BudgetListener {
     private final AutoCompact autoCompact;
     private final TokenEstimator tokenEstimator;
     private final SessionCompactionState state;
+    private final SessionMemoryManager memoryManager;
+    private final CompactionMetricsCollector metrics;
+    private final String sessionId;
     private boolean compactionPerformed;
 
     public AutoCompactTrigger(ContextWindow contextWindow, TokenEstimator tokenEstimator, LlmClient llmClient) {
+        this(contextWindow, tokenEstimator, llmClient, "default-session");
+    }
+
+    public AutoCompactTrigger(ContextWindow contextWindow, TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
         this.contextWindow = contextWindow;
         this.tokenEstimator = tokenEstimator;
-        this.slidingWindow = new DynamicSlidingWindow(tokenEstimator);
-        this.autoCompact = new AutoCompact(tokenEstimator, llmClient);
+        this.sessionId = sessionId;
+        this.slidingWindow = new DynamicSlidingWindow(tokenEstimator, sessionId, llmClient);
+        this.autoCompact = new AutoCompact(tokenEstimator, llmClient, sessionId);
+        this.memoryManager = new SessionMemoryManager(sessionId);
+        this.metrics = new CompactionMetricsCollector();
         this.state = new SessionCompactionState();
         this.compactionPerformed = false;
     }
@@ -40,6 +52,8 @@ public class AutoCompactTrigger implements BudgetListener {
         int targetTokens = (int) (BudgetThreshold.WARNING_75.getThresholdTokens(maxTokens) * 0.9);
 
         List<Message> currentMessages = contextWindow.getRawMessages();
+
+        waitForSessionMemoryExtraction();
 
         if (state.canIncrementalCompact()) {
             DynamicSlidingWindow.CompactionResult incremental = tryIncrementalCompact(
@@ -80,6 +94,24 @@ public class AutoCompactTrigger implements BudgetListener {
         return trySlidingWindowFirst(messages, targetTokens, maxTokens);
     }
 
+    private void waitForSessionMemoryExtraction() {
+        long start = System.currentTimeMillis();
+        long timeout = 15000;
+
+        while (System.currentTimeMillis() - start < timeout) {
+            long lastExtractTime = state.getLastExtractionTime();
+            if (lastExtractTime > 0 && System.currentTimeMillis() - lastExtractTime > 1000) {
+                break;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
     private DynamicSlidingWindow.CompactionResult trySlidingWindowFirst(
             List<Message> messages, int targetTokens, int maxTokens) {
 
@@ -87,16 +119,50 @@ public class AutoCompactTrigger implements BudgetListener {
             return null;
         }
 
-        DynamicSlidingWindow.CompactionResult result = slidingWindow.compact(messages, targetTokens);
+        if (!memoryManager.exists()) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_NO_SESSION_MEMORY);
+            return null;
+        }
+
+        if (!memoryManager.hasActualContent()) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_EMPTY_TEMPLATE);
+            return null;
+        }
+
+        if (!state.hasValidSummaryBoundary()) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND);
+            return null;
+        }
+
+        DynamicSlidingWindow.BoundaryResult boundary = 
+            slidingWindow.findSummaryBoundaryWithValidation(messages, state);
+
+        if (!boundary.isValid && "summarized_id_not_found".equals(boundary.reason)) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND,
+                "边界ID在当前会话中不存在 → 恢复旧会话场景，优雅降级");
+            return null;
+        }
+
+        if ("tool_call_in_progress".equals(boundary.reason)) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS,
+                "检测到未完成工具调用，冻结截断边界");
+        }
+
+        DynamicSlidingWindow.CompactionResult result = slidingWindow.compact(messages, targetTokens, state);
 
         int tokensAfter = tokenEstimator.estimateConversationTokens(result.getMessages());
 
-        if (tokensAfter < BudgetThreshold.SLIDING_WINDOW.getThresholdTokens(maxTokens)
-            && result.isWithinOptimalRange()) {
-            return result;
+        if (tokensAfter >= BudgetThreshold.SLIDING_WINDOW.getThresholdTokens(maxTokens)
+            || !result.isWithinOptimalRange()) {
+            metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_THRESHOLD_EXCEEDED,
+                String.format("tokensAfter=%d, withinRange=%b", tokensAfter, result.isWithinOptimalRange()));
+            return null;
         }
 
-        return null;
+        metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_SUCCESS,
+            String.format("removed=%d turns, saved=%d tokens", result.getRemovedTurns(), result.getSavedTokens()));
+
+        return result;
     }
 
     private void applyResult(DynamicSlidingWindow.CompactionResult result, boolean incremental) {
@@ -111,6 +177,10 @@ public class AutoCompactTrigger implements BudgetListener {
         
         return toolMessageCount > 5
             && messages.size() > 20;
+    }
+
+    public CompactionMetricsCollector getMetrics() {
+        return metrics;
     }
 
     private void injectSlidingWindowSuccess(DynamicSlidingWindow.CompactionResult result, boolean incremental) {
@@ -153,6 +223,7 @@ public class AutoCompactTrigger implements BudgetListener {
 
     public void reset() {
         compactionPerformed = false;
+        state.reset();
     }
 
     public void fullReset() {
