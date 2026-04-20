@@ -41,10 +41,10 @@ public class TokenMetricsCollector {
         }
     }
     
-    public void recordConversation(String conversationId, LocalDateTime timestamp,
+    public void recordConversation(String sessionId, LocalDateTime timestamp,
                                    int estimatedTokens, Usage actualUsage) {
         String record = String.format("%s,%s,%d,%d,%d,%d\n",
-            conversationId,
+            sessionId,
             timestamp.format(TIMESTAMP_FORMAT),
             estimatedTokens,
             actualUsage != null ? actualUsage.getPromptTokens() : 0,
@@ -55,7 +55,7 @@ public class TokenMetricsCollector {
         try {
             Files.writeString(metricsFile, record, 
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            logger.debug("记录 Token 指标: {}", conversationId);
+            logger.debug("记录 Token 指标: {}", sessionId);
         } catch (IOException e) {
             logger.error("写入 Token 指标失败", e);
         }

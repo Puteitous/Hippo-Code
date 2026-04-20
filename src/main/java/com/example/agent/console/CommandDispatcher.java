@@ -83,7 +83,7 @@ public class CommandDispatcher {
     private final TokenMetricsCollector tokenMetricsCollector;
     private final SessionStorage sessionStorage;
     private final McpServiceManager mcpServiceManager;
-    private String currentConversationId;
+    private String currentSessionId;
 
     public CommandDispatcher(AgentContext context, AgentUi ui, InputHandler inputHandler) {
         this.ui = ui;
@@ -151,12 +151,12 @@ public class CommandDispatcher {
         }
 
         if ("showlog".equalsIgnoreCase(line)) {
-            if (currentConversationId == null) {
+            if (currentSessionId == null) {
                 ui.println(ConsoleStyle.yellow("还没有对话记录"));
                 ui.println(ConsoleStyle.gray("提示：开始一次对话后，可以使用 showlog 查看日志"));
                 ui.println();
             } else {
-                ui.showLastConversationLog(currentConversationId);
+                ui.showLastConversationLog(currentSessionId);
             }
             return CommandResult.continueExecution();
         }
@@ -720,11 +720,11 @@ public class CommandDispatcher {
         return true;
     }
 
-    public void setCurrentConversationId(String conversationId) {
-        this.currentConversationId = conversationId;
+    public void setCurrentSessionId(String sessionId) {
+        this.currentSessionId = sessionId;
     }
 
-    public String getCurrentConversationId() {
-        return currentConversationId;
+    public String getCurrentSessionId() {
+        return currentSessionId;
     }
 }

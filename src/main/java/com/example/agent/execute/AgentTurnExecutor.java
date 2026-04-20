@@ -40,7 +40,7 @@ public class AgentTurnExecutor {
         this.context = context;
     }
 
-    public AgentTurnResult execute(ConversationLogger conversationLogger, String conversationId) throws LlmException {
+    public AgentTurnResult execute(ConversationLogger conversationLogger, String sessionId) throws LlmException {
         ui.println(ConsoleStyle.gray("  ┌─ ") + ConsoleStyle.boldCyan("AI 思考中..."));
         ui.println(ConsoleStyle.gray("  │"));
         ui.print(ConsoleStyle.gray("  └─ ") + ConsoleStyle.boldCyan("AI: "));
@@ -84,9 +84,9 @@ public class AgentTurnExecutor {
         }
 
         Usage usage = response.getUsage();
-        if (usage != null && conversationId != null) {
+        if (usage != null && sessionId != null) {
             context.getTokenMetricsCollector().recordConversation(
-                    conversationId,
+                    sessionId,
                     LocalDateTime.now(),
                     conversationManager.getTokenCount(),
                     usage

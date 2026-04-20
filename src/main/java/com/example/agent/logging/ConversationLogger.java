@@ -11,6 +11,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConversationLogger {
@@ -19,7 +20,7 @@ public class ConversationLogger {
     private static final DateTimeFormatter TIMESTAMP_FORMAT = 
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
-    private final String conversationId;
+    private final String sessionId;
     private final Path logFile;
     private final LocalDateTime startTime;
     private final AtomicInteger totalInputTokens = new AtomicInteger(0);
@@ -27,24 +28,27 @@ public class ConversationLogger {
     private final AtomicInteger totalToolCalls = new AtomicInteger(0);
     private final AtomicInteger llmCallCount = new AtomicInteger(0);
     
-    public ConversationLogger(String conversationId, Path logFile) {
-        this.conversationId = conversationId;
+    public ConversationLogger(String sessionId, Path logFile) {
+        this.sessionId = sessionId;
         this.logFile = logFile;
         this.startTime = LocalDateTime.now();
         
         try {
             Files.createDirectories(logFile.getParent());
+            WorkspaceManager.ensureSessionResources(
+                WorkspaceManager.getCurrentProjectKey(), sessionId
+            );
             writeHeader();
-            logger.debug("创建对话日志: {}", logFile);
+            logger.debug("创建会话日志: session={}", sessionId);
         } catch (IOException e) {
-            logger.error("创建对话日志文件失败: {}", logFile, e);
+            logger.error("创建会话日志文件失败: {}", logFile, e);
         }
     }
     
     private void writeHeader() throws IOException {
         StringBuilder header = new StringBuilder();
         header.append("═".repeat(80)).append("\n");
-        header.append("对话 ID: ").append(conversationId).append("\n");
+        header.append("会话 ID: ").append(sessionId).append("\n");
         header.append("开始时间: ").append(startTime.format(TIMESTAMP_FORMAT)).append("\n");
         header.append("═".repeat(80)).append("\n\n");
         
@@ -119,21 +123,43 @@ public class ConversationLogger {
     public void logToolCall(String toolName, String args, String result, 
                            long duration, boolean success) {
         totalToolCalls.incrementAndGet();
+        String toolCallId = UUID.randomUUID().toString().substring(0, 8);
         
         StringBuilder entry = new StringBuilder();
         entry.append("\n┌─ 工具调用 ────────────────────────────────\n");
         entry.append("│ 时间: ").append(LocalDateTime.now().format(TIMESTAMP_FORMAT)).append("\n");
         entry.append("│ 工具: ").append(toolName).append("\n");
+        entry.append("│ 调用ID: ").append(toolCallId).append("\n");
         entry.append("│ 耗时: ").append(duration).append("ms\n");
         entry.append("│ 状态: ").append(success ? "✅ 成功" : "❌ 失败").append("\n");
         entry.append("├────────────────────────────────────────────\n");
-        entry.append("│ 参数: ").append(args).append("\n");
+        entry.append("│ 参数: ").append(truncate(args, 200)).append("\n");
         entry.append("├────────────────────────────────────────────\n");
-        entry.append("│ 结果: ").append(truncate(result, 500)).append("\n");
+        
+        if (result != null && result.length() > 1024) {
+            Path resultPath = writeToolResultShard(toolCallId, result);
+            entry.append("│ 结果: 📂 已分片存储 (").append(result.length())
+                 .append(" 字符) → ").append(resultPath.getFileName()).append("\n");
+        } else {
+            entry.append("│ 结果: ").append(truncate(result, 500)).append("\n");
+        }
         entry.append("└────────────────────────────────────────────\n");
         
         writeToFile(entry.toString());
         logger.debug("记录工具调用: {} ({}ms)", toolName, duration);
+    }
+    
+    private Path writeToolResultShard(String toolCallId, String result) {
+        try {
+            String projectKey = WorkspaceManager.getCurrentProjectKey();
+            Path resultPath = WorkspaceManager.getToolResultPath(projectKey, sessionId, toolCallId);
+            Files.createDirectories(resultPath.getParent());
+            Files.writeString(resultPath, result, StandardOpenOption.CREATE);
+            return resultPath;
+        } catch (IOException e) {
+            logger.warn("写入工具结果分片失败，降级到内联: {}", toolCallId, e);
+            return logFile.getParent();
+        }
     }
     
     public void logSummary() {
@@ -144,7 +170,7 @@ public class ConversationLogger {
         summary.append("\n\n").append("═".repeat(80)).append("\n");
         summary.append("对话摘要\n");
         summary.append("═".repeat(80)).append("\n");
-        summary.append("对话 ID: ").append(conversationId).append("\n");
+        summary.append("对话 ID: ").append(sessionId).append("\n");
         summary.append("开始时间: ").append(startTime.format(TIMESTAMP_FORMAT)).append("\n");
         summary.append("结束时间: ").append(endTime.format(TIMESTAMP_FORMAT)).append("\n");
         summary.append("总耗时: ").append(duration).append(" 秒\n");
@@ -156,8 +182,8 @@ public class ConversationLogger {
         summary.append("═".repeat(80)).append("\n");
         
         writeToFile(summary.toString());
-        logger.info("对话摘要 - ID: {}, 总Token: {}, 工具调用: {}", 
-            conversationId, totalInputTokens.get() + totalOutputTokens.get(), totalToolCalls.get());
+        logger.info("会话摘要 - ID: {}, 总Token: {}, 工具调用: {}", 
+            sessionId, totalInputTokens.get() + totalOutputTokens.get(), totalToolCalls.get());
     }
     
     public void logDebug(String message) {
@@ -187,8 +213,8 @@ public class ConversationLogger {
         return str.substring(0, maxLength) + "... (已截断)";
     }
     
-    public String getConversationId() {
-        return conversationId;
+    public String getSessionId() {
+        return sessionId;
     }
     
     public int getTotalInputTokens() {
