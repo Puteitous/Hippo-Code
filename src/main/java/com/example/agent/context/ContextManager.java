@@ -4,11 +4,13 @@ import com.example.agent.context.compressor.AutoCompactTrigger;
 import com.example.agent.context.compressor.SlidingWindowTrigger;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryStore;
 import com.example.agent.service.TokenEstimator;
 
 import java.util.List;
+import java.util.UUID;
 
 public class ContextManager {
 
@@ -18,12 +20,19 @@ public class ContextManager {
     private final AutoCompactTrigger autoCompactTrigger;
     private final BlockingGuard blockingGuard;
     private final MemoryRetriever memoryRetriever;
+    private final BackgroundExtractor backgroundExtractor;
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
+    private final String sessionId;
 
     public ContextManager(int maxTokens, TokenEstimator tokenEstimator, LlmClient llmClient) {
+        this(maxTokens, tokenEstimator, llmClient, UUID.randomUUID().toString());
+    }
+
+    public ContextManager(int maxTokens, TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
+        this.sessionId = sessionId;
         this.contextWindow = new ContextWindow(maxTokens, tokenEstimator);
 
         this.warningInjector = new BudgetWarningInjector(contextWindow);
@@ -32,7 +41,7 @@ public class ContextManager {
         this.slidingWindowTrigger = new SlidingWindowTrigger(contextWindow, tokenEstimator);
         this.slidingWindowTrigger.register();
 
-        this.autoCompactTrigger = new AutoCompactTrigger(contextWindow, tokenEstimator, llmClient);
+        this.autoCompactTrigger = new AutoCompactTrigger(contextWindow, tokenEstimator, llmClient, sessionId);
         this.autoCompactTrigger.register();
 
         this.blockingGuard = new BlockingGuard(contextWindow);
@@ -40,6 +49,13 @@ public class ContextManager {
 
         MemoryStore memoryStore = new MemoryStore(llmClient);
         this.memoryRetriever = new MemoryRetriever(memoryStore);
+
+        this.backgroundExtractor = new BackgroundExtractor(
+            sessionId, 
+            tokenEstimator, 
+            llmClient, 
+            autoCompactTrigger.getState()
+        );
     }
 
     public void addMessage(Message message) {
@@ -47,6 +63,8 @@ public class ContextManager {
             throw new IllegalStateException(blockingGuard.getStatusMessage());
         }
         contextWindow.addMessage(message);
+
+        backgroundExtractor.onMessageAdded(message, contextWindow.getRawMessages());
 
         if (shouldMarkForMemory(message)) {
             memoryRetriever.markForMemory(message.getContent());
@@ -102,12 +120,24 @@ public class ContextManager {
         return memoryRetriever;
     }
 
+    public BackgroundExtractor getBackgroundExtractor() {
+        return backgroundExtractor;
+    }
+
+    public String getCompactionStats() {
+        return autoCompactTrigger.getMetrics().getSummary();
+    }
+
     public BlockingGuard getBlockingGuard() {
         return blockingGuard;
     }
 
     public boolean canCallTool() {
         return blockingGuard.canCallTool();
+    }
+
+    public String getSessionId() {
+        return sessionId;
     }
 
     private boolean shouldMarkForMemory(Message message) {

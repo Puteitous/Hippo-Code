@@ -2,6 +2,7 @@ package com.example.agent.context.compressor;
 
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
 
 import java.util.ArrayList;
@@ -12,12 +13,26 @@ public class AutoCompact {
 
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
+    private final SessionMemoryManager memoryManager;
     private CompactionResult lastResult;
     private String customInstruction;
 
     public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
+        this.memoryManager = null;
+    }
+
+    public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
+        this.tokenEstimator = tokenEstimator;
+        this.llmClient = llmClient;
+        this.memoryManager = new SessionMemoryManager(sessionId);
+    }
+
+    public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient, SessionMemoryManager memoryManager) {
+        this.tokenEstimator = tokenEstimator;
+        this.llmClient = llmClient;
+        this.memoryManager = memoryManager;
     }
 
     public List<Message> compact(List<Message> messages, int targetTokens) {
@@ -39,7 +54,7 @@ public class AutoCompact {
         List<Message> toSummarize = historyMessages.subList(0, splitIndex);
         List<Message> toKeep = historyMessages.subList(splitIndex, historyMessages.size());
 
-        String summary = generateSummary(toSummarize);
+        String summary = getOrGenerateSummary(toSummarize);
 
         List<Message> result = new ArrayList<>();
         if (systemMessage != null) {
@@ -59,6 +74,14 @@ public class AutoCompact {
         );
 
         return result;
+    }
+
+    private String getOrGenerateSummary(List<Message> messages) {
+        String existingMemory = memoryManager.read();
+        if (existingMemory != null && !existingMemory.isBlank()) {
+            return existingMemory + "\n\n> ✅ 从 session-memory.md 加载，无需重新生成";
+        }
+        return generateSummary(messages);
     }
 
     private String generateSummary(List<Message> messages) {
