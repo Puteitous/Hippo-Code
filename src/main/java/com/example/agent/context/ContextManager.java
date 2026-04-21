@@ -1,13 +1,13 @@
 package com.example.agent.context;
 
 import com.example.agent.context.compressor.AutoCompactTrigger;
-import com.example.agent.context.compressor.SlidingWindowTrigger;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryStore;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.session.SessionTranscript;
 
 import java.util.List;
 import java.util.UUID;
@@ -16,7 +16,6 @@ public class ContextManager {
 
     private final ContextWindow contextWindow;
     private final BudgetWarningInjector warningInjector;
-    private final SlidingWindowTrigger slidingWindowTrigger;
     private final AutoCompactTrigger autoCompactTrigger;
     private final BlockingGuard blockingGuard;
     private final MemoryRetriever memoryRetriever;
@@ -24,6 +23,7 @@ public class ContextManager {
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
     private final String sessionId;
+    private final SessionTranscript transcript;
 
     public ContextManager(int maxTokens, TokenEstimator tokenEstimator, LlmClient llmClient) {
         this(maxTokens, tokenEstimator, llmClient, UUID.randomUUID().toString());
@@ -34,14 +34,18 @@ public class ContextManager {
         this.llmClient = llmClient;
         this.sessionId = sessionId;
         this.contextWindow = new ContextWindow(maxTokens, tokenEstimator);
+        this.transcript = new SessionTranscript(sessionId);
 
         this.warningInjector = new BudgetWarningInjector(contextWindow);
         this.warningInjector.register();
 
-        this.slidingWindowTrigger = new SlidingWindowTrigger(contextWindow, tokenEstimator);
-        this.slidingWindowTrigger.register();
-
-        this.autoCompactTrigger = new AutoCompactTrigger(contextWindow, tokenEstimator, llmClient, sessionId);
+        this.autoCompactTrigger = new AutoCompactTrigger(
+            contextWindow, 
+            tokenEstimator, 
+            llmClient, 
+            sessionId,
+            transcript
+        );
         this.autoCompactTrigger.register();
 
         this.blockingGuard = new BlockingGuard(contextWindow);
@@ -78,6 +82,9 @@ public class ContextManager {
     }
 
     public List<Message> getContext() {
+        autoCompactTrigger.startNewQueryLoop();
+        autoCompactTrigger.ensureResumeWindowIfNeeded();
+
         List<Message> effectiveMessages = contextWindow.getEffectiveMessages();
         return memoryRetriever.prepareContextHeader(effectiveMessages);
     }
@@ -96,7 +103,6 @@ public class ContextManager {
 
     public void clear() {
         contextWindow.clear();
-        slidingWindowTrigger.reset();
         autoCompactTrigger.fullReset();
         warningInjector.reset();
     }
@@ -104,7 +110,6 @@ public class ContextManager {
     public void replaceContext(List<Message> newMessages) {
         contextWindow.clearInjectedWarnings();
         contextWindow.replaceMessages(newMessages);
-        slidingWindowTrigger.reset();
         autoCompactTrigger.reset();
     }
 
