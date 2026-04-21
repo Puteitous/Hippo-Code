@@ -1,6 +1,7 @@
 package com.example.agent.domain.rule;
 
 import com.example.agent.config.RuleConfig;
+import com.example.agent.config.UserResourceManager;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,7 +9,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public class RuleManager {
 
@@ -37,48 +37,22 @@ public class RuleManager {
     }
 
     public void loadHippoRules() {
-        String rulesFile = config.getRulesFile();
-        if (rulesFile == null || rulesFile.isEmpty()) {
-            logger.debug("未配置 rules_file，跳过加载");
-            return;
-        }
-
-        Path filePath = Paths.get(rulesFile);
-        if (!Files.exists(filePath)) {
-            logger.debug("文件 {} 不存在，跳过加载", rulesFile);
-            return;
-        }
-
-        try {
-            hippoRulesContent = Files.readString(filePath);
+        UserResourceManager.initialize();
+        hippoRulesContent = UserResourceManager.loadCombinedRules();
+        
+        if (!hippoRulesContent.isEmpty()) {
             int tokens = tokenEstimator.estimateTextTokens(hippoRulesContent);
-            logger.info("加载 .hipporules 文件，大小: {} 字符, {} tokens", hippoRulesContent.length(), tokens);
-        } catch (IOException e) {
-            logger.warn("加载 .hipporules 文件失败: {}", e.getMessage());
-            hippoRulesContent = "";
+            logger.info("📋 加载分层规则文件，总大小: {} 字符, {} tokens", hippoRulesContent.length(), tokens);
         }
     }
 
     public void loadMemoryMd() {
-        String memoryFile = config.getMemoryFile();
-        if (memoryFile == null || memoryFile.isEmpty()) {
-            logger.debug("未配置 memory_file，跳过加载");
-            return;
-        }
-
-        Path filePath = Paths.get(memoryFile);
-        if (!Files.exists(filePath)) {
-            logger.debug("文件 {} 不存在，跳过加载", memoryFile);
-            return;
-        }
-
-        try {
-            memoryMdContent = Files.readString(filePath);
+        UserResourceManager.initialize();
+        memoryMdContent = UserResourceManager.loadCombinedMemory();
+        
+        if (!memoryMdContent.isEmpty()) {
             int tokens = tokenEstimator.estimateTextTokens(memoryMdContent);
-            logger.info("加载 MEMORY.md 文件，大小: {} 字符, {} tokens", memoryMdContent.length(), tokens);
-        } catch (IOException e) {
-            logger.warn("加载 MEMORY.md 文件失败: {}", e.getMessage());
-            memoryMdContent = "";
+            logger.info("🧠 加载分层记忆文件，总大小: {} 字符, {} tokens", memoryMdContent.length(), tokens);
         }
     }
 
