@@ -10,12 +10,15 @@ import com.example.agent.core.blocker.EditConfirmationBlocker;
 import com.example.agent.execute.AgentTurnExecutor;
 import com.example.agent.execute.ConversationLoop;
 import com.example.agent.execute.ToolCallProcessor;
+import com.example.agent.logging.WorkspaceManager;
 
 import com.example.agent.progress.EditConfirmationHandler;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
 import com.example.agent.session.SessionStorageFactory;
+import com.example.agent.session.TranscriptLister;
+import com.example.agent.session.TranscriptLoader;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.UserInterruptException;
@@ -24,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
@@ -46,6 +50,8 @@ public class AgentApplication {
             registerShutdownHook(context);
 
             context.initialize();
+
+            runTranscriptHealthCheck();
 
             AgentUi ui = new AgentUi(context.getTerminal(), context.getConfig());
             ServiceLocator.registerSingleton(AgentUi.class, ui);
@@ -262,5 +268,42 @@ public class AgentApplication {
                     ((EditConfirmationBlocker) blocker).setConfirmationHandler(confirmationHandler);
                     logger.info("✅ Diff 预览确认机制已激活");
                 });
+    }
+
+    private static void runTranscriptHealthCheck() {
+        try {
+            logger.info("🔍 启动 Transcript 健康检查...");
+            
+            int repairedCount = 0;
+            var sessions = TranscriptLister.listSessions();
+            
+            for (var session : sessions) {
+                if (session.isHasCrashMarker()) {
+                    try {
+                        Path transcriptFile = WorkspaceManager.getSessionMessagesFile(
+                            WorkspaceManager.getCurrentProjectKey(),
+                            session.getSessionId()
+                        );
+                        int lines = TranscriptLoader.repairAndCompact(transcriptFile);
+                        if (lines > 0) {
+                            repairedCount++;
+                            logger.warn("🛠️  修复会话 {}: 移除了 {} 损坏行", 
+                                session.getSessionId(), lines);
+                        }
+                    } catch (Exception e) {
+                        logger.debug("修复会话失败: {}", session.getSessionId(), e);
+                    }
+                }
+            }
+            
+            if (repairedCount > 0) {
+                logger.info("✅ Transcript 健康检查完成: 修复了 {} 个会话", repairedCount);
+            } else {
+                logger.info("✅ Transcript 健康检查完成: 所有会话状态良好");
+            }
+            
+        } catch (Exception e) {
+            logger.warn("Transcript 健康检查失败，继续启动", e);
+        }
     }
 }

@@ -15,6 +15,7 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
+import com.example.agent.session.TranscriptLoader;
 import org.jline.reader.UserInterruptException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +79,7 @@ public class ConversationLoop {
             WorkspaceManager.getCurrentProjectKey(), sessionId
         );
         conversationLogger = new ConversationLogger(sessionId, logFile);
+        conversationManager.enableTranscript(sessionId);
         logger.info("新会话已启动: {}", sessionId);
     }
 
@@ -289,17 +291,26 @@ public class ConversationLoop {
             return;
         }
         
-        conversationManager.importSession(session);
+        String sessionId = session.getSessionId();
+        
+        boolean loadedFromTranscript = TranscriptLoader.loadToConversationManager(
+            sessionId, conversationManager
+        );
+        
+        if (!loadedFromTranscript) {
+            conversationManager.importSession(session);
+        }
+        
         conversationManager.fixUnfinishedToolCall();
         
-        String sessionId = session.getSessionId();
         currentSessionId = sessionId;
-        conversationRound = countUserMessages(session.getMessages());
+        conversationRound = countUserMessages(conversationManager.getHistory());
         
         Path logFile = WorkspaceManager.getSessionLogFile(
             WorkspaceManager.getCurrentProjectKey(), sessionId
         );
         conversationLogger = new ConversationLogger(sessionId, logFile);
+        conversationManager.enableTranscript(sessionId);
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         
         logger.info("会话已恢复: {}, 轮次: {}", sessionId, conversationRound);
