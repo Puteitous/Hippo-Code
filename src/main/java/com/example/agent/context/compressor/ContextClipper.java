@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class DynamicSlidingWindow {
+public class ContextClipper {
 
     public static final int MIN_TOKENS_TARGET = 10000;
     public static final int MAX_TOKENS_TARGET = 40000;
@@ -23,19 +23,19 @@ public class DynamicSlidingWindow {
     private final int maxTokens;
     private final int minTextBlockMessages;
 
-    public DynamicSlidingWindow(TokenEstimator tokenEstimator) {
+    public ContextClipper(TokenEstimator tokenEstimator) {
         this(tokenEstimator, null, null, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
-    public DynamicSlidingWindow(TokenEstimator tokenEstimator, String sessionId, LlmClient llmClient) {
+    public ContextClipper(TokenEstimator tokenEstimator, String sessionId, LlmClient llmClient) {
         this(tokenEstimator, new SessionMemoryManager(sessionId), llmClient, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
-    public DynamicSlidingWindow(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient) {
+    public ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient) {
         this(tokenEstimator, memoryManager, llmClient, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
-    public DynamicSlidingWindow(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient, int minTokens, int maxTokens, int minTextBlockMessages) {
+    public ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient, int minTokens, int maxTokens, int minTextBlockMessages) {
         this.tokenEstimator = tokenEstimator;
         this.memoryManager = memoryManager;
         this.llmClient = llmClient;
@@ -388,7 +388,7 @@ public class DynamicSlidingWindow {
         return content.substring(0, maxLength) + "\n... [truncated]";
     }
 
-    private class  ConversationTurn {
+    private class ConversationTurn {
         private final List<Message> messages = new ArrayList<>();
         private int tokenCount = 0;
         private boolean hasToolPair = false;

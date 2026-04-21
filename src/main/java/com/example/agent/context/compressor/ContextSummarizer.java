@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class AutoCompact {
+public class ContextSummarizer {
 
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
@@ -17,19 +17,19 @@ public class AutoCompact {
     private CompactionResult lastResult;
     private String customInstruction;
 
-    public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient) {
+    public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.memoryManager = null;
     }
 
-    public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
+    public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.memoryManager = new SessionMemoryManager(sessionId);
     }
 
-    public AutoCompact(TokenEstimator tokenEstimator, LlmClient llmClient, SessionMemoryManager memoryManager) {
+    public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, SessionMemoryManager memoryManager) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.memoryManager = memoryManager;

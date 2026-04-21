@@ -9,31 +9,44 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.session.SessionTranscript;
 
 import java.util.List;
 
 public class AutoCompactTrigger implements BudgetListener {
 
     private final ContextWindow contextWindow;
-    private final DynamicSlidingWindow slidingWindow;
-    private final AutoCompact autoCompact;
+    private final ContextClipper clipper;
+    private final ContextSummarizer summarizer;
     private final TokenEstimator tokenEstimator;
     private final SessionCompactionState state;
     private final SessionMemoryManager memoryManager;
     private final CompactionMetricsCollector metrics;
     private final String sessionId;
+    private final SessionTranscript transcript;
     private boolean compactionPerformed;
+    private boolean resumeWindowBuilt = false;
 
     public AutoCompactTrigger(ContextWindow contextWindow, TokenEstimator tokenEstimator, LlmClient llmClient) {
-        this(contextWindow, tokenEstimator, llmClient, "default-session");
+        this(contextWindow, tokenEstimator, llmClient, "default-session", new SessionTranscript("default-session"));
     }
 
     public AutoCompactTrigger(ContextWindow contextWindow, TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
+        this(contextWindow, tokenEstimator, llmClient, sessionId, new SessionTranscript(sessionId));
+    }
+
+    public AutoCompactTrigger(
+            ContextWindow contextWindow, 
+            TokenEstimator tokenEstimator, 
+            LlmClient llmClient, 
+            String sessionId,
+            SessionTranscript transcript) {
         this.contextWindow = contextWindow;
         this.tokenEstimator = tokenEstimator;
         this.sessionId = sessionId;
-        this.slidingWindow = new DynamicSlidingWindow(tokenEstimator, sessionId, llmClient);
-        this.autoCompact = new AutoCompact(tokenEstimator, llmClient, sessionId);
+        this.transcript = transcript;
+        this.clipper = new ContextClipper(tokenEstimator, sessionId, llmClient);
+        this.summarizer = new ContextSummarizer(tokenEstimator, llmClient, sessionId);
         this.memoryManager = new SessionMemoryManager(sessionId);
         this.metrics = new CompactionMetricsCollector();
         this.state = new SessionCompactionState();
@@ -42,13 +55,21 @@ public class AutoCompactTrigger implements BudgetListener {
 
     @Override
     public void onThresholdReached(BudgetThreshold threshold, int currentTokens, int maxTokens) {
-        if (threshold == BudgetThreshold.AUTO_COMPACT && !compactionPerformed) {
+        if (threshold == BudgetThreshold.AUTO_COMPACT && !compactionPerformed && state.shouldTryCompaction()) {
             performSmartCompaction(currentTokens, maxTokens);
             compactionPerformed = true;
         }
     }
 
     private void performSmartCompaction(int currentTokens, int maxTokens) {
+        if (!state.shouldTryCompaction()) {
+            metrics.recordEvent(
+                CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_CIRCUIT_BREAKER,
+                String.format("断路器已熔断: 连续失败 %d 次, 本会话不再尝试", state.getConsecutiveFailures())
+            );
+            return;
+        }
+
         int targetTokens = (int) (BudgetThreshold.WARNING_75.getThresholdTokens(maxTokens) * 0.9);
 
         List<Message> currentMessages = contextWindow.getRawMessages();
@@ -56,7 +77,7 @@ public class AutoCompactTrigger implements BudgetListener {
         waitForSessionMemoryExtraction();
 
         if (state.canIncrementalCompact()) {
-            DynamicSlidingWindow.CompactionResult incremental = tryIncrementalCompact(
+            ContextClipper.CompactionResult incremental = tryIncrementalCompact(
                 currentMessages, targetTokens, maxTokens
             );
             if (incremental != null) {
@@ -65,7 +86,7 @@ public class AutoCompactTrigger implements BudgetListener {
             }
         }
 
-        DynamicSlidingWindow.CompactionResult windowResult = trySlidingWindowFirst(
+        ContextClipper.CompactionResult windowResult = tryClippingFirst(
             currentMessages, targetTokens, maxTokens
         );
 
@@ -74,18 +95,30 @@ public class AutoCompactTrigger implements BudgetListener {
             return;
         }
 
-        List<Message> compacted = autoCompact.compact(currentMessages, targetTokens);
-        contextWindow.clearInjectedWarnings();
-        contextWindow.replaceMessages(compacted);
-        state.recordCompaction();
+        try {
+            List<Message> compacted = summarizer.compact(currentMessages, targetTokens);
+            contextWindow.clearInjectedWarnings();
+            contextWindow.replaceMessages(compacted);
+            state.recordCompaction();
+            state.recordSuccess();
 
-        AutoCompact.CompactionResult llmResult = autoCompact.getLastResult();
-        injectLLMCompaction(llmResult, currentTokens, maxTokens);
+            writeBoundaryMarker(compacted);
+
+            ContextSummarizer.CompactionResult llmResult = summarizer.getLastResult();
+            injectSummarySuccess(llmResult, currentTokens, maxTokens);
+        } catch (Exception e) {
+            state.recordFailure();
+            metrics.recordEvent(
+                CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_ERROR,
+                String.format("LLM 摘要压缩失败: %s, 连续失败 %d 次", 
+                    e.getMessage(), state.getConsecutiveFailures())
+            );
+        }
     }
 
-    private DynamicSlidingWindow.CompactionResult tryIncrementalCompact(
+    private ContextClipper.CompactionResult tryIncrementalCompact(
             List<Message> messages, int targetTokens, int maxTokens) {
-        return trySlidingWindowFirst(messages, targetTokens, maxTokens);
+        return tryClippingFirst(messages, targetTokens, maxTokens);
     }
 
     private void waitForSessionMemoryExtraction() {
@@ -106,10 +139,10 @@ public class AutoCompactTrigger implements BudgetListener {
         }
     }
 
-    private DynamicSlidingWindow.CompactionResult trySlidingWindowFirst(
+    private ContextClipper.CompactionResult tryClippingFirst(
             List<Message> messages, int targetTokens, int maxTokens) {
 
-        if (!shouldTrySlidingWindowFirst(messages)) {
+        if (!shouldTryClippingFirst(messages)) {
             return null;
         }
 
@@ -128,8 +161,8 @@ public class AutoCompactTrigger implements BudgetListener {
             return null;
         }
 
-        DynamicSlidingWindow.BoundaryResult boundary = 
-            slidingWindow.findSummaryBoundaryWithValidation(messages, state);
+        ContextClipper.BoundaryResult boundary = 
+            clipper.findSummaryBoundaryWithValidation(messages, state);
 
         if (!boundary.isValid && "resumed_session".equals(boundary.reason)) {
             metrics.recordEvent(CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_RESUMED_SESSION,
@@ -146,7 +179,7 @@ public class AutoCompactTrigger implements BudgetListener {
                 "恢复会话模式：锚点ID不存在，从尾部向左重建窗口");
         }
 
-        DynamicSlidingWindow.CompactionResult result = slidingWindow.compact(messages, targetTokens, state);
+        ContextClipper.CompactionResult result = clipper.compact(messages, targetTokens, state);
 
         int tokensAfter = tokenEstimator.estimateConversationTokens(result.getMessages());
 
@@ -163,14 +196,44 @@ public class AutoCompactTrigger implements BudgetListener {
         return result;
     }
 
-    private void applyResult(DynamicSlidingWindow.CompactionResult result, boolean incremental) {
+    private void applyResult(ContextClipper.CompactionResult result, boolean incremental) {
         contextWindow.clearInjectedWarnings();
         contextWindow.replaceMessages(result.getMessages());
         state.recordCompaction();
-        injectSlidingWindowSuccess(result, incremental);
+        state.recordSuccess();
+
+        writeBoundaryMarker(result.getMessages());
+
+        injectClippingSuccess(result, incremental);
     }
 
-    private boolean shouldTrySlidingWindowFirst(List<Message> messages) {
+    private void writeBoundaryMarker(List<Message> messages) {
+        if (messages.size() < 2) {
+            return;
+        }
+
+        Message summaryMessage = null;
+        for (int i = 1; i < messages.size(); i++) {
+            Message msg = messages.get(i);
+            if (msg.isSystem() && msg.getContent().contains("摘要")) {
+                summaryMessage = msg;
+                break;
+            }
+        }
+
+        if (summaryMessage != null) {
+            String boundaryUuid = summaryMessage.getId();
+            transcript.appendCompactBoundary(boundaryUuid);
+            state.recordMemoryExtraction(boundaryUuid);
+
+            metrics.recordEvent(
+                CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_BOUNDARY_PERSISTED,
+                "压缩边界已持久化到 Transcript: " + boundaryUuid.substring(0, 8)
+            );
+        }
+    }
+
+    private boolean shouldTryClippingFirst(List<Message> messages) {
         long toolMessageCount = messages.stream().filter(Message::isTool).count();
         
         return toolMessageCount > 5
@@ -181,10 +244,10 @@ public class AutoCompactTrigger implements BudgetListener {
         return metrics;
     }
 
-    private void injectSlidingWindowSuccess(DynamicSlidingWindow.CompactionResult result, boolean incremental) {
+    private void injectClippingSuccess(ContextClipper.CompactionResult result, boolean incremental) {
         String content = String.format(
             "<system-reminder>\n" +
-            "✅ %s零成本压缩完成（动态滑动窗口）\n" +
+            "✅ %s零成本裁剪完成（动态滑动窗口）\n" +
             "• 算法：动态 token 范围（10K-40K），无 LLM 调用\n" +
             "• 保留 %d / %d 个完整对话回合\n" +
             "• 保留 %d 条含文本的推理消息\n" +
@@ -201,7 +264,7 @@ public class AutoCompactTrigger implements BudgetListener {
         contextWindow.injectWarning(Message.system(content));
     }
 
-    private void injectLLMCompaction(AutoCompact.CompactionResult result, int beforeTokens, int maxTokens) {
+    private void injectSummarySuccess(ContextSummarizer.CompactionResult result, int beforeTokens, int maxTokens) {
         int savedTokens = beforeTokens - result.getTokenCountAfter();
         String content = String.format(
             "<system-reminder>\n" +
@@ -221,12 +284,18 @@ public class AutoCompactTrigger implements BudgetListener {
 
     public void reset() {
         compactionPerformed = false;
+        resumeWindowBuilt = false;
         state.reset();
     }
 
     public void fullReset() {
         reset();
         state.reset();
+    }
+
+    public void startNewQueryLoop() {
+        compactionPerformed = false;
+        state.startNewQueryLoop();
     }
 
     public void register() {
@@ -243,5 +312,28 @@ public class AutoCompactTrigger implements BudgetListener {
 
     public SessionCompactionState getState() {
         return state;
+    }
+
+    public void ensureResumeWindowIfNeeded() {
+        if (resumeWindowBuilt || !state.hasValidSummaryBoundary()) {
+            return;
+        }
+
+        List<Message> messages = contextWindow.getRawMessages();
+        ContextClipper.BoundaryResult boundary = 
+            clipper.findSummaryBoundaryWithValidation(messages, state);
+
+        if ("resumed_session".equals(boundary.reason)) {
+            metrics.recordEvent(
+                CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_RESUMED_SESSION,
+                "检测到恢复会话，立即强制构建滑动窗口"
+            );
+
+            int maxTokens = contextWindow.getBudget().getMaxTokens();
+            int currentTokens = tokenEstimator.estimate(messages);
+            performSmartCompaction(currentTokens, maxTokens);
+
+            resumeWindowBuilt = true;
+        }
     }
 }
