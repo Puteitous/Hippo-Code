@@ -2,16 +2,22 @@ package com.example.agent.context;
 
 public class SessionCompactionState {
 
+    private static final int MAX_CONSECUTIVE_FAILURES = 3;
+
     private String lastSummarizedMessageId;
     private int compactionCount;
     private long lastCompactionTime;
     private long lastExtractionTime;
     private long firstMessageTimestamp;
+    private int consecutiveFailures;
+    private boolean compactedInCurrentLoop;
 
     public SessionCompactionState() {
         this.compactionCount = 0;
         this.lastCompactionTime = 0;
         this.lastExtractionTime = 0;
+        this.consecutiveFailures = 0;
+        this.compactedInCurrentLoop = false;
     }
 
     public boolean canIncrementalCompact() {
@@ -33,11 +39,39 @@ public class SessionCompactionState {
         this.lastExtractionTime = System.currentTimeMillis();
     }
 
+    public boolean shouldTryCompaction() {
+        return consecutiveFailures < MAX_CONSECUTIVE_FAILURES
+            && !compactedInCurrentLoop;
+    }
+
+    public void recordFailure() {
+        consecutiveFailures++;
+    }
+
+    public void recordSuccess() {
+        consecutiveFailures = 0;
+        compactedInCurrentLoop = true;
+    }
+
+    public void startNewQueryLoop() {
+        compactedInCurrentLoop = false;
+    }
+
     public void reset() {
         this.lastSummarizedMessageId = null;
         this.compactionCount = 0;
         this.lastCompactionTime = 0;
         this.lastExtractionTime = 0;
+        this.consecutiveFailures = 0;
+        this.compactedInCurrentLoop = false;
+    }
+
+    public int getConsecutiveFailures() {
+        return consecutiveFailures;
+    }
+
+    public boolean isCompactedInCurrentLoop() {
+        return compactedInCurrentLoop;
     }
 
     public String getLastSummarizedMessageId() {

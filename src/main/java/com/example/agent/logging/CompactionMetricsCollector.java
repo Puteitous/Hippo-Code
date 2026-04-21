@@ -21,7 +21,9 @@ public class CompactionMetricsCollector {
         TENGU_SM_COMPACT_RESUMED_SESSION("tengu_sm_compact_resumed_session", "恢复会话-边界重建"),
         TENGU_SM_COMPACT_THRESHOLD_EXCEEDED("tengu_sm_compact_threshold_exceeded", "压缩后仍超阈值"),
         TENGU_SM_COMPACT_SUMMARIZED_ID_NOT_FOUND("tengu_sm_compact_summarized_id_not_found", "边界ID不存在"),
+        TENGU_SM_COMPACT_BOUNDARY_PERSISTED("tengu_sm_compact_boundary_persisted", "压缩边界已持久化"),
         TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS("tengu_sm_compact_tool_call_in_progress", "存在未完成工具调用"),
+        TENGU_SM_COMPACT_CIRCUIT_BREAKER("tengu_sm_compact_circuit_breaker", "断路器熔断"),
         TENGU_SM_COMPACT_ERROR("tengu_sm_compact_error", "压缩异常");
 
         private final String eventName;
@@ -57,6 +59,7 @@ public class CompactionMetricsCollector {
             case TENGU_SM_COMPACT_RESUMED_SESSION:
             case TENGU_SM_COMPACT_THRESHOLD_EXCEEDED:
             case TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS:
+            case TENGU_SM_COMPACT_CIRCUIT_BREAKER:
             case TENGU_SM_COMPACT_ERROR:
                 llmSummaryFallback.incrementAndGet();
                 fallbackReasons.computeIfAbsent(event.getEventName(), k -> new AtomicInteger(0)).incrementAndGet();
