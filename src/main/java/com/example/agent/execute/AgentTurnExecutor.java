@@ -102,7 +102,7 @@ public class AgentTurnExecutor {
                 assistantMessage.setContent(contentBuilder.toString());
             }
 
-            conversationManager.addAssistantMessage(assistantMessage);
+            conversationManager.addAssistantMessage(assistantMessage, usage);
 
             List<ToolCall> toolCalls = assistantMessage.getToolCalls();
             ui.println();
@@ -140,7 +140,7 @@ public class AgentTurnExecutor {
                 return AgentTurnResult.EMPTY_RESPONSE;
             }
 
-            conversationManager.addAssistantMessage(assistantMessage);
+            conversationManager.addAssistantMessage(assistantMessage, usage);
 
             if (conversationLogger != null) {
                 conversationLogger.logAiResponse(contentBuilder.toString(), usage);

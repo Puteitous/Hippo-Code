@@ -288,42 +288,35 @@ public class CommandDispatcher {
         }
         
         String arg = parts[1].trim();
+        List<SessionData> sessions = sessionStorage.listSessions();
         
-        try {
-            int index = Integer.parseInt(arg);
-            List<SessionData> sessions = sessionStorage.listSessions();
-            
-            if (index < 1 || index > sessions.size()) {
-                ui.println(ConsoleStyle.red("无效的会话序号: " + index));
-                ui.println();
-                return CommandResult.continueExecution();
-            }
-            
-            SessionData session = sessions.get(index - 1);
-            if (!session.canResume()) {
-                ui.println(ConsoleStyle.yellow("该会话已完成，无法恢复"));
-                ui.println();
-                return CommandResult.continueExecution();
-            }
-            
-            return CommandResult.resumeSession(session);
-            
-        } catch (NumberFormatException e) {
-            SessionData session = sessionStorage.loadSession(arg).orElse(null);
-            if (session == null) {
+        SessionData session = sessionStorage.loadSession(arg).orElse(null);
+        
+        if (session == null) {
+            try {
+                int index = Integer.parseInt(arg);
+                
+                if (index < 1 || index > sessions.size()) {
+                    ui.println(ConsoleStyle.red("无效的会话序号/ID: " + arg));
+                    ui.println();
+                    return CommandResult.continueExecution();
+                }
+                
+                session = sessions.get(index - 1);
+            } catch (NumberFormatException e) {
                 ui.println(ConsoleStyle.red("找不到会话: " + arg));
                 ui.println();
                 return CommandResult.continueExecution();
             }
-            
-            if (!session.canResume()) {
-                ui.println(ConsoleStyle.yellow("该会话已完成，无法恢复"));
-                ui.println();
-                return CommandResult.continueExecution();
-            }
-            
-            return CommandResult.resumeSession(session);
         }
+        
+        if (!session.canResume()) {
+            ui.println(ConsoleStyle.yellow("该会话已完成，无法恢复"));
+            ui.println();
+            return CommandResult.continueExecution();
+        }
+        
+        return CommandResult.resumeSession(session);
     }
 
     private CommandResult handleDeleteSessionCommand(String line) {
@@ -336,35 +329,32 @@ public class CommandDispatcher {
         }
         
         String arg = parts[1].trim();
+        List<SessionData> sessions = sessionStorage.listSessions();
+        
+        boolean deleted = sessionStorage.deleteSession(arg);
+        if (deleted) {
+            ui.println(ConsoleStyle.green("会话已删除: " + arg));
+            ui.println();
+            return CommandResult.continueExecution();
+        }
         
         try {
             int index = Integer.parseInt(arg);
-            List<SessionData> sessions = sessionStorage.listSessions();
             
             if (index < 1 || index > sessions.size()) {
-                ui.println(ConsoleStyle.red("无效的会话序号: " + index));
+                ui.println(ConsoleStyle.red("无效的会话序号/ID: " + arg));
                 ui.println();
                 return CommandResult.continueExecution();
             }
             
             SessionData session = sessions.get(index - 1);
-            boolean deleted = sessionStorage.deleteSession(session.getSessionId());
-            
-            if (deleted) {
-                ui.println(ConsoleStyle.green("会话已删除: " + session.getSessionId()));
-            } else {
-                ui.println(ConsoleStyle.red("删除会话失败"));
-            }
+            sessionStorage.deleteSession(session.getSessionId());
+            ui.println(ConsoleStyle.green("已删除会话: " + session.getSessionId()));
             ui.println();
             return CommandResult.continueExecution();
             
         } catch (NumberFormatException e) {
-            boolean deleted = sessionStorage.deleteSession(arg);
-            if (deleted) {
-                ui.println(ConsoleStyle.green("会话已删除: " + arg));
-            } else {
-                ui.println(ConsoleStyle.red("找不到会话: " + arg));
-            }
+            ui.println(ConsoleStyle.red("找不到会话: " + arg));
             ui.println();
             return CommandResult.continueExecution();
         }
