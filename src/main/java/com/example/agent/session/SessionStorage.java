@@ -110,25 +110,17 @@ public class SessionStorage {
                 session.setSessionId(sessionId);
             }
 
-            Path existingFile = getSessionFilePath(sessionId);
-            if (Files.exists(existingFile)) {
-                long fileSize = Files.size(existingFile);
-                if (fileSize > tombstoneThresholdBytes) {
-                    logger.warn("会话文件超过墓碑阈值({}MB)，不再重写以保护稳定性: {}", 
-                        fileSize / 1024 / 1024, sessionId);
-                    return session;
-                }
-            }
-
             if (updateTimestamp) {
                 session.touch();
             }
+            
+            SessionData indexOnly = createIndexSession(session);
             
             Path sessionFile = getSessionFilePath(sessionId);
             Path tempFile = sessionFile.resolveSibling(sessionFile.getFileName() + ".tmp");
             
             try {
-                objectMapper.writeValue(tempFile.toFile(), session);
+                objectMapper.writeValue(tempFile.toFile(), indexOnly);
                 
                 try {
                     Files.move(tempFile, sessionFile, 
@@ -136,10 +128,9 @@ public class SessionStorage {
                         StandardCopyOption.ATOMIC_MOVE);
                 } catch (UnsupportedOperationException e) {
                     Files.move(tempFile, sessionFile, StandardCopyOption.REPLACE_EXISTING);
-                    logger.debug("原子移动不支持，使用普通移动");
                 }
                 
-                logger.info("会话已保存: {} (状态: {}, 消息数: {})", 
+                logger.info("会话索引已更新: {} (状态: {}, 消息数: {})", 
                     sessionId, session.getStatus(), session.getMessageCount());
                 
             } finally {
@@ -150,25 +141,58 @@ public class SessionStorage {
             
             return session;
         } catch (IOException e) {
-            logger.error("保存会话失败: {}", session.getSessionId(), e);
+            logger.error("保存会话索引失败: {}", session.getSessionId(), e);
             return null;
         }
     }
 
+    private SessionData createIndexSession(SessionData source) {
+        SessionData index = new SessionData(source.getSessionId());
+        index.setStatus(source.getStatus());
+        index.setCreatedAt(source.getCreatedAt());
+        index.setLastActiveAt(source.getLastActiveAt());
+        index.setMessageCount(source.getMessageCount());
+        index.setLastUserMessage(source.getLastUserMessage());
+        index.setMessages(null);
+        return index;
+    }
+
     public Optional<SessionData> loadSession(String sessionId) {
+        return loadSession(sessionId, true);
+    }
+
+    public Optional<SessionData> loadSession(String sessionId, boolean preferTranscript) {
         if (sessionId == null || sessionId.isEmpty()) {
             return Optional.empty();
         }
-        
-        if (!isValidSessionId(sessionId)) {
-            logger.warn("无效的会话ID: {}", sessionId);
+
+        String safeSessionId = sanitizeSessionId(sessionId);
+        if (!safeSessionId.equals(sessionId)) {
+            logger.debug("会话ID已净化: {} -> {}", sessionId, safeSessionId);
+        }
+
+        if (preferTranscript && TranscriptLoader.exists(safeSessionId)) {
+            SessionData transcriptSession = TranscriptLoader.loadToSessionData(safeSessionId);
+            if (transcriptSession != null) {
+                logger.info("会话已从 Transcript 恢复: {} (消息数: {})", 
+                    safeSessionId, transcriptSession.getMessageCount());
+                return Optional.of(transcriptSession);
+            }
+        }
+
+        if (!isValidSessionId(safeSessionId)) {
+            logger.warn("无效的会话ID: {}", safeSessionId);
             return Optional.empty();
         }
 
-        Path sessionFile = getSessionFilePath(sessionId);
+        Path sessionFile = getSessionFilePath(safeSessionId);
+        
+        if (!Files.exists(sessionFile) && safeSessionId.matches("^\\d+$")) {
+            sessionFile = getSessionFilePath("session_" + safeSessionId);
+        }
         
         if (!Files.exists(sessionFile)) {
-            logger.warn("会话文件不存在: {}", sessionId);
+            logger.warn("会话文件不存在: {}", safeSessionId);
             return Optional.empty();
         }
 
@@ -181,7 +205,21 @@ public class SessionStorage {
             }
 
             SessionData session = objectMapper.readValue(sessionFile.toFile(), SessionData.class);
-            logger.info("会话已加载: {} (状态: {}, 消息数: {})", 
+            
+            if ((session.getMessages() == null || session.getMessages().isEmpty()) 
+                && TranscriptLoader.exists(safeSessionId)) {
+                SessionData transcriptSession = TranscriptLoader.loadToSessionData(safeSessionId);
+                if (transcriptSession != null) {
+                    transcriptSession.setStatus(session.getStatus());
+                    transcriptSession.setCreatedAt(session.getCreatedAt());
+                    transcriptSession.setLastActiveAt(session.getLastActiveAt());
+                    logger.info("会话已从快照+Transcript合并加载: {} (状态: {}, 消息数: {})", 
+                        sessionId, session.getStatus(), transcriptSession.getMessageCount());
+                    return Optional.of(transcriptSession);
+                }
+            }
+            
+            logger.info("会话已从快照加载: {} (状态: {}, 消息数: {})", 
                 sessionId, session.getStatus(), session.getMessageCount());
             return Optional.of(session);
         } catch (IOException e) {
@@ -191,24 +229,47 @@ public class SessionStorage {
     }
 
     public List<SessionData> listSessions() {
+        return listSessions(true);
+    }
+
+    public List<SessionData> listSessions(boolean includeTranscript) {
         List<SessionData> sessions = new ArrayList<>();
+        java.util.Set<String> seenIds = new java.util.HashSet<>();
         
+        if (includeTranscript) {
+            var transcriptSessions = TranscriptLister.listSessions();
+            for (var summary : transcriptSessions) {
+                SessionData session = TranscriptLoader.loadToSessionData(summary.getSessionId());
+                if (session != null) {
+                    if (summary.getCustomTitle() != null) {
+                        session.setLastUserMessage(summary.getCustomTitle());
+                    }
+                    sessions.add(session);
+                    seenIds.add(session.getSessionId());
+                }
+            }
+        }
+
         if (!Files.exists(storageDirectory)) {
+            sessions.sort(Comparator.comparing(SessionData::getLastActiveAt).reversed());
             return sessions;
         }
 
         try (Stream<Path> files = Files.list(storageDirectory)) {
-            sessions = files
+            List<SessionData> legacySessions = files
                 .filter(this::isSessionFile)
                 .map(this::loadSessionFromFile)
                 .filter(Optional::isPresent)
                 .map(Optional::get)
-                .sorted(Comparator.comparing(SessionData::getLastActiveAt).reversed())
+                .filter(s -> !seenIds.contains(s.getSessionId()))
                 .collect(Collectors.toList());
+            
+            sessions.addAll(legacySessions);
         } catch (IOException e) {
             logger.error("列出会话失败", e);
         }
 
+        sessions.sort(Comparator.comparing(SessionData::getLastActiveAt).reversed());
         return sessions;
     }
 
@@ -228,7 +289,12 @@ public class SessionStorage {
             return false;
         }
 
-        Path sessionFile = getSessionFilePath(sessionId);
+        String safeSessionId = sanitizeSessionId(sessionId);
+        Path sessionFile = getSessionFilePath(safeSessionId);
+        
+        if (!Files.exists(sessionFile) && safeSessionId.matches("^\\d+$")) {
+            sessionFile = getSessionFilePath("session_" + safeSessionId);
+        }
         
         try {
             boolean deleted = Files.deleteIfExists(sessionFile);
@@ -332,6 +398,13 @@ public class SessionStorage {
             }
         });
         logger.debug("后台清理任务已调度，将在{}ms后执行", BACKGROUND_CLEANUP_DELAY_MS);
+    }
+
+    public static String sanitizeSessionId(String sessionId) {
+        if (sessionId == null) {
+            return "";
+        }
+        return sessionId.replaceAll("[^a-zA-Z0-9_-]", "");
     }
 
     private String generateSessionId() {
