@@ -27,6 +27,7 @@ public class Message {
     private String name;
 
     public Message() {
+        this.id = java.util.UUID.randomUUID().toString();
     }
 
     public Message(String role, String content) {

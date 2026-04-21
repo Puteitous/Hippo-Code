@@ -35,7 +35,7 @@ tools:
 session:
   auto_save: true
   max_history: 50
-  history_file: .agent_history
+  # 注意：cli-history 现在自动按项目分组存储在 .hippo/projects/*/cli-history
 
 ui:
   theme: dark
@@ -55,8 +55,10 @@ context:
     truncate_strategy: tail
 
 rule:
-  rules_file: .hipporules      # 项目规则文件
-  memory_file: MEMORY.md       # 持久化记忆文件
+  # 规则文件支持分层加载，按优先级：
+  # 1. 项目根目录: .hipporules, HIPPO.md
+  # 2. 项目目录: .hippo/rules/*.md
+  # 3. 用户全局: ~/.hippo/rules/*.md
   max_tokens: 8000             # Rule 最大 token 数
   inject_at_startup: true      # 启动时注入
 
@@ -95,8 +97,9 @@ tokenizer:
   cache_max_size: 1000  # 缓存最大条目数
 
 session:
-persist_sessions: true      # 是否持久化会话
-max_saved_sessions: 10      # 最大保存会话数
-session_directory: "logs/sessions"  # 会话存储目录
-auto_resume: true           # 启动时自动检查可恢复会话
-resume_timeout_hours: 72  # 超过 72 小时的会话自动标记为 IGNORED
+  persist_sessions: true      # 是否持久化会话
+  max_saved_sessions: 50      # 最大保存会话数
+  # 注意：现在自动按工作目录分组存储在 .hippo/projects/{hash}/sessions/
+  # session_directory 配置已废弃，由 WorkspaceManager 自动管理
+  auto_resume: true           # 启动时自动检查可恢复会话
+  resume_timeout_hours: 72    # 超过 72 小时的会话自动标记为 IGNORED

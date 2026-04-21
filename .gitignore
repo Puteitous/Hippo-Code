@@ -29,20 +29,6 @@ logs/
 # ====================
 .hippo/*
 
-# ✅ 项目级规则和记忆（随项目提交）
-!.hippo/rules/
-!.hippo/memory/
-!.hippo/skills/
-
-# ❌ 运行时数据（本地临时数据）
-.hippo/projects/
-.hippo/cache/
-.hippo/metrics/
-.hippo/debug/
-.hippo/config/
-.hippo/backups/
-.hippo/*.lock
-
 # 📋 兼容根目录散落文件（迁移期）
 .hipporules
 MEMORY.md

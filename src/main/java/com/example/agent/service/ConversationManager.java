@@ -6,12 +6,19 @@ import com.example.agent.context.config.ContextConfig;
 import com.example.agent.context.compressor.TruncateCompressor;
 import com.example.agent.context.policy.SlidingWindowPolicy;
 import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.Usage;
 import com.example.agent.session.SessionData;
+import com.example.agent.session.SessionTranscript;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class ConversationManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(ConversationManager.class);
 
     private final List<Message> conversationHistory;
     private final TokenEstimator tokenEstimator;
@@ -20,6 +27,9 @@ public class ConversationManager {
     private TrimPolicy trimPolicy;
     private final Compressor toolResultCompressor;
     private final ContextConfig config;
+    
+    private SessionTranscript transcript;
+    private Consumer<Message> messageListener;
 
     public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator) {
         this(systemPrompt, tokenEstimator, new ContextConfig());
@@ -88,17 +98,36 @@ public class ConversationManager {
     }
 
     public void addUserMessage(String content) {
-        conversationHistory.add(Message.user(content));
+        Message message = Message.user(content);
+        conversationHistory.add(message);
+        notifyMessageAdded(message);
+        
+        if (transcript != null) {
+            transcript.appendUserMessage(message);
+        }
     }
 
     public void addAssistantMessage(Message message) {
+        addAssistantMessage(message, null);
+    }
+
+    public void addAssistantMessage(Message message, Usage usage) {
         if (message == null) {
             return;
         }
         conversationHistory.add(message);
+        notifyMessageAdded(message);
+        
+        if (transcript != null) {
+            transcript.appendAssistantMessage(message, usage);
+        }
     }
 
     public void addToolResult(String toolCallId, String toolName, String result) {
+        addToolResult(toolCallId, toolName, result, 0, true);
+    }
+
+    public void addToolResult(String toolCallId, String toolName, String result, long durationMs, boolean success) {
         if (toolCallId == null || toolCallId.trim().isEmpty()) {
             return;
         }
@@ -114,6 +143,11 @@ public class ConversationManager {
         }
         
         conversationHistory.add(toolMessage);
+        notifyMessageAdded(toolMessage);
+        
+        if (transcript != null) {
+            transcript.appendToolResult(toolMessage, toolName, durationMs, success);
+        }
     }
 
     public List<Message> getHistory() {
@@ -181,6 +215,39 @@ public class ConversationManager {
         
         conversationHistory.clear();
         conversationHistory.addAll(session.getMessages());
+    }
+
+    public void enableTranscript(String sessionId) {
+        if (transcript != null) {
+            transcript.close();
+        }
+        transcript = new SessionTranscript(sessionId);
+        logger.debug("Transcript 已启用: {}", sessionId);
+    }
+
+    public SessionTranscript getTranscript() {
+        return transcript;
+    }
+
+    public void disableTranscript() {
+        if (transcript != null) {
+            transcript.close();
+            transcript = null;
+        }
+    }
+
+    public void setMessageListener(Consumer<Message> listener) {
+        this.messageListener = listener;
+    }
+
+    private void notifyMessageAdded(Message message) {
+        if (messageListener != null) {
+            try {
+                messageListener.accept(message);
+            } catch (Exception e) {
+                logger.warn("消息监听器执行失败: {}", e.getMessage());
+            }
+        }
     }
 
     public boolean hasUnfinishedToolCall() {

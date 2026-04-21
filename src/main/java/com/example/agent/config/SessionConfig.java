@@ -10,8 +10,12 @@ public class SessionConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionConfig.class);
     private static final int DEFAULT_MAX_HISTORY = 50;
+    /** @deprecated 现在由 WorkspaceManager 按项目动态分配 */
+    @Deprecated
     private static final String DEFAULT_HISTORY_FILE = ".hippo/cli-history";
     private static final int DEFAULT_MAX_SAVED_SESSIONS = 1000;
+    /** @deprecated 现在由 WorkspaceManager 按项目动态分配 */
+    @Deprecated
     private static final String DEFAULT_SESSION_DIRECTORY = "logs/sessions";
     private static final int DEFAULT_RESUME_TIMEOUT_HOURS = 72;
     private static final int MIN_MAX_SAVED_SESSIONS = 0;
