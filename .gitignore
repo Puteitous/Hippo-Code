@@ -25,8 +25,28 @@ Thumbs.db
 *.log
 logs/
 
-# Hippo 工作空间（包含会话、缓存、凭证）
-.hippo/
+# Hippo 工作空间架构
+# ====================
+.hippo/*
+
+# ✅ 项目级规则和记忆（随项目提交）
+!.hippo/rules/
+!.hippo/memory/
+!.hippo/skills/
+
+# ❌ 运行时数据（本地临时数据）
+.hippo/projects/
+.hippo/cache/
+.hippo/metrics/
+.hippo/debug/
+.hippo/config/
+.hippo/backups/
+.hippo/*.lock
+
+# 📋 兼容根目录散落文件（迁移期）
+.hipporules
+MEMORY.md
+*.hippo.md
 
 # Maven
 dependency-reduced-pom.xml

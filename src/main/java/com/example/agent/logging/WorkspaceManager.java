@@ -66,9 +66,10 @@ public class WorkspaceManager {
         try {
             Path projectDir = getProjectDir(projectKey);
             Path[] dirs = {
-                projectDir.resolve("sessions"),
-                projectDir.resolve("resources"),
-                projectDir.resolve("cache")
+                projectDir.resolve("sessions"),      // 🤖 会话 JSON（程序用）
+                projectDir.resolve("logs"),          // 👤 会话日志（人类用）
+                projectDir.resolve("resources"),     // 📦 资源分片
+                projectDir.resolve("cache")          // ⚡ 项目缓存
             };
             for (Path dir : dirs) {
                 if (!Files.exists(dir)) {
@@ -125,7 +126,7 @@ public class WorkspaceManager {
     }
     
     public static Path getSessionLogFile(String projectKey, String sessionId) {
-        return getProjectDir(projectKey).resolve("sessions").resolve(sessionId + ".log");
+        return getProjectDir(projectKey).resolve("logs").resolve(sessionId + ".log");
     }
     
     public static Path getToolResultPath(String projectKey, String sessionId, String toolCallId) {
