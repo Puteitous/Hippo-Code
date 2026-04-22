@@ -1,13 +1,16 @@
 package com.example.agent;
 
+import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.Choice;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Usage;
 import com.example.agent.service.ConversationManager;
-import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.service.TokenEstimatorFactory;
 import org.junit.jupiter.api.*;
+
+import static org.mockito.Mockito.mock;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,8 +26,9 @@ class EmptyResponseRetryTest {
 
     @BeforeEach
     void setUp() {
-        tokenEstimator = new SimpleTokenEstimator();
-        conversationManager = new ConversationManager("You are a helpful assistant.", tokenEstimator);
+        tokenEstimator = TokenEstimatorFactory.getDefault();
+        LlmClient mockLlmClient = mock(LlmClient.class);
+        conversationManager = new ConversationManager("You are a helpful assistant.", tokenEstimator, mockLlmClient);
     }
 
     @Test

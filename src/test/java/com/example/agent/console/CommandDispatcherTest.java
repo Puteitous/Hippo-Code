@@ -1,15 +1,18 @@
 package com.example.agent.console;
 
+import com.example.agent.application.ConversationService;
 import com.example.agent.config.Config;
 import com.example.agent.core.AgentContext;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.logging.TokenMetricsCollector;
-import com.example.agent.service.ConversationManager;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.UserInterruptException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import java.lang.reflect.Field;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -20,7 +23,8 @@ class CommandDispatcherTest {
     private AgentUi ui;
     private InputHandler inputHandler;
     private Config config;
-    private ConversationManager conversationManager;
+    private ConversationService conversationService;
+    private Conversation conversation;
     private TokenMetricsCollector tokenMetricsCollector;
     private CommandDispatcher dispatcher;
 
@@ -30,14 +34,28 @@ class CommandDispatcherTest {
         ui = mock(AgentUi.class);
         inputHandler = mock(InputHandler.class);
         config = mock(Config.class);
-        conversationManager = mock(ConversationManager.class);
+        conversationService = mock(ConversationService.class);
+        conversation = mock(Conversation.class);
         tokenMetricsCollector = mock(TokenMetricsCollector.class);
 
         when(context.getConfig()).thenReturn(config);
-        when(context.getConversationManager()).thenReturn(conversationManager);
+        when(context.getConversationService()).thenReturn(conversationService);
+        when(context.getConversation()).thenReturn(conversation);
         when(context.getTokenMetricsCollector()).thenReturn(tokenMetricsCollector);
 
         dispatcher = new CommandDispatcher(context, ui, inputHandler);
+    }
+
+    private void setCurrentSessionId(String sessionId) throws Exception {
+        Field field = CommandDispatcher.class.getDeclaredField("currentSessionId");
+        field.setAccessible(true);
+        field.set(dispatcher, sessionId);
+    }
+
+    private String getCurrentSessionId() throws Exception {
+        Field field = CommandDispatcher.class.getDeclaredField("currentSessionId");
+        field.setAccessible(true);
+        return (String) field.get(dispatcher);
     }
 
     @Nested
@@ -120,7 +138,7 @@ class CommandDispatcherTest {
             CommandDispatcher.CommandResult result = dispatcher.dispatch("reset");
             
             assertEquals(CommandDispatcher.CommandResult.Type.CONTINUE, result.getType());
-            verify(conversationManager).reset();
+            verify(conversationService).reset(conversation);
         }
 
         @Test
@@ -143,8 +161,8 @@ class CommandDispatcherTest {
 
         @Test
         @DisplayName("showlog命令返回CONTINUE")
-        void testShowlogCommand() throws UserInterruptException, EndOfFileException {
-            dispatcher.setCurrentConversationId("test-conversation-id");
+        void testShowlogCommand() throws Exception {
+            setCurrentSessionId("test-conversation-id");
             
             CommandDispatcher.CommandResult result = dispatcher.dispatch("showlog");
             
@@ -228,18 +246,18 @@ class CommandDispatcherTest {
 
         @Test
         @DisplayName("设置和获取会话ID")
-        void testSetAndGetConversationId() {
-            dispatcher.setCurrentConversationId("conv-123");
+        void testSetAndGetConversationId() throws Exception {
+            setCurrentSessionId("conv-123");
             
-            assertEquals("conv-123", dispatcher.getCurrentConversationId());
+            assertEquals("conv-123", getCurrentSessionId());
         }
 
         @Test
         @DisplayName("null会话ID")
-        void testNullConversationId() {
-            dispatcher.setCurrentConversationId(null);
+        void testNullConversationId() throws Exception {
+            setCurrentSessionId(null);
             
-            assertNull(dispatcher.getCurrentConversationId());
+            assertNull(getCurrentSessionId());
         }
     }
 

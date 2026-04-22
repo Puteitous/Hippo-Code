@@ -50,7 +50,10 @@ class SessionTranscriptTest {
     @Test
     void testAppendAssistantMessageWithUsage() throws IOException {
         Message message = Message.assistant("Hi there!");
-        Usage usage = new Usage(100, 50, 150);
+        Usage usage = new Usage();
+        usage.setPromptTokens(100);
+        usage.setCompletionTokens(50);
+        usage.setTotalTokens(150);
         
         transcript.appendAssistantMessage(message, usage);
         transcript.close();

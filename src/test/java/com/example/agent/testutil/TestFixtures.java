@@ -1,17 +1,9 @@
 package com.example.agent.testutil;
 
-import com.example.agent.intent.IntentResult;
-import com.example.agent.intent.IntentType;
 import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.ToolCall;
-import com.example.agent.plan.ExecutionContext;
-import com.example.agent.plan.ExecutionPlan;
-import com.example.agent.plan.ExecutionStep;
-import com.example.agent.plan.ExecutionStrategy;
-import com.example.agent.plan.PlanningContext;
-import com.example.agent.plan.StepType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -106,98 +98,6 @@ public final class TestFixtures {
 
         public static List<ToolCall> multipleToolCalls(ToolCall... calls) {
             return List.of(calls);
-        }
-    }
-
-    public static class Intents {
-        public static IntentResult simpleQuestion(String userInput) {
-            return IntentResult.builder()
-                    .type(IntentType.QUESTION)
-                    .confidence(0.95)
-                    .reasoning(userInput)
-                    .build();
-        }
-
-        public static IntentResult codeModification(String file, String content) {
-            return IntentResult.builder()
-                    .type(IntentType.CODE_MODIFICATION)
-                    .confidence(0.90)
-                    .entity("file", file)
-                    .entity("content", content)
-                    .build();
-        }
-
-        public static IntentResult debugging(String error) {
-            return IntentResult.builder()
-                    .type(IntentType.DEBUGGING)
-                    .confidence(0.85)
-                    .entity("error", error)
-                    .build();
-        }
-
-        public static IntentResult projectAnalysis() {
-            return IntentResult.builder()
-                    .type(IntentType.PROJECT_ANALYSIS)
-                    .confidence(0.80)
-                    .build();
-        }
-
-        public static IntentResult unknown() {
-            return IntentResult.builder()
-                    .type(IntentType.UNKNOWN)
-                    .confidence(0.0)
-                    .build();
-        }
-
-        public static IntentResult withConfidence(IntentType type, double confidence) {
-            return IntentResult.builder()
-                    .type(type)
-                    .confidence(confidence)
-                    .build();
-        }
-    }
-
-    public static class Plans {
-        public static ExecutionPlan simplePlan(IntentResult intent) {
-            ExecutionStep step = ExecutionStep.builder()
-                    .id("step-1")
-                    .type(StepType.LLM_CALL)
-                    .description("处理用户请求")
-                    .build();
-            
-            return ExecutionPlan.builder()
-                    .intent(intent)
-                    .strategy(ExecutionStrategy.SEQUENTIAL)
-                    .step(step)
-                    .build();
-        }
-
-        public static ExecutionPlan multiStepPlan(IntentResult intent, int stepCount) {
-            ExecutionPlan.Builder builder = ExecutionPlan.builder()
-                    .intent(intent)
-                    .strategy(ExecutionStrategy.SEQUENTIAL);
-            
-            for (int i = 1; i <= stepCount; i++) {
-                builder.step(ExecutionStep.builder()
-                        .id("step-" + i)
-                        .type(i % 2 == 0 ? StepType.TOOL_CALL : StepType.LLM_CALL)
-                        .description("步骤 " + i)
-                        .build());
-            }
-            
-            return builder.build();
-        }
-
-        public static PlanningContext planningContext(String userInput) {
-            return PlanningContext.builder()
-                    .userInput(userInput)
-                    .currentRound(1)
-                    .build();
-        }
-
-        public static ExecutionContext executionContext() {
-            return ExecutionContext.builder()
-                    .build();
         }
     }
 

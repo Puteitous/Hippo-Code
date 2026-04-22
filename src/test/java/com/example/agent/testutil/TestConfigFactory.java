@@ -1,7 +1,6 @@
 package com.example.agent.testutil;
 
 import com.example.agent.config.Config;
-import com.example.agent.config.IntentConfig;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.context.config.ContextConfig.ToolResultConfig;
 
@@ -27,35 +26,6 @@ public final class TestConfigFactory {
             config.getLlm().setBaseUrl(TEST_BASE_URL);
             config.getLlm().setMaxTokens(TEST_MAX_TOKENS);
             config.getLlm().setTemperature(TEST_TEMPERATURE);
-            return config;
-        }
-    }
-
-    public static class Intent {
-        public static IntentConfig createDefaultIntentConfig() {
-            IntentConfig config = new IntentConfig();
-            config.getRecognition().setLlmEnabled(false);
-            config.getRecognition().setPreferLlm(false);
-            config.getRecognition().setHighConfidenceThreshold(0.85);
-            config.getRecognition().setLowConfidenceThreshold(0.5);
-            return config;
-        }
-
-        public static IntentConfig createLlmEnabledIntentConfig() {
-            IntentConfig config = new IntentConfig();
-            config.getRecognition().setLlmEnabled(true);
-            config.getRecognition().setPreferLlm(true);
-            config.getRecognition().setHighConfidenceThreshold(0.9);
-            config.getRecognition().setLowConfidenceThreshold(0.3);
-            return config;
-        }
-
-        public static IntentConfig createRuleOnlyIntentConfig() {
-            IntentConfig config = new IntentConfig();
-            config.getRecognition().setLlmEnabled(false);
-            config.getRecognition().setPreferLlm(false);
-            config.getRecognition().setHighConfidenceThreshold(0.7);
-            config.getRecognition().setLowConfidenceThreshold(0.3);
             return config;
         }
     }

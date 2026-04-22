@@ -10,6 +10,7 @@ import com.example.agent.domain.rule.RuleManager;
 
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.model.Message;
 import com.example.agent.logging.EventMetricsCollector;
 import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
@@ -18,7 +19,7 @@ import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
 import com.example.agent.service.TokenEstimator;
 
-import com.example.agent.service.TokenEstimator;
+import java.util.List;
 import com.example.agent.lsp.LspServiceManager;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.tools.ToolRegistry;
@@ -212,6 +213,38 @@ public class AgentContext {
         } else {
             this.conversation = conversationService.create(basePrompt);
         }
+    }
+
+    public void addUserMessage(String content) {
+        conversation.addMessage(Message.user(content));
+    }
+
+    public void addAssistantMessage(String content) {
+        conversation.addMessage(Message.assistant(content));
+    }
+
+    public void addSystemMessage(String content) {
+        conversation.addMessage(Message.system(content));
+    }
+
+    public void addToolResult(String toolCallId, String toolName, String content) {
+        conversation.addMessage(Message.toolResult(toolCallId, toolName, content));
+    }
+
+    public List<Message> prepareForInference() {
+        return conversationService.prepareForInference(conversation);
+    }
+
+    public int getTokenCount() {
+        return conversation.getTokenCount();
+    }
+
+    public double getTokenUsageRatio() {
+        return conversation.getUsageRatio();
+    }
+
+    public int getMessageCount() {
+        return conversation.size();
     }
 
     public ConversationService getConversationService() {

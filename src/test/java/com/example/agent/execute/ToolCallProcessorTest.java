@@ -1,11 +1,12 @@
 package com.example.agent.execute;
 
+import com.example.agent.application.ConversationService;
 import com.example.agent.console.AgentUi;
 import com.example.agent.core.AgentContext;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.model.FunctionCall;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
-import com.example.agent.service.ConversationManager;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
@@ -34,7 +35,8 @@ class ToolCallProcessorTest {
 
     private ToolRegistry toolRegistry;
     private ConcurrentToolExecutor executor;
-    private ConversationManager conversationManager;
+    private ConversationService conversationService;
+    private Conversation conversation;
     private AgentUi ui;
     private AgentContext context;
     private ToolCallProcessor processor;
@@ -43,10 +45,11 @@ class ToolCallProcessorTest {
     void setUp() throws Exception {
         toolRegistry = new ToolRegistry();
         executor = new ConcurrentToolExecutor(toolRegistry);
-        conversationManager = mock(ConversationManager.class);
+        conversationService = mock(ConversationService.class);
+        conversation = mock(Conversation.class);
         ui = mock(AgentUi.class);
         context = mock(AgentContext.class);
-        processor = new ToolCallProcessor(context, executor, conversationManager, ui);
+        processor = new ToolCallProcessor(context, executor, conversationService, conversation, ui);
     }
 
     private ToolCall createToolCall(String id, String name, String arguments) {
@@ -67,7 +70,7 @@ class ToolCallProcessorTest {
             
             assertDoesNotThrow(() -> processor.processToolCallsConcurrently(toolCalls, null));
             
-            verify(conversationManager, never()).addToolResult(any(), any(), any());
+            verify(conversationService, never()).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -84,7 +87,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, never()).addToolResult(any(), any(), any());
+            verify(conversationService, never()).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -95,7 +98,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, never()).addToolResult(any(), any(), any());
+            verify(conversationService, never()).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -110,7 +113,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, never()).addToolResult(any(), any(), any());
+            verify(conversationService, never()).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
     }
 
@@ -126,7 +129,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult(
+            verify(conversationService).addToolResult(eq(conversation), 
                 eq("call-1"),
                 eq("nonexistent_tool"),
                 contains("Error:")
@@ -145,7 +148,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, times(3)).addToolResult(any(), any(), any());
+            verify(conversationService, times(3)).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
     }
 
@@ -163,7 +166,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult("call-1", "test_tool", "test result");
+            verify(conversationService).addToolResult(conversation, "call-1", "test_tool", "test result");
         }
 
         @Test
@@ -178,8 +181,8 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult("call-1", "tool_a", "result_a");
-            verify(conversationManager).addToolResult("call-2", "tool_b", "result_b");
+            verify(conversationService).addToolResult(conversation, "call-1", "tool_a", "result_a");
+            verify(conversationService).addToolResult(conversation, "call-2", "tool_b", "result_b");
         }
     }
 
@@ -195,7 +198,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult(
+            verify(conversationService).addToolResult(eq(conversation), 
                 eq("call-1"),
                 eq("test_tool"),
                 contains("Error:")
@@ -214,7 +217,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult(
+            verify(conversationService).addToolResult(eq(conversation), 
                 eq("call-1"),
                 eq("test_tool"),
                 any()
@@ -231,7 +234,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager).addToolResult("call-1", "test_tool", "success");
+            verify(conversationService).addToolResult(conversation, "call-1", "test_tool", "success");
         }
     }
 
@@ -306,7 +309,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, times(2)).addToolResult(any(), any(), any());
+            verify(conversationService, times(2)).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -321,7 +324,7 @@ class ToolCallProcessorTest {
             
             processor.processToolCallsConcurrently(toolCalls, null);
             
-            verify(conversationManager, times(100)).addToolResult(any(), any(), any());
+            verify(conversationService, times(100)).addToolResult(any(Conversation.class), anyString(), anyString(), anyString());
         }
     }
 

@@ -1,8 +1,10 @@
 package com.example.agent.session;
 
+import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.ConversationManager;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.logging.WorkspaceManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,8 +26,9 @@ class TranscriptP0EndToEndTest {
     @BeforeEach
     void setUp() {
         sessionId = "p0-test-" + System.currentTimeMillis();
-        tokenEstimator = new TokenEstimator();
-        manager = new ConversationManager("You are a helper", tokenEstimator);
+        tokenEstimator = TokenEstimatorFactory.getDefault();
+        LlmClient mockLlmClient = org.mockito.Mockito.mock(LlmClient.class);
+        manager = new ConversationManager("You are a helper", tokenEstimator, mockLlmClient);
     }
 
     @AfterEach
@@ -44,7 +47,8 @@ class TranscriptP0EndToEndTest {
 
         manager.disableTranscript();
 
-        ConversationManager newManager = new ConversationManager("You are a helper", tokenEstimator);
+        LlmClient mockLlmClient = org.mockito.Mockito.mock(LlmClient.class);
+        ConversationManager newManager = new ConversationManager("You are a helper", tokenEstimator, mockLlmClient);
         
         boolean loaded = TranscriptLoader.loadToConversationManager(sessionId, newManager);
         assertTrue(loaded);
@@ -124,7 +128,8 @@ class TranscriptP0EndToEndTest {
             java.util.List.of(Message.user("This is from old snapshot")),
             SessionData.Status.INTERRUPTED);
 
-        ConversationManager resumeManager = new ConversationManager("You are helper", tokenEstimator);
+        LlmClient mockLlmClient2 = org.mockito.Mockito.mock(LlmClient.class);
+        ConversationManager resumeManager = new ConversationManager("You are helper", tokenEstimator, mockLlmClient2);
         
         boolean loadedFromTranscript = TranscriptLoader.loadToConversationManager(
             sessionId, resumeManager

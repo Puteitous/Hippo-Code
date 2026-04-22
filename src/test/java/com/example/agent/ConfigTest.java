@@ -5,7 +5,6 @@ import com.example.agent.config.LlmConfig;
 import com.example.agent.config.ToolsConfig;
 import com.example.agent.config.SessionConfig;
 import com.example.agent.config.UiConfig;
-import com.example.agent.config.IntentConfig;
 import com.example.agent.context.config.ContextConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -77,10 +76,6 @@ class ConfigTest {
         Field contextField = Config.class.getDeclaredField("context");
         contextField.setAccessible(true);
         contextField.set(config, new ContextConfig());
-        
-        Field intentField = Config.class.getDeclaredField("intent");
-        intentField.setAccessible(true);
-        intentField.set(config, new IntentConfig());
         
         return config;
     }
