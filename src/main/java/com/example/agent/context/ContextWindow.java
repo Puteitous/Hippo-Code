@@ -6,6 +6,7 @@ import com.example.agent.service.TokenEstimator;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ContextWindow {
 
@@ -15,19 +16,32 @@ public class ContextWindow {
     private final List<Message> injectedWarnings;
 
     public ContextWindow(int maxTokens, TokenEstimator tokenEstimator) {
+        if (tokenEstimator == null) {
+            throw new IllegalArgumentException("tokenEstimator must not be null");
+        }
         this.budget = new TokenBudget(maxTokens);
-        this.messages = new ArrayList<>();
+        this.messages = new CopyOnWriteArrayList<>();
         this.tokenEstimator = tokenEstimator;
-        this.injectedWarnings = new ArrayList<>();
+        this.injectedWarnings = new CopyOnWriteArrayList<>();
     }
 
     public void addMessage(Message message) {
+        if (message == null) {
+            throw new IllegalArgumentException("message must not be null");
+        }
         messages.add(message);
         recalculateBudget();
     }
 
     public void addMessages(List<Message> newMessages) {
-        messages.addAll(newMessages);
+        if (newMessages == null || newMessages.isEmpty()) {
+            return;
+        }
+        newMessages.forEach(msg -> {
+            if (msg != null) {
+                messages.add(msg);
+            }
+        });
         recalculateBudget();
     }
 
@@ -41,6 +55,9 @@ public class ContextWindow {
     }
 
     public void injectWarning(Message warningMessage) {
+        if (warningMessage == null) {
+            return;
+        }
         injectedWarnings.add(warningMessage);
         recalculateBudget();
     }

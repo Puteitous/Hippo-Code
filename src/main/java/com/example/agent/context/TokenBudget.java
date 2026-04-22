@@ -7,11 +7,13 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TokenBudget {
 
     private final int maxTokens;
-    private int currentTokens;
+    private final AtomicInteger currentTokens;
     private final Set<BudgetThreshold> triggeredThresholds;
     private final List<BudgetListener> listeners;
 
@@ -20,40 +22,50 @@ public class TokenBudget {
             throw new IllegalArgumentException("maxTokens must be positive");
         }
         this.maxTokens = maxTokens;
-        this.currentTokens = 0;
+        this.currentTokens = new AtomicInteger(0);
         this.triggeredThresholds = EnumSet.noneOf(BudgetThreshold.class);
-        this.listeners = new ArrayList<>();
+        this.listeners = new CopyOnWriteArrayList<>();
     }
 
     public void update(int newTokenCount) {
-        this.currentTokens = Math.max(0, newTokenCount);
+        int safeTokens = Math.max(0, newTokenCount);
+        int oldTokens = currentTokens.getAndSet(safeTokens);
+        
+        if (oldTokens == safeTokens) {
+            return;
+        }
+        
         double ratio = getUsageRatio();
 
-        listeners.forEach(listener -> listener.onBudgetUpdated(currentTokens, maxTokens, ratio));
+        listeners.forEach(listener -> listener.onBudgetUpdated(safeTokens, maxTokens, ratio));
 
         checkThresholds(ratio);
 
-        if (currentTokens > maxTokens) {
-            listeners.forEach(listener -> listener.onBudgetExceeded(currentTokens, maxTokens));
+        if (safeTokens > maxTokens) {
+            listeners.forEach(listener -> listener.onBudgetExceeded(safeTokens, maxTokens));
         }
     }
 
     public void addTokens(int tokensToAdd) {
-        update(Math.max(0, currentTokens + tokensToAdd));
+        update(Math.max(0, currentTokens.get() + tokensToAdd));
     }
 
     private void checkThresholds(double ratio) {
         BudgetThreshold currentThreshold = BudgetThreshold.fromRatio(ratio);
         
-        if (currentThreshold != null && !triggeredThresholds.contains(currentThreshold)) {
-            triggeredThresholds.add(currentThreshold);
-            notifyThreshold(currentThreshold);
+        if (currentThreshold != null) {
+            synchronized (triggeredThresholds) {
+                if (!triggeredThresholds.contains(currentThreshold)) {
+                    triggeredThresholds.add(currentThreshold);
+                    notifyThreshold(currentThreshold);
+                }
+            }
         }
     }
 
     private void notifyThreshold(BudgetThreshold threshold) {
         listeners.forEach(listener -> 
-            listener.onThresholdReached(threshold, currentTokens, maxTokens)
+            listener.onThresholdReached(threshold, currentTokens.get(), maxTokens)
         );
     }
 
@@ -72,11 +84,11 @@ public class TokenBudget {
     }
 
     public int getCurrentTokens() {
-        return currentTokens;
+        return currentTokens.get();
     }
 
     public double getUsageRatio() {
-        return (double) currentTokens / maxTokens;
+        return (double) currentTokens.get() / maxTokens;
     }
 
     public boolean isThresholdTriggered(BudgetThreshold threshold) {
@@ -94,7 +106,9 @@ public class TokenBudget {
     }
 
     public void reset() {
-        currentTokens = 0;
-        triggeredThresholds.clear();
+        currentTokens.set(0);
+        synchronized (triggeredThresholds) {
+            triggeredThresholds.clear();
+        }
     }
 }

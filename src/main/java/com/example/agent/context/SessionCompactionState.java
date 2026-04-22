@@ -1,23 +1,30 @@
 package com.example.agent.context;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 public class SessionCompactionState {
 
     private static final int MAX_CONSECUTIVE_FAILURES = 3;
 
-    private String lastSummarizedMessageId;
-    private int compactionCount;
-    private long lastCompactionTime;
-    private long lastExtractionTime;
-    private long firstMessageTimestamp;
-    private int consecutiveFailures;
-    private boolean compactedInCurrentLoop;
+    private final AtomicReference<String> lastSummarizedMessageId;
+    private final AtomicInteger compactionCount;
+    private final AtomicLong lastCompactionTime;
+    private final AtomicLong lastExtractionTime;
+    private final AtomicLong firstMessageTimestamp;
+    private final AtomicInteger consecutiveFailures;
+    private final AtomicBoolean compactedInCurrentLoop;
 
     public SessionCompactionState() {
-        this.compactionCount = 0;
-        this.lastCompactionTime = 0;
-        this.lastExtractionTime = 0;
-        this.consecutiveFailures = 0;
-        this.compactedInCurrentLoop = false;
+        this.lastSummarizedMessageId = new AtomicReference<>(null);
+        this.compactionCount = new AtomicInteger(0);
+        this.lastCompactionTime = new AtomicLong(0);
+        this.lastExtractionTime = new AtomicLong(0);
+        this.firstMessageTimestamp = new AtomicLong(0);
+        this.consecutiveFailures = new AtomicInteger(0);
+        this.compactedInCurrentLoop = new AtomicBoolean(false);
     }
 
     public boolean canIncrementalCompact() {
@@ -25,80 +32,80 @@ public class SessionCompactionState {
     }
 
     public boolean hasValidSummaryBoundary() {
-        return lastSummarizedMessageId != null 
-            && !lastSummarizedMessageId.isEmpty();
+        String id = lastSummarizedMessageId.get();
+        return id != null && !id.isEmpty();
     }
 
     public void recordCompaction() {
-        this.compactionCount++;
-        this.lastCompactionTime = System.currentTimeMillis();
+        this.compactionCount.incrementAndGet();
+        this.lastCompactionTime.set(System.currentTimeMillis());
     }
 
     public void recordMemoryExtraction(String lastMessageId) {
-        this.lastSummarizedMessageId = lastMessageId;
-        this.lastExtractionTime = System.currentTimeMillis();
+        this.lastSummarizedMessageId.set(lastMessageId);
+        this.lastExtractionTime.set(System.currentTimeMillis());
     }
 
     public boolean shouldTryCompaction() {
-        return consecutiveFailures < MAX_CONSECUTIVE_FAILURES
-            && !compactedInCurrentLoop;
+        return consecutiveFailures.get() < MAX_CONSECUTIVE_FAILURES
+            && !compactedInCurrentLoop.get();
     }
 
     public void recordFailure() {
-        consecutiveFailures++;
+        consecutiveFailures.incrementAndGet();
     }
 
     public void recordSuccess() {
-        consecutiveFailures = 0;
-        compactedInCurrentLoop = true;
+        consecutiveFailures.set(0);
+        compactedInCurrentLoop.set(true);
     }
 
     public void startNewQueryLoop() {
-        compactedInCurrentLoop = false;
+        compactedInCurrentLoop.set(false);
     }
 
     public void reset() {
-        this.lastSummarizedMessageId = null;
-        this.compactionCount = 0;
-        this.lastCompactionTime = 0;
-        this.lastExtractionTime = 0;
-        this.consecutiveFailures = 0;
-        this.compactedInCurrentLoop = false;
+        this.lastSummarizedMessageId.set(null);
+        this.compactionCount.set(0);
+        this.lastCompactionTime.set(0);
+        this.lastExtractionTime.set(0);
+        this.consecutiveFailures.set(0);
+        this.compactedInCurrentLoop.set(false);
     }
 
     public int getConsecutiveFailures() {
-        return consecutiveFailures;
+        return consecutiveFailures.get();
     }
 
     public boolean isCompactedInCurrentLoop() {
-        return compactedInCurrentLoop;
+        return compactedInCurrentLoop.get();
     }
 
     public String getLastSummarizedMessageId() {
-        return lastSummarizedMessageId;
+        return lastSummarizedMessageId.get();
     }
 
     public void setLastSummarizedMessageId(String lastSummarizedMessageId) {
-        this.lastSummarizedMessageId = lastSummarizedMessageId;
+        this.lastSummarizedMessageId.set(lastSummarizedMessageId);
     }
 
     public int getCompactionCount() {
-        return compactionCount;
+        return compactionCount.get();
     }
 
     public long getLastCompactionTime() {
-        return lastCompactionTime;
+        return lastCompactionTime.get();
     }
 
     public long getLastExtractionTime() {
-        return lastExtractionTime;
+        return lastExtractionTime.get();
     }
 
     public long getFirstMessageTimestamp() {
-        return firstMessageTimestamp;
+        return firstMessageTimestamp.get();
     }
 
     public void setFirstMessageTimestamp(long firstMessageTimestamp) {
-        this.firstMessageTimestamp = firstMessageTimestamp;
+        this.firstMessageTimestamp.set(firstMessageTimestamp);
     }
 }

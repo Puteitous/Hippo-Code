@@ -25,6 +25,13 @@ public class MessageClassifier {
         return classified;
     }
 
+    private double safeDivide(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return 1.0;
+        }
+        return (double) numerator / denominator;
+    }
+
     private MessageType determineType(Message message) {
         if (message.isSystem()) {
             return MessageType.SYSTEM;
@@ -45,6 +52,9 @@ public class MessageClassifier {
     }
 
     private boolean isConversationCritical(Message message, int index, int totalMessages) {
+        if (totalMessages <= 0) {
+            return true;
+        }
         int recencyThreshold = Math.max(6, totalMessages / 3);
         boolean isRecent = (totalMessages - index) <= recencyThreshold;
 
@@ -81,7 +91,7 @@ public class MessageClassifier {
 
     private double calculateValueScore(ClassifiedMessage classified, int index, int totalMessages) {
         double score = 0.0;
-        double recency = (double) (index + 1) / totalMessages;
+        double recency = safeDivide(index + 1, totalMessages);
 
         score += recency * 0.4;
 

@@ -115,18 +115,29 @@ public class TruncateCompressor implements Compressor {
     }
 
     private String smartTruncate(String content, int targetChars, String suffix) {
+        String middleOmit = "\n\n... [中间部分已省略] ...\n\n";
+        int availableChars = targetChars - suffix.length();
+        
+        if (availableChars <= 100) {
+            return content.substring(0, Math.max(0, availableChars)) + suffix;
+        }
+        
         int tailRatio = 70;
-        int tailChars = (int) ((targetChars - suffix.length()) * tailRatio / 100);
-        int headChars = (targetChars - suffix.length()) - tailChars;
+        int tailChars = (int) (availableChars * tailRatio / 100);
+        int headChars = availableChars - tailChars;
 
         StringBuilder sb = new StringBuilder();
         
-        if (headChars > 100) {
-            sb.append(content.substring(0, headChars));
-            sb.append("\n\n... [中间部分已省略] ...\n\n");
+        if (headChars > middleOmit.length() + 50) {
+            headChars -= middleOmit.length();
+            sb.append(content.substring(0, Math.min(headChars, content.length())));
+            sb.append(middleOmit);
+        } else {
+            tailChars = availableChars;
         }
         
-        sb.append(content.substring(Math.max(0, content.length() - tailChars)));
+        int safeTailStart = Math.max(0, content.length() - tailChars);
+        sb.append(content.substring(safeTailStart, Math.min(safeTailStart + tailChars, content.length())));
         sb.append(suffix);
 
         return sb.toString();

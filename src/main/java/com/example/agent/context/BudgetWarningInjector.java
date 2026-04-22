@@ -53,6 +53,12 @@ public class BudgetWarningInjector implements BudgetListener {
         contextWindow.injectWarning(Message.system(content));
     }
 
+    private boolean hasInjectedMessage(String marker) {
+        return contextWindow.getEffectiveMessages().stream()
+            .filter(Message::isSystem)
+            .anyMatch(m -> m.getContent() != null && m.getContent().contains(marker));
+    }
+
     private void injectEfficiencyHint() {
         String content = 
             "<system-reminder>\n" +
@@ -84,10 +90,18 @@ public class BudgetWarningInjector implements BudgetListener {
     }
 
     private void checkEfficiencyNudge(int currentTokens) {
+        if (currentTokens < 0) {
+            return;
+        }
         int milestone = currentTokens / NUDGE_INTERVAL;
-        if (milestone > lastNudgeTokenMilestone) {
+        if (milestone > lastNudgeTokenMilestone && milestone > 0) {
             lastNudgeTokenMilestone = milestone;
         }
+    }
+
+    public void reset() {
+        lastNudgeTokenMilestone = 0;
+        autoCompactAnnounced = false;
     }
 
     public void register() {
@@ -98,8 +112,4 @@ public class BudgetWarningInjector implements BudgetListener {
         contextWindow.getBudget().removeListener(this);
     }
 
-    public void reset() {
-        autoCompactAnnounced = false;
-        lastNudgeTokenMilestone = 0;
-    }
 }
