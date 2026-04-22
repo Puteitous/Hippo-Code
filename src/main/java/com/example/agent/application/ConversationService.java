@@ -20,10 +20,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class ConversationService {
@@ -35,7 +36,8 @@ public class ConversationService {
     private final Compressor toolResultCompressor;
     private final MemoryStore globalMemoryStore;
 
-    private final Map<String, ConversationComponents> componentRegistry = new HashMap<>();
+    private final Map<String, ConversationComponents> componentRegistry = new ConcurrentHashMap<>();
+    private final Map<String, Long> sessionLastAccessTime = new ConcurrentHashMap<>();
 
     private Consumer<Message> messageListener;
     private Consumer<Message> messageSyncListener;
@@ -136,15 +138,67 @@ public class ConversationService {
             transcript,
             compactionState
         ));
+        
+        sessionLastAccessTime.put(sessionId, System.currentTimeMillis());
     }
 
     private ConversationComponents getComponents(Conversation conversation) {
-        return componentRegistry.get(conversation.getSessionId());
+        if (conversation == null) {
+            logger.warn("conversation 为 null");
+            return null;
+        }
+        String sessionId = conversation.getSessionId();
+        if (sessionId == null) {
+            logger.warn("sessionId 为 null");
+            return null;
+        }
+        sessionLastAccessTime.put(sessionId, System.currentTimeMillis());
+        return componentRegistry.get(sessionId);
+    }
+
+    public void destroy(Conversation conversation) {
+        String sessionId = conversation.getSessionId();
+        componentRegistry.remove(sessionId);
+        sessionLastAccessTime.remove(sessionId);
+        conversation.clear();
+        logger.debug("销毁会话: sessionId={}", sessionId);
+    }
+
+    public void cleanupIdleSessions(long idleTimeoutMs) {
+        long now = System.currentTimeMillis();
+        int cleanedCount = 0;
+        
+        Iterator<Map.Entry<String, Long>> iterator = sessionLastAccessTime.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, Long> entry = iterator.next();
+            if (now - entry.getValue() > idleTimeoutMs) {
+                String sessionId = entry.getKey();
+                componentRegistry.remove(sessionId);
+                iterator.remove();
+                cleanedCount++;
+                logger.debug("清理空闲会话: sessionId={}", sessionId);
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            logger.info("空闲会话清理完成: 清理 {} 个，剩余活跃会话 {}", 
+                cleanedCount, componentRegistry.size());
+        }
+    }
+
+    public int getActiveSessionCount() {
+        return componentRegistry.size();
     }
 
     public void reset(Conversation conversation) {
+        if (conversation == null) {
+            logger.warn("尝试重置 null 的 conversation");
+            return;
+        }
+        String sessionId = conversation.getSessionId();
         conversation.clear();
-        componentRegistry.remove(conversation.getSessionId());
+        componentRegistry.remove(sessionId);
+        sessionLastAccessTime.remove(sessionId);
         initializeComponents(conversation);
         
         String systemPrompt = conversation.getSystemPrompt();
@@ -183,6 +237,15 @@ public class ConversationService {
     }
 
     public void addMessage(Conversation conversation, Message message) {
+        if (conversation == null) {
+            logger.warn("conversation 为 null，跳过添加消息");
+            return;
+        }
+        if (message == null) {
+            logger.warn("message 为 null，跳过添加");
+            return;
+        }
+        
         ConversationComponents components = getComponents(conversation);
         
         conversation.addMessage(message);
@@ -191,7 +254,7 @@ public class ConversationService {
         if (components != null) {
             components.backgroundExtractor.onMessageAdded(message, conversation.getMessages());
             
-            if (conversation.shouldMarkForMemory(message)) {
+            if (message.getContent() != null && conversation.shouldMarkForMemory(message)) {
                 components.memoryRetriever.markForMemory(message.getContent());
             }
             

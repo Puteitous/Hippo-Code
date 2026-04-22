@@ -8,12 +8,14 @@ import com.example.agent.service.TokenEstimator;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Conversation {
 
     private final ContextWindow contextWindow;
     private final BlockingGuard blockingGuard;
     private final String sessionId;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private String systemPrompt;
 
     public Conversation(int maxTokens, TokenEstimator tokenEstimator) {
@@ -27,61 +29,121 @@ public class Conversation {
     }
 
     public void addMessage(Message message) {
-        if (!blockingGuard.canAddMessage()) {
-            throw new IllegalStateException(blockingGuard.getStatusMessage());
+        lock.writeLock().lock();
+        try {
+            if (!blockingGuard.canAddMessage()) {
+                throw new IllegalStateException(blockingGuard.getStatusMessage());
+            }
+            contextWindow.addMessage(message);
+        } finally {
+            lock.writeLock().unlock();
         }
-        contextWindow.addMessage(message);
     }
 
     public void addMessages(List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
             return;
         }
-        if (!blockingGuard.canAddMessage()) {
-            throw new IllegalStateException(blockingGuard.getStatusMessage());
+        lock.writeLock().lock();
+        try {
+            if (!blockingGuard.canAddMessage()) {
+                throw new IllegalStateException(blockingGuard.getStatusMessage());
+            }
+            contextWindow.addMessages(messages);
+        } finally {
+            lock.writeLock().unlock();
         }
-        contextWindow.addMessages(messages);
     }
 
     public List<Message> getMessages() {
-        return contextWindow.getRawMessages();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getRawMessages();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public int getMessageCount() {
-        return contextWindow.getRawMessages().size();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getRawMessages().size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public List<Message> getEffectiveMessages() {
-        return contextWindow.getEffectiveMessages();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getEffectiveMessages();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public TokenBudget getBudget() {
-        return contextWindow.getBudget();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getBudget();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public double getUsageRatio() {
-        return contextWindow.getBudget().getUsageRatio();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getBudget().getUsageRatio();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public int getTokenCount() {
-        return contextWindow.getBudget().getCurrentTokens();
+        lock.readLock().lock();
+        try {
+            return contextWindow.getBudget().getCurrentTokens();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public void clear() {
-        contextWindow.clear();
+        lock.writeLock().lock();
+        try {
+            contextWindow.clear();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public void replaceMessages(List<Message> newMessages) {
-        contextWindow.clearInjectedWarnings();
-        contextWindow.replaceMessages(newMessages);
+        lock.writeLock().lock();
+        try {
+            contextWindow.clearInjectedWarnings();
+            contextWindow.replaceMessages(newMessages);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public int size() {
-        return contextWindow.size();
+        lock.readLock().lock();
+        try {
+            return contextWindow.size();
+        } finally {
+            lock.readLock().unlock();
+        }
     }
 
     public void clearInjectedWarnings() {
-        contextWindow.clearInjectedWarnings();
+        lock.writeLock().lock();
+        try {
+            contextWindow.clearInjectedWarnings();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public ContextWindow getContextWindow() {
