@@ -170,10 +170,9 @@ public class AgentContext {
         // 增强系统提示词（使用 PromptLibrary）
         String basePrompt = promptService.getBasePrompt(null);
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-        this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
+        this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, llmClient, config.getContext());
 
-        // 默认使用 SlidingWindowPolicy
-        logger.info("使用滑动窗口记忆策略");
+        logger.info("统一上下文管理：ConversationManager 委托 ContextManager 实现自动压缩 ✅");
 
         // 模式切换监听器：自动切换 System Prompt + 状态栏，无缝保留上下文
         onModeChanged(newMode -> {
@@ -211,9 +210,9 @@ public class AgentContext {
         if (this.ruleManager != null) {
             this.ruleManager.reload();
             String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-            this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, config.getContext());
+            this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, llmClient, config.getContext());
         } else {
-            this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, config.getContext());
+            this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, llmClient, config.getContext());
         }
     }
 

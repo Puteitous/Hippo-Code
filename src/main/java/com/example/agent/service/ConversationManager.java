@@ -1,10 +1,10 @@
 package com.example.agent.service;
 
 import com.example.agent.context.Compressor;
-import com.example.agent.context.TrimPolicy;
+import com.example.agent.context.ContextManager;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.context.compressor.TruncateCompressor;
-import com.example.agent.context.policy.SlidingWindowPolicy;
+import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Usage;
 import com.example.agent.session.SessionData;
@@ -14,17 +14,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 public class ConversationManager {
 
     private static final Logger logger = LoggerFactory.getLogger(ConversationManager.class);
 
-    private final List<Message> conversationHistory;
+    private final ContextManager contextManager;
     private final TokenEstimator tokenEstimator;
     private String systemPrompt;
     
-    private TrimPolicy trimPolicy;
     private final Compressor toolResultCompressor;
     private final ContextConfig config;
     
@@ -32,46 +32,34 @@ public class ConversationManager {
     private Consumer<Message> messageListener;
     private Consumer<Message> messageSyncListener;
 
-    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator) {
-        this(systemPrompt, tokenEstimator, new ContextConfig());
+    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, LlmClient llmClient) {
+        this(systemPrompt, tokenEstimator, llmClient, new ContextConfig());
     }
 
-    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, ContextConfig config) {
+    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, LlmClient llmClient, ContextConfig config) {
         if (tokenEstimator == null) {
             throw new IllegalArgumentException("tokenEstimator不能为null");
+        }
+        if (llmClient == null) {
+            throw new IllegalArgumentException("llmClient不能为null");
         }
         this.systemPrompt = systemPrompt != null ? systemPrompt : "";
         this.tokenEstimator = tokenEstimator;
         this.config = config != null ? config : new ContextConfig();
-        this.conversationHistory = new ArrayList<>();
         
-        this.trimPolicy = new SlidingWindowPolicy(tokenEstimator, this.config);
+        String sessionId = UUID.randomUUID().toString();
+        this.contextManager = new ContextManager(config.getMaxTokens(), tokenEstimator, llmClient, sessionId);
+        
         this.toolResultCompressor = new TruncateCompressor(tokenEstimator, this.config.getToolResult());
         
         reset();
     }
 
-    public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator, 
-                               TrimPolicy trimPolicy, Compressor toolResultCompressor, ContextConfig config) {
-        if (tokenEstimator == null) {
-            throw new IllegalArgumentException("tokenEstimator不能为null");
-        }
-        if (trimPolicy == null) {
-            throw new IllegalArgumentException("trimPolicy不能为null");
-        }
-        this.systemPrompt = systemPrompt != null ? systemPrompt : "";
-        this.tokenEstimator = tokenEstimator;
-        this.config = config != null ? config : new ContextConfig();
-        this.conversationHistory = new ArrayList<>();
-        this.trimPolicy = trimPolicy;
-        this.toolResultCompressor = toolResultCompressor;
-        
-        reset();
-    }
-
     public void reset() {
-        conversationHistory.clear();
-        conversationHistory.add(Message.system(systemPrompt));
+        contextManager.clear();
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            contextManager.addMessage(Message.system(systemPrompt));
+        }
     }
 
     public void setSystemPrompt(String newSystemPrompt) {
@@ -81,17 +69,20 @@ public class ConversationManager {
     public void setSystemPrompt(String newSystemPrompt, boolean preserveHistory) {
         this.systemPrompt = newSystemPrompt;
 
-        if (!preserveHistory || conversationHistory.isEmpty()) {
+        if (!preserveHistory || contextManager.size() == 0) {
             reset();
             return;
         }
 
-        // ✅ 无缝切换：只替换第一条 System 消息，保留所有对话历史
-        if (!conversationHistory.isEmpty() && conversationHistory.get(0).isSystem()) {
-            conversationHistory.set(0, Message.system(newSystemPrompt));
+        List<Message> messages = new ArrayList<>(contextManager.getRawMessages());
+        
+        if (!messages.isEmpty() && messages.get(0).isSystem()) {
+            messages.set(0, Message.system(newSystemPrompt));
         } else {
-            conversationHistory.add(0, Message.system(newSystemPrompt));
+            messages.add(0, Message.system(newSystemPrompt));
         }
+        
+        contextManager.replaceContext(messages);
     }
 
     public String getSystemPrompt() {
@@ -100,7 +91,7 @@ public class ConversationManager {
 
     public void addUserMessage(String content) {
         Message message = Message.user(content);
-        conversationHistory.add(message);
+        contextManager.addMessage(message);
         notifyMessageAdded(message);
         
         if (transcript != null) {
@@ -116,7 +107,7 @@ public class ConversationManager {
         if (message == null) {
             return;
         }
-        conversationHistory.add(message);
+        contextManager.addMessage(message);
         notifyMessageAdded(message);
         
         if (transcript != null) {
@@ -143,7 +134,7 @@ public class ConversationManager {
             toolMessage = toolResultCompressor.compress(toolMessage, maxTokens);
         }
         
-        conversationHistory.add(toolMessage);
+        contextManager.addMessage(toolMessage);
         notifyMessageAdded(toolMessage);
         
         if (transcript != null) {
@@ -152,60 +143,39 @@ public class ConversationManager {
     }
 
     public List<Message> getHistory() {
-        return conversationHistory;
+        return contextManager.getRawMessages();
+    }
+
+    public List<Message> getContextForInference() {
+        return contextManager.getContext();
     }
 
     public int getMessageCount() {
-        return conversationHistory.size();
+        return contextManager.size();
     }
 
     public int getTokenCount() {
-        return tokenEstimator.estimateConversationTokens(conversationHistory);
+        return contextManager.getBudget().getCurrentTokens();
     }
 
-    public void trimHistory(TrimCallback callback) {
-        int beforeCount = conversationHistory.size();
-        int beforeTokens = tokenEstimator.estimateConversationTokens(conversationHistory);
-        
-        List<Message> trimmed = trimPolicy.apply(
-            conversationHistory, 
-            config.getMaxTokens(), 
-            config.getMaxMessages()
-        );
-        
-        if (trimmed == null) {
-            return;
-        }
-        
-        conversationHistory.clear();
-        conversationHistory.addAll(trimmed);
-        
-        if (callback != null && conversationHistory.size() < beforeCount) {
-            int currentTokens = tokenEstimator.estimateConversationTokens(conversationHistory);
-            callback.onTrimmed(conversationHistory.size(), currentTokens);
-        }
+    public double getTokenUsageRatio() {
+        return contextManager.getUsageRatio();
     }
 
     public ContextConfig getConfig() {
         return config;
     }
 
-    public TrimPolicy getTrimPolicy() {
-        return trimPolicy;
-    }
-
-    public void setTrimPolicy(TrimPolicy trimPolicy) {
-        if (trimPolicy != null) {
-            this.trimPolicy = trimPolicy;
-        }
-    }
-
     public Compressor getToolResultCompressor() {
         return toolResultCompressor;
     }
 
+    public ContextManager getContextManager() {
+        return contextManager;
+    }
+
     public SessionData exportSession(String sessionId, SessionData.Status status) {
-        List<Message> messagesCopy = new ArrayList<>(conversationHistory);
+        List<Message> messagesCopy = new ArrayList<>(contextManager.getRawMessages());
         return SessionData.create(sessionId, messagesCopy, status);
     }
 
@@ -213,9 +183,7 @@ public class ConversationManager {
         if (session == null || session.getMessages() == null) {
             return;
         }
-        
-        conversationHistory.clear();
-        conversationHistory.addAll(session.getMessages());
+        contextManager.replaceContext(session.getMessages());
     }
 
     public void enableTranscript(String sessionId) {
@@ -228,6 +196,17 @@ public class ConversationManager {
 
     public SessionTranscript getTranscript() {
         return transcript;
+    }
+
+    public void fixUnfinishedToolCall() {
+        List<Message> messages = contextManager.getRawMessages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            Message msg = messages.get(i);
+            if (msg.isAssistant() && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                logger.debug("检测到未完成的工具调用，已清理");
+                break;
+            }
+        }
     }
 
     public void disableTranscript() {
@@ -250,68 +229,15 @@ public class ConversationManager {
             try {
                 messageListener.accept(message);
             } catch (Exception e) {
-                logger.warn("消息监听器执行失败: {}", e.getMessage());
+                logger.warn("消息监听器回调异常", e);
             }
         }
         if (messageSyncListener != null) {
             try {
                 messageSyncListener.accept(message);
             } catch (Exception e) {
-                logger.warn("消息同步监听器执行失败: {}", e.getMessage());
+                logger.warn("同步消息监听器回调异常", e);
             }
         }
-    }
-
-    public boolean hasUnfinishedToolCall() {
-        if (conversationHistory.isEmpty()) {
-            return false;
-        }
-        
-        Message lastMessage = conversationHistory.get(conversationHistory.size() - 1);
-        if ("assistant".equals(lastMessage.getRole()) && 
-            lastMessage.getToolCalls() != null && 
-            !lastMessage.getToolCalls().isEmpty()) {
-            return true;
-        }
-        return false;
-    }
-
-    public void fixUnfinishedToolCall() {
-        if (!hasUnfinishedToolCall()) {
-            return;
-        }
-        
-        Message lastMessage = conversationHistory.get(conversationHistory.size() - 1);
-        conversationHistory.remove(conversationHistory.size() - 1);
-        
-        StringBuilder prompt = new StringBuilder();
-        
-        String content = lastMessage.getContent();
-        if (content != null && !content.trim().isEmpty()) {
-            prompt.append(content).append("\n\n");
-        }
-        
-        prompt.append("（会话中断");
-        
-        if (lastMessage.getToolCalls() != null && !lastMessage.getToolCalls().isEmpty()) {
-            String toolNames = lastMessage.getToolCalls().stream()
-                .filter(tc -> tc != null && tc.getFunction() != null)
-                .map(tc -> tc.getFunction().getName())
-                .filter(name -> name != null && !name.isEmpty())
-                .collect(java.util.stream.Collectors.joining(", "));
-            
-            if (!toolNames.isEmpty()) {
-                prompt.append("，待执行的操作: ").append(toolNames);
-            }
-        }
-        
-        prompt.append("，请继续）");
-        
-        conversationHistory.add(Message.assistant(prompt.toString()));
-    }
-
-    @FunctionalInterface
-    public interface TrimCallback {
-        void onTrimmed(int messageCount, int tokenCount);
     }
 }
