@@ -35,7 +35,7 @@ public class ContextConfig {
     }
 
     public void setMaxTokens(int maxTokens) {
-        this.maxTokens = maxTokens;
+        this.maxTokens = Math.max(1000, maxTokens);
     }
 
     public int getMaxMessages() {
@@ -43,7 +43,7 @@ public class ContextConfig {
     }
 
     public void setMaxMessages(int maxMessages) {
-        this.maxMessages = maxMessages;
+        this.maxMessages = Math.max(2, maxMessages);
     }
 
     public int getKeepRecentTurns() {
@@ -51,7 +51,7 @@ public class ContextConfig {
     }
 
     public void setKeepRecentTurns(int keepRecentTurns) {
-        this.keepRecentTurns = keepRecentTurns;
+        this.keepRecentTurns = Math.max(1, keepRecentTurns);
     }
 
     public ToolResultConfig getToolResult() {
@@ -89,7 +89,7 @@ public class ContextConfig {
         }
 
         public void setMaxTokens(int maxTokens) {
-            this.maxTokens = maxTokens;
+            this.maxTokens = Math.max(100, maxTokens);
         }
 
         public String getTruncateStrategy() {

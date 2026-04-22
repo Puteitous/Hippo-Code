@@ -77,9 +77,11 @@ public class ContextSummarizer {
     }
 
     private String getOrGenerateSummary(List<Message> messages) {
-        String existingMemory = memoryManager.read();
-        if (existingMemory != null && !existingMemory.isBlank()) {
-            return existingMemory + "\n\n> ✅ 从 session-memory.md 加载，无需重新生成";
+        if (memoryManager != null) {
+            String existingMemory = memoryManager.read();
+            if (existingMemory != null && !existingMemory.isBlank()) {
+                return existingMemory + "\n\n> ✅ 从 session-memory.md 加载，无需重新生成";
+            }
         }
         return generateSummary(messages);
     }
@@ -116,15 +118,22 @@ public class ContextSummarizer {
     }
 
     private String fallbackSummary(List<Message> messages) {
+        if (messages.isEmpty()) {
+            return "## 历史摘要\n- 对话历史为空";
+        }
+        Message lastMsg = messages.get(messages.size() - 1);
+        String contentPreview = "";
+        if (lastMsg.getContent() != null && !lastMsg.getContent().isEmpty()) {
+            int previewLen = Math.min(100, lastMsg.getContent().length());
+            contentPreview = lastMsg.getContent().substring(0, previewLen) + "...";
+        }
         return String.format(
             "## 历史摘要（共 %d 条消息）\n" +
             "- 早期对话已被压缩\n" +
             "- 最近对话完整保留\n" +
-            "- 关键上下文：%s...",
+            "- 关键上下文：%s",
             messages.size(),
-            messages.isEmpty() ? "无" :
-                messages.get(messages.size() - 1).getContent().substring(0, Math.min(100,
-                    messages.get(messages.size() - 1).getContent().length()))
+            contentPreview
         );
     }
 
