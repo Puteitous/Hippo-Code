@@ -104,6 +104,12 @@ public class DynamicSlidingWindow {
     }
 
     private int findTurnIndexForMessage(List<ConversationTurn> turns, int messageIndex) {
+        if (turns.isEmpty()) {
+            return 0;
+        }
+        if (messageIndex <= 0) {
+            return 0;
+        }
         int currentMsgIdx = 0;
         for (int i = 0; i < turns.size(); i++) {
             ConversationTurn turn = turns.get(i);

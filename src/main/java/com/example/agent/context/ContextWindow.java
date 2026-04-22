@@ -67,10 +67,14 @@ public class ContextWindow {
     }
 
     public void removeMessage(int index) {
-        if (index >= 0 && index < messages.size()) {
-            messages.remove(index);
-            recalculateBudget();
+        if (index < 0 || index >= messages.size()) {
+            throw new IndexOutOfBoundsException(
+                String.format("Cannot remove message at index %d, size is %d", 
+                    index, messages.size())
+            );
         }
+        messages.remove(index);
+        recalculateBudget();
     }
 
     public TokenBudget getBudget() {

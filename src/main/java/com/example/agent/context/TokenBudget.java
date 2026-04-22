@@ -26,7 +26,7 @@ public class TokenBudget {
     }
 
     public void update(int newTokenCount) {
-        this.currentTokens = newTokenCount;
+        this.currentTokens = Math.max(0, newTokenCount);
         double ratio = getUsageRatio();
 
         listeners.forEach(listener -> listener.onBudgetUpdated(currentTokens, maxTokens, ratio));
@@ -39,7 +39,7 @@ public class TokenBudget {
     }
 
     public void addTokens(int tokensToAdd) {
-        update(currentTokens + tokensToAdd);
+        update(Math.max(0, currentTokens + tokensToAdd));
     }
 
     private void checkThresholds(double ratio) {

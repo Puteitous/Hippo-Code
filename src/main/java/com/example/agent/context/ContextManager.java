@@ -78,8 +78,20 @@ public class ContextManager {
     }
 
     public void addMessages(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        if (!blockingGuard.canAddMessage()) {
+            throw new IllegalStateException(blockingGuard.getStatusMessage());
+        }
+        contextWindow.addMessages(messages);
+        
+        List<Message> rawMessages = contextWindow.getRawMessages();
         for (Message msg : messages) {
-            addMessage(msg);
+            backgroundExtractor.onMessageAdded(msg, rawMessages);
+            if (shouldMarkForMemory(msg)) {
+                memoryRetriever.markForMemory(msg.getContent());
+            }
         }
     }
 

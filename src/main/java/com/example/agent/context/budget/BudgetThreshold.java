@@ -29,9 +29,13 @@ public enum BudgetThreshold {
     }
 
     public static BudgetThreshold fromRatio(double ratio) {
+        if (Double.isNaN(ratio) || Double.isInfinite(ratio) || ratio < 0) {
+            return null;
+        }
+        double clampedRatio = Math.min(ratio, 1.0);
         BudgetThreshold[] thresholds = values();
         for (int i = thresholds.length - 1; i >= 0; i--) {
-            if (ratio >= thresholds[i].ratio) {
+            if (clampedRatio >= thresholds[i].ratio) {
                 return thresholds[i];
             }
         }

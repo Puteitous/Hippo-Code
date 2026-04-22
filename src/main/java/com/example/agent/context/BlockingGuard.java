@@ -25,7 +25,7 @@ public class BlockingGuard implements BudgetListener {
     }
 
     public int getRemainingTokens(int maxTokens) {
-        return maxTokens - contextWindow.getBudget().getCurrentTokens();
+        return Math.max(0, maxTokens - contextWindow.getBudget().getCurrentTokens());
     }
 
     public boolean canAddMessage() {

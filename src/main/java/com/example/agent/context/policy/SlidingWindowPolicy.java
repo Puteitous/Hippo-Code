@@ -42,13 +42,18 @@ public class SlidingWindowPolicy implements TrimPolicy {
             return new ArrayList<>(messages);
         }
 
-        Message systemMessage = messages.get(0);
-        List<Message> conversationMessages = new ArrayList<>(messages.subList(1, messages.size()));
+        boolean hasSystemMessage = messages.get(0).isSystem();
+        Message systemMessage = hasSystemMessage ? messages.get(0) : null;
+        List<Message> conversationMessages = hasSystemMessage 
+            ? new ArrayList<>(messages.subList(1, messages.size()))
+            : new ArrayList<>(messages);
 
         List<Message> windowMessages = extractRecentTurns(conversationMessages);
 
         List<Message> result = new ArrayList<>();
-        result.add(systemMessage);
+        if (systemMessage != null) {
+            result.add(systemMessage);
+        }
         result.addAll(windowMessages);
 
         while (result.size() > 1) {
