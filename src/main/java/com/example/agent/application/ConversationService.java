@@ -1,21 +1,28 @@
 package com.example.agent.application;
 
+import com.example.agent.context.BudgetWarningInjector;
 import com.example.agent.context.Compressor;
+import com.example.agent.context.SessionCompactionState;
+import com.example.agent.context.compressor.AutoCompactTrigger;
 import com.example.agent.context.compressor.TruncateCompressor;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Usage;
+import com.example.agent.memory.BackgroundExtractor;
+import com.example.agent.memory.MemoryRetriever;
+import com.example.agent.memory.MemoryStore;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionTranscript;
-import com.example.agent.session.TranscriptLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -26,9 +33,35 @@ public class ConversationService {
     private final LlmClient llmClient;
     private final ContextConfig defaultConfig;
     private final Compressor toolResultCompressor;
+    private final MemoryStore globalMemoryStore;
+
+    private final Map<String, ConversationComponents> componentRegistry = new HashMap<>();
 
     private Consumer<Message> messageListener;
     private Consumer<Message> messageSyncListener;
+
+    private static class ConversationComponents {
+        final BudgetWarningInjector warningInjector;
+        final AutoCompactTrigger autoCompactTrigger;
+        final MemoryRetriever memoryRetriever;
+        final BackgroundExtractor backgroundExtractor;
+        final SessionTranscript transcript;
+        final SessionCompactionState compactionState;
+
+        ConversationComponents(BudgetWarningInjector warningInjector,
+                                AutoCompactTrigger autoCompactTrigger,
+                                MemoryRetriever memoryRetriever,
+                                BackgroundExtractor backgroundExtractor,
+                                SessionTranscript transcript,
+                                SessionCompactionState compactionState) {
+            this.warningInjector = warningInjector;
+            this.autoCompactTrigger = autoCompactTrigger;
+            this.memoryRetriever = memoryRetriever;
+            this.backgroundExtractor = backgroundExtractor;
+            this.transcript = transcript;
+            this.compactionState = compactionState;
+        }
+    }
 
     public ConversationService(TokenEstimator tokenEstimator, LlmClient llmClient) {
         this(tokenEstimator, llmClient, new ContextConfig());
@@ -45,6 +78,7 @@ public class ConversationService {
         this.llmClient = llmClient;
         this.defaultConfig = config != null ? config : new ContextConfig();
         this.toolResultCompressor = new TruncateCompressor(tokenEstimator, this.defaultConfig.getToolResult());
+        this.globalMemoryStore = new MemoryStore(llmClient);
     }
 
     public Conversation create(String systemPrompt) {
@@ -53,8 +87,10 @@ public class ConversationService {
 
     public Conversation create(String systemPrompt, int maxTokens) {
         String sessionId = UUID.randomUUID().toString();
-        Conversation conversation = new Conversation(maxTokens, tokenEstimator, llmClient, sessionId);
+        Conversation conversation = new Conversation(maxTokens, tokenEstimator, sessionId);
         conversation.setSystemPrompt(systemPrompt != null ? systemPrompt : "");
+
+        initializeComponents(conversation);
 
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             conversation.addMessage(Message.system(systemPrompt));
@@ -65,8 +101,52 @@ public class ConversationService {
         return conversation;
     }
 
+    private void initializeComponents(Conversation conversation) {
+        String sessionId = conversation.getSessionId();
+        
+        SessionTranscript transcript = new SessionTranscript(sessionId);
+        BudgetWarningInjector warningInjector = new BudgetWarningInjector(conversation.getContextWindow());
+        warningInjector.register();
+
+        SessionCompactionState compactionState = new SessionCompactionState();
+        AutoCompactTrigger autoCompactTrigger = new AutoCompactTrigger(
+            conversation.getContextWindow(),
+            tokenEstimator,
+            llmClient,
+            sessionId,
+            transcript,
+            compactionState
+        );
+        autoCompactTrigger.register();
+
+        MemoryRetriever memoryRetriever = new MemoryRetriever(globalMemoryStore);
+
+        BackgroundExtractor backgroundExtractor = new BackgroundExtractor(
+            sessionId,
+            tokenEstimator,
+            llmClient,
+            compactionState
+        );
+
+        componentRegistry.put(sessionId, new ConversationComponents(
+            warningInjector,
+            autoCompactTrigger,
+            memoryRetriever,
+            backgroundExtractor,
+            transcript,
+            compactionState
+        ));
+    }
+
+    private ConversationComponents getComponents(Conversation conversation) {
+        return componentRegistry.get(conversation.getSessionId());
+    }
+
     public void reset(Conversation conversation) {
         conversation.clear();
+        componentRegistry.remove(conversation.getSessionId());
+        initializeComponents(conversation);
+        
         String systemPrompt = conversation.getSystemPrompt();
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             conversation.addMessage(Message.system(systemPrompt));
@@ -78,91 +158,77 @@ public class ConversationService {
     }
 
     public void setSystemPrompt(Conversation conversation, String newSystemPrompt, boolean preserveHistory) {
-        conversation.setSystemPrompt(newSystemPrompt);
-
-        if (!preserveHistory || conversation.size() == 0) {
+        conversation.setSystemPrompt(newSystemPrompt != null ? newSystemPrompt : "");
+        
+        if (!preserveHistory) {
             reset(conversation);
-            return;
         }
-
-        List<Message> messages = new ArrayList<>(conversation.getMessages());
-        
-        if (!messages.isEmpty() && messages.get(0).isSystem()) {
-            messages.set(0, Message.system(newSystemPrompt));
-        } else {
-            messages.add(0, Message.system(newSystemPrompt));
-        }
-        
-        conversation.replaceMessages(messages);
     }
 
     public void addUserMessage(Conversation conversation, String content) {
-        Message message = Message.user(content);
-        conversation.addMessage(message);
-        notifyMessageAdded(message);
-        
-        SessionTranscript transcript = conversation.getTranscript();
-        if (transcript != null) {
-            transcript.appendUserMessage(message);
-        }
+        addMessage(conversation, Message.user(content));
     }
 
-    public void addAssistantMessage(Conversation conversation, Message message) {
-        addAssistantMessage(conversation, message, null);
+    public void addAssistantMessage(Conversation conversation, String content) {
+        addMessage(conversation, Message.assistant(content));
     }
 
     public void addAssistantMessage(Conversation conversation, Message message, Usage usage) {
-        if (message == null) {
-            return;
-        }
+        addMessage(conversation, message);
+    }
+
+    public void addToolResult(Conversation conversation, String toolCallId, String toolName, String content) {
+        String compressed = toolResultCompressor.compress(content);
+        addMessage(conversation, Message.toolResult(toolCallId, toolName, compressed));
+    }
+
+    public void addMessage(Conversation conversation, Message message) {
+        ConversationComponents components = getComponents(conversation);
+        
         conversation.addMessage(message);
         notifyMessageAdded(message);
-        
-        SessionTranscript transcript = conversation.getTranscript();
-        if (transcript != null) {
-            transcript.appendAssistantMessage(message, usage);
+
+        if (components != null) {
+            components.backgroundExtractor.onMessageAdded(message, conversation.getMessages());
+            
+            if (conversation.shouldMarkForMemory(message)) {
+                components.memoryRetriever.markForMemory(message.getContent());
+            }
+            
+            if (message.isUser()) {
+                components.transcript.appendUserMessage(message);
+            } else if (message.isAssistant()) {
+                components.transcript.appendAssistantMessage(message, null);
+            } else if (message.isTool()) {
+                components.transcript.appendToolResult(message, message.getName(), 0, true);
+            } else if (message.isSystem()) {
+                components.transcript.appendSystemMessage(message.getContent());
+            }
         }
     }
 
-    public void addToolResult(Conversation conversation, String toolCallId, String toolName, String result) {
-        addToolResult(conversation, toolCallId, toolName, result, 0, true);
-    }
+    public List<Message> prepareForInference(Conversation conversation) {
+        ConversationComponents components = getComponents(conversation);
+        
+        if (components != null) {
+            components.autoCompactTrigger.startNewQueryLoop();
+            components.autoCompactTrigger.ensureResumeWindowIfNeeded();
+        }
 
-    public void addToolResult(Conversation conversation, String toolCallId, String toolName, String result, 
-                              long durationMs, boolean success) {
-        if (toolCallId == null || toolCallId.trim().isEmpty()) {
-            return;
-        }
-        if (toolName == null || toolName.trim().isEmpty()) {
-            return;
-        }
+        List<Message> effectiveMessages = conversation.getEffectiveMessages();
         
-        Message toolMessage = Message.toolResult(toolCallId, toolName, result);
-        
-        if (toolResultCompressor != null && toolResultCompressor.supports(toolMessage)) {
-            int maxTokens = defaultConfig.getToolResult().getMaxTokens();
-            toolMessage = toolResultCompressor.compress(toolMessage, maxTokens);
+        if (components != null) {
+            effectiveMessages = components.memoryRetriever.prepareContextHeader(effectiveMessages);
         }
         
-        conversation.addMessage(toolMessage);
-        notifyMessageAdded(toolMessage);
-        
-        SessionTranscript transcript = conversation.getTranscript();
-        if (transcript != null) {
-            transcript.appendToolResult(toolMessage, toolName, durationMs, success);
-        }
+        return effectiveMessages;
     }
 
-    public List<Message> getHistory(Conversation conversation) {
-        return conversation.getMessages();
-    }
-
-    public List<Message> getContextForInference(Conversation conversation) {
-        return conversation.prepareForInference();
-    }
-
-    public int getMessageCount(Conversation conversation) {
-        return conversation.size();
+    public String getCompactionStats(Conversation conversation) {
+        ConversationComponents components = getComponents(conversation);
+        return components != null 
+            ? components.autoCompactTrigger.getMetrics().getSummary() 
+            : "No compaction data available";
     }
 
     public int getTokenCount(Conversation conversation) {
@@ -185,7 +251,6 @@ public class ConversationService {
         try {
             conversation.clear();
             conversation.addMessages(sessionData.getMessages());
-            logger.info("导入会话成功: {} 条消息", sessionData.getMessages().size());
             return true;
         } catch (Exception e) {
             logger.error("导入会话失败", e);
@@ -193,11 +258,11 @@ public class ConversationService {
         }
     }
 
-    public boolean loadFromTranscript(Conversation conversation, String sessionId) {
-        return TranscriptLoader.loadToConversation(sessionId, conversation, this);
+    public List<Message> getContextForInference(Conversation conversation) {
+        return prepareForInference(conversation);
     }
 
-    public void fixUnfinishedToolCall(Conversation conversation) {
+    public void cleanupInterruptedToolCalls(Conversation conversation) {
         List<Message> messages = conversation.getMessages();
         if (messages.isEmpty()) {
             return;
@@ -227,7 +292,6 @@ public class ConversationService {
             for (com.example.agent.llm.model.ToolCall call : lastMessage.getToolCalls()) {
                 fixContent.append("\n  - 待执行的操作: ").append(call.getFunction().getName());
             }
-            fixContent.append("\n\n请继续。");
             lastMessage.setContent(fixContent.toString());
         }
     }
@@ -242,6 +306,18 @@ public class ConversationService {
 
     public Compressor getToolResultCompressor() {
         return toolResultCompressor;
+    }
+
+    public int getMessageCount(Conversation conversation) {
+        return conversation.getMessageCount();
+    }
+
+    public List<Message> getHistory(Conversation conversation) {
+        return conversation.getMessages();
+    }
+
+    public void fixUnfinishedToolCall(Conversation conversation) {
+        cleanupInterruptedToolCalls(conversation);
     }
 
     public ContextConfig getConfig() {

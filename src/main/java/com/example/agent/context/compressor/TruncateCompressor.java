@@ -150,4 +150,13 @@ public class TruncateCompressor implements Compressor {
     public String getStrategy() {
         return strategy;
     }
+
+    public String compress(String content) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+        Message temp = Message.toolResult("temp", "temp", content);
+        Message result = compress(temp, maxTokens);
+        return result.getContent();
+    }
 }

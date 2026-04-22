@@ -41,6 +41,16 @@ public class AutoCompactTrigger implements BudgetListener {
             LlmClient llmClient, 
             String sessionId,
             SessionTranscript transcript) {
+        this(contextWindow, tokenEstimator, llmClient, sessionId, transcript, new SessionCompactionState());
+    }
+
+    public AutoCompactTrigger(
+            ContextWindow contextWindow, 
+            TokenEstimator tokenEstimator, 
+            LlmClient llmClient, 
+            String sessionId,
+            SessionTranscript transcript,
+            SessionCompactionState state) {
         this.contextWindow = contextWindow;
         this.tokenEstimator = tokenEstimator;
         this.sessionId = sessionId;
@@ -49,7 +59,7 @@ public class AutoCompactTrigger implements BudgetListener {
         this.summarizer = new ContextSummarizer(tokenEstimator, llmClient, sessionId);
         this.memoryManager = new SessionMemoryManager(sessionId);
         this.metrics = new CompactionMetricsCollector();
-        this.state = new SessionCompactionState();
+        this.state = state;
         this.compactionPerformed = false;
     }
 
