@@ -49,7 +49,7 @@ public class AgentTurnExecutor {
         StringBuilder contentBuilder = new StringBuilder();
 
         ChatResponse response = llmClient.chatStream(
-                conversationManager.getHistory(),
+                context.getContextManager().getContext(),
                 toolRegistry.toTools(),
                 chunk -> {
                     if (interrupted) {

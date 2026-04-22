@@ -1,6 +1,8 @@
 package com.example.agent.context;
 
 import com.example.agent.context.compressor.AutoCompactTrigger;
+import com.example.agent.core.AgentContext;
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.memory.BackgroundExtractor;
@@ -160,5 +162,17 @@ public class ContextManager {
                content.contains("经验：") ||
                content.contains("教训：") ||
                (message.isAssistant() && content.contains("已完成") && content.length() > 200);
+    }
+
+    public static void initialize(AgentContext context) {
+        int maxTokens = context.getConfig().getMaxTokens();
+        String sessionId = context.getSessionId();
+        ContextManager instance = new ContextManager(
+            maxTokens,
+            context.getTokenEstimator(),
+            context.getLlmClient(),
+            sessionId
+        );
+        ServiceLocator.registerSingleton(ContextManager.class, instance);
     }
 }

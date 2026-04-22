@@ -73,6 +73,11 @@ public class ConversationLoop {
         currentSessionId = sessionId;
         conversationRound = 1;
         conversationManager.reset();
+        context.getContextManager().clear();
+
+        conversationManager.setMessageSyncListener(
+            msg -> context.getContextManager().addMessage(msg)
+        );
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(
@@ -106,10 +111,17 @@ public class ConversationLoop {
         conversationLogger.logUserInput(userInput, inputTokens);
 
         conversationManager.addUserMessage(userInput);
-        conversationManager.trimHistory((messageCount, tokenCount) -> {
-            ui.println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]") );
-            ui.println();
-        });
+
+        // ✅ 新架构：ContextManager 上下文压缩自动处理
+        //    旧的 trimHistory 已废弃，原因：
+        //    1. 直接删除 ConversationManager（真相源）破坏 SSOT 原则
+        //    2. 现在通过 AutoCompactTrigger 三级阈值自动触发压缩
+        //    3. 90% → ContextClipper 零成本裁剪，95% → LLM 深度摘要
+        //    4. 压缩仅在 ContextWindow（工作窗口）执行，真相源永不删除
+        // conversationManager.trimHistory((messageCount, tokenCount) -> {
+        //     ui.println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]") );
+        //     ui.println();
+        // });
 
         ui.println();
         ui.println(ConsoleStyle.conversationDivider(conversationRound));

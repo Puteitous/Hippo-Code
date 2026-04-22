@@ -30,6 +30,7 @@ public class ConversationManager {
     
     private SessionTranscript transcript;
     private Consumer<Message> messageListener;
+    private Consumer<Message> messageSyncListener;
 
     public ConversationManager(String systemPrompt, TokenEstimator tokenEstimator) {
         this(systemPrompt, tokenEstimator, new ContextConfig());
@@ -240,12 +241,23 @@ public class ConversationManager {
         this.messageListener = listener;
     }
 
+    public void setMessageSyncListener(Consumer<Message> listener) {
+        this.messageSyncListener = listener;
+    }
+
     private void notifyMessageAdded(Message message) {
         if (messageListener != null) {
             try {
                 messageListener.accept(message);
             } catch (Exception e) {
                 logger.warn("消息监听器执行失败: {}", e.getMessage());
+            }
+        }
+        if (messageSyncListener != null) {
+            try {
+                messageSyncListener.accept(message);
+            } catch (Exception e) {
+                logger.warn("消息同步监听器执行失败: {}", e.getMessage());
             }
         }
     }

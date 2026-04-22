@@ -1,6 +1,7 @@
 package com.example.agent.core;
 
 import com.example.agent.config.Config;
+import com.example.agent.context.ContextManager;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.core.di.CoreModule;
 import com.example.agent.core.di.ServiceLocator;
@@ -45,6 +46,7 @@ public class AgentContext {
     private final Config config;
     private final Terminal terminal;
     private final LineReader reader;
+    private final String sessionId;
     
     private LlmClient llmClient;
     private ToolRegistry toolRegistry;
@@ -52,6 +54,7 @@ public class AgentContext {
     private ToolOrchestrator toolOrchestrator;
     private TokenEstimator tokenEstimator;
     private ConversationManager conversationManager;
+    private ContextManager contextManager;
     private TokenMetricsCollector tokenMetricsCollector;
     private EventMetricsCollector eventMetricsCollector;
     private RuleManager ruleManager;
@@ -64,6 +67,7 @@ public class AgentContext {
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
+        this.sessionId = java.util.UUID.randomUUID().toString();
         this.terminal = TerminalBuilder.builder()
                 .system(true)
                 .build();
@@ -115,9 +119,15 @@ public class AgentContext {
         CoreModule.configure();
         logger.info("DI 容器初始化完成 ✅");
 
+        // ✅ 注册 AgentContext 并初始化主流程 ContextManager
+        ServiceLocator.registerSingleton(AgentContext.class, this);
+        ContextManager.initialize(this);
+        logger.info("ContextManager 主流程上下文初始化完成 ✅");
+
         // ✅ 从 DI 容器获取所有依赖，再也不需要手动 new 了！
         this.llmClient = ServiceLocator.get(LlmClient.class);
         this.tokenEstimator = ServiceLocator.get(TokenEstimator.class);
+        this.contextManager = ServiceLocator.get(ContextManager.class);
         this.ruleManager = ServiceLocator.get(RuleManager.class);
         this.codeIndex = ServiceLocator.get(CodeIndex.class);
         this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
@@ -211,6 +221,10 @@ public class AgentContext {
         return config;
     }
 
+    public String getSessionId() {
+        return sessionId;
+    }
+
     public Terminal getTerminal() {
         return terminal;
     }
@@ -237,6 +251,10 @@ public class AgentContext {
 
     public ConversationManager getConversationManager() {
         return conversationManager;
+    }
+
+    public ContextManager getContextManager() {
+        return contextManager;
     }
 
     public TokenMetricsCollector getTokenMetricsCollector() {
