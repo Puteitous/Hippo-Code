@@ -1,7 +1,8 @@
 package com.example.agent.core;
 
 import com.example.agent.config.Config;
-import com.example.agent.context.ContextManager;
+import com.example.agent.application.ConversationService;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.core.di.CoreModule;
 import com.example.agent.core.di.ServiceLocator;
@@ -15,7 +16,7 @@ import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
-import com.example.agent.service.ConversationManager;
+import com.example.agent.service.TokenEstimator;
 
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.lsp.LspServiceManager;
@@ -53,13 +54,12 @@ public class AgentContext {
     private ConcurrentToolExecutor concurrentToolExecutor;
     private ToolOrchestrator toolOrchestrator;
     private TokenEstimator tokenEstimator;
-    private ConversationManager conversationManager;
-    private ContextManager contextManager;
+    private ConversationService conversationService;
+    private Conversation conversation;
     private TokenMetricsCollector tokenMetricsCollector;
     private EventMetricsCollector eventMetricsCollector;
     private RuleManager ruleManager;
     private CodeIndex codeIndex;
-    private ThinkingEngine thinkingEngine;
     private McpServiceManager mcpServiceManager;
     private LspServiceManager lspServiceManager;
     private AgentMode currentMode = AgentMode.CHAT;
@@ -119,15 +119,12 @@ public class AgentContext {
         CoreModule.configure();
         logger.info("DI 容器初始化完成 ✅");
 
-        // ✅ 注册 AgentContext 并初始化主流程 ContextManager
+        // ✅ 注册 AgentContext
         ServiceLocator.registerSingleton(AgentContext.class, this);
-        ContextManager.initialize(this);
-        logger.info("ContextManager 主流程上下文初始化完成 ✅");
 
-        // ✅ 从 DI 容器获取所有依赖，再也不需要手动 new 了！
+        // ✅ 从 DI 容器获取所有依赖
         this.llmClient = ServiceLocator.get(LlmClient.class);
         this.tokenEstimator = ServiceLocator.get(TokenEstimator.class);
-        this.contextManager = ServiceLocator.get(ContextManager.class);
         this.ruleManager = ServiceLocator.get(RuleManager.class);
         this.codeIndex = ServiceLocator.get(CodeIndex.class);
         this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
@@ -155,11 +152,7 @@ public class AgentContext {
 
 
 
-        // 初始化 ThinkingEngine
-        this.thinkingEngine = ServiceLocator.get(ThinkingEngine.class);
-        this.thinkingEngine.setCodeIndex(this.codeIndex);
 
-        logger.info("统一思考引擎 ThinkingEngine 初始化完成 ✅");
 
         // 初始化 PromptLibrary
         PromptService promptService = new PromptService();
@@ -167,12 +160,17 @@ public class AgentContext {
         ServiceLocator.registerSingleton(PromptLibrary.class, PromptLibrary.getInstance());
         logger.info("PromptLibrary 初始化完成 ✅");
 
+        // 初始化会话服务（无状态，全局共享）
+        this.conversationService = new ConversationService(tokenEstimator, llmClient, config.getContext());
+        
         // 增强系统提示词（使用 PromptLibrary）
         String basePrompt = promptService.getBasePrompt(null);
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-        this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, llmClient, config.getContext());
+        this.conversation = conversationService.create(enhancedSystemPrompt);
 
-        logger.info("统一上下文管理：ConversationManager 委托 ContextManager 实现自动压缩 ✅");
+        logger.info("✅ 四层架构落地: ConversationService(应用层) + Conversation(领域层)");
+        logger.info("   - Service: 无状态，全局共享，编排业务流程");
+        logger.info("   - Conversation: 有状态，每个会话一个实例，纯业务逻辑");
 
         // 模式切换监听器：自动切换 System Prompt + 状态栏，无缝保留上下文
         onModeChanged(newMode -> {
@@ -184,7 +182,7 @@ public class AgentContext {
             String enhancedPrompt = ruleManager.enhanceSystemPrompt(prompt);
             
             // ✅ 核心：preserveHistory = true
-            conversationManager.setSystemPrompt(enhancedPrompt, true);
+            conversationService.setSystemPrompt(conversation, enhancedPrompt, true);
             
             // ✅ 更新 Terminal 状态栏标题
             AgentUi ui = ServiceLocator.getOrNull(AgentUi.class);
@@ -198,7 +196,7 @@ public class AgentContext {
         // 默认使用 Chat 模式 Prompt
         String defaultPrompt = promptService.getBasePrompt(com.example.agent.prompt.model.TaskMode.CHAT);
         String enhancedDefaultPrompt = ruleManager.enhanceSystemPrompt(defaultPrompt);
-        conversationManager.setSystemPrompt(enhancedDefaultPrompt);
+        conversationService.setSystemPrompt(conversation, enhancedDefaultPrompt);
         logger.info("默认启用 Chat 模式 System Prompt ✅");
     }
 
@@ -210,10 +208,18 @@ public class AgentContext {
         if (this.ruleManager != null) {
             this.ruleManager.reload();
             String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-            this.conversationManager = new ConversationManager(enhancedSystemPrompt, tokenEstimator, llmClient, config.getContext());
+            this.conversation = conversationService.create(enhancedSystemPrompt);
         } else {
-            this.conversationManager = new ConversationManager(basePrompt, tokenEstimator, llmClient, config.getContext());
+            this.conversation = conversationService.create(basePrompt);
         }
+    }
+
+    public ConversationService getConversationService() {
+        return conversationService;
+    }
+
+    public Conversation getConversation() {
+        return conversation;
     }
 
     public Config getConfig() {
@@ -248,13 +254,7 @@ public class AgentContext {
         return tokenEstimator;
     }
 
-    public ConversationManager getConversationManager() {
-        return conversationManager;
-    }
 
-    public ContextManager getContextManager() {
-        return contextManager;
-    }
 
     public TokenMetricsCollector getTokenMetricsCollector() {
         return tokenMetricsCollector;
@@ -280,9 +280,7 @@ public class AgentContext {
         return toolOrchestrator;
     }
 
-    public ThinkingEngine getThinkingEngine() {
-        return thinkingEngine;
-    }
+
 
     public McpServiceManager getMcpServiceManager() {
         return mcpServiceManager;

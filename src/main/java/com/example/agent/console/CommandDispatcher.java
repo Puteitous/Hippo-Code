@@ -9,7 +9,8 @@ import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.mcp.client.McpClient;
 import com.example.agent.mcp.config.McpConfig;
 import com.example.agent.mcp.model.McpTool;
-import com.example.agent.service.ConversationManager;
+import com.example.agent.application.ConversationService;
+import com.example.agent.domain.conversation.Conversation;
 
 import java.util.concurrent.TimeUnit;
 import com.example.agent.session.SessionData;
@@ -85,7 +86,8 @@ public class CommandDispatcher {
     private final Config config;
     private final AgentContext context;
     private final InputHandler inputHandler;
-    private final ConversationManager conversationManager;
+    private final ConversationService conversationService;
+    private final Conversation conversation;
     private final TokenMetricsCollector tokenMetricsCollector;
     private final SessionStorage sessionStorage;
     private final McpServiceManager mcpServiceManager;
@@ -96,7 +98,8 @@ public class CommandDispatcher {
         this.config = context.getConfig();
         this.context = context;
         this.inputHandler = inputHandler;
-        this.conversationManager = context.getConversationManager();
+        this.conversationService = context.getConversationService();
+        this.conversation = context.getConversation();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
         this.sessionStorage = new SessionStorage();
         this.mcpServiceManager = context.getMcpServiceManager();
@@ -107,7 +110,8 @@ public class CommandDispatcher {
         this.config = context.getConfig();
         this.context = context;
         this.inputHandler = inputHandler;
-        this.conversationManager = context.getConversationManager();
+        this.conversationService = context.getConversationService();
+        this.conversation = context.getConversation();
         this.tokenMetricsCollector = context.getTokenMetricsCollector();
         this.sessionStorage = sessionStorage;
         this.mcpServiceManager = context.getMcpServiceManager();
@@ -140,7 +144,7 @@ public class CommandDispatcher {
         }
 
         if ("reset".equalsIgnoreCase(line)) {
-            conversationManager.reset();
+            conversationService.reset(conversation);
             ui.println(ConsoleStyle.success("会话已重置"));
             ui.println();
             return CommandResult.continueExecution();

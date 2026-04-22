@@ -11,7 +11,8 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.llm.model.Usage;
 import com.example.agent.logging.ConversationLogger;
-import com.example.agent.service.ConversationManager;
+import com.example.agent.application.ConversationService;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.tools.ToolRegistry;
 import org.jline.reader.UserInterruptException;
 
@@ -24,7 +25,8 @@ public class AgentTurnExecutor {
 
     private final LlmClient llmClient;
     private final ToolRegistry toolRegistry;
-    private final ConversationManager conversationManager;
+    private final ConversationService conversationService;
+    private final Conversation conversation;
     private final ToolCallProcessor toolCallProcessor;
     private final AgentUi ui;
     private final AgentContext context;
@@ -34,7 +36,8 @@ public class AgentTurnExecutor {
     public AgentTurnExecutor(AgentContext context, ToolCallProcessor toolCallProcessor, AgentUi ui) {
         this.llmClient = context.getLlmClient();
         this.toolRegistry = context.getToolRegistry();
-        this.conversationManager = context.getConversationManager();
+        this.conversationService = context.getConversationService();
+        this.conversation = context.getConversation();
         this.toolCallProcessor = toolCallProcessor;
         this.ui = ui;
         this.context = context;
@@ -49,7 +52,7 @@ public class AgentTurnExecutor {
         StringBuilder contentBuilder = new StringBuilder();
 
         ChatResponse response = llmClient.chatStream(
-                context.getContextManager().getContext(),
+                conversationService.getContextForInference(conversation),
                 toolRegistry.toTools(),
                 chunk -> {
                     if (interrupted) {
@@ -88,7 +91,7 @@ public class AgentTurnExecutor {
             context.getTokenMetricsCollector().recordConversation(
                     sessionId,
                     LocalDateTime.now(),
-                    conversationManager.getTokenCount(),
+                    conversationService.getTokenCount(conversation),
                     usage
             );
         }
@@ -102,7 +105,7 @@ public class AgentTurnExecutor {
                 assistantMessage.setContent(contentBuilder.toString());
             }
 
-            conversationManager.addAssistantMessage(assistantMessage, usage);
+            conversationService.addAssistantMessage(conversation, assistantMessage, usage);
 
             List<ToolCall> toolCalls = assistantMessage.getToolCalls();
             ui.println();
@@ -140,7 +143,7 @@ public class AgentTurnExecutor {
                 return AgentTurnResult.EMPTY_RESPONSE;
             }
 
-            conversationManager.addAssistantMessage(assistantMessage, usage);
+            conversationService.addAssistantMessage(conversation, assistantMessage, usage);
 
             if (conversationLogger != null) {
                 conversationLogger.logAiResponse(contentBuilder.toString(), usage);

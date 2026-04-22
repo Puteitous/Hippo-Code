@@ -8,7 +8,8 @@ import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.progress.ToolCardRenderer;
-import com.example.agent.service.ConversationManager;
+import com.example.agent.application.ConversationService;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.orchestrator.ToolOrchestrator;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
@@ -27,19 +28,22 @@ public class ToolCallProcessor {
 
     private final ConcurrentToolExecutor concurrentToolExecutor;
     private final ToolOrchestrator toolOrchestrator;
-    private final ConversationManager conversationManager;
+    private final ConversationService conversationService;
+    private final Conversation conversation;
     private final AgentUi ui;
     private final TruncationService truncationService;
     private final AgentContext context;
 
     public ToolCallProcessor(AgentContext context,
                              ConcurrentToolExecutor concurrentToolExecutor,
-                             ConversationManager conversationManager,
+                             ConversationService conversationService,
+                             Conversation conversation,
                              AgentUi ui) {
         this.context = context;
         this.concurrentToolExecutor = concurrentToolExecutor;
         this.toolOrchestrator = context.getToolOrchestrator();
-        this.conversationManager = conversationManager;
+        this.conversationService = conversationService;
+        this.conversation = conversation;
         this.ui = ui;
         this.truncationService = new TruncationService(TokenEstimatorFactory.getDefault());
     }
@@ -67,7 +71,7 @@ public class ToolCallProcessor {
                     );
                     ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.yellow(msg));
                     logger.warn("模式权限拦截: {} - {}", mode, toolName);
-                    conversationManager.addToolResult(toolCall.getId(), toolName, "权限受限: " + msg);
+                    conversationService.addToolResult(conversation, toolCall.getId(), toolName, "权限受限: " + msg);
                     continue;
                 }
                 
@@ -118,7 +122,7 @@ public class ToolCallProcessor {
                     );
                 }
 
-                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), truncatedResult);
+                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), truncatedResult);
             } else {
                 String errorMsg = result.getErrorMessage() != null ? result.getErrorMessage() : "未知错误";
 
@@ -133,7 +137,7 @@ public class ToolCallProcessor {
                 }
 
                 String errorResult = "Error: " + errorMsg + "\nPlease try a different approach or check if the path is correct.";
-                conversationManager.addToolResult(result.getToolCallId(), result.getToolName(), errorResult);
+                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), errorResult);
             }
         }
     }

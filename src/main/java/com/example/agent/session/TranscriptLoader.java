@@ -54,9 +54,14 @@ public class TranscriptLoader {
             return session;
         }
 
+        public void applyToConversation(com.example.agent.domain.conversation.Conversation conversation,
+                                         com.example.agent.application.ConversationService service) {
+            conversation.clear();
+            conversation.addMessages(messages);
+        }
+
+        @Deprecated
         public void applyToConversationManager(com.example.agent.service.ConversationManager manager) {
-            manager.getHistory().clear();
-            manager.getHistory().addAll(messages);
         }
 
         public List<Message> getMessages() {
@@ -286,18 +291,25 @@ public class TranscriptLoader {
         return result.toSessionData(safeSessionId);
     }
 
-    public static boolean loadToConversationManager(String sessionId, com.example.agent.service.ConversationManager manager) {
+    public static boolean loadToConversation(String sessionId, 
+                                              com.example.agent.domain.conversation.Conversation conversation,
+                                              com.example.agent.application.ConversationService service) {
         String safeSessionId = SessionStorage.sanitizeSessionId(sessionId);
         LoadResult result = load(safeSessionId);
         if (result.isEmpty()) {
             return false;
         }
-        result.applyToConversationManager(manager);
+        result.applyToConversation(conversation, service);
         if (result.isRecoveredFromCrash()) {
             logger.info("会话 {} 从崩溃中恢复，截断了 {} 行损坏数据", 
                 sessionId, result.getTruncatedLines());
         }
         return true;
+    }
+
+    @Deprecated
+    public static boolean loadToConversationManager(String sessionId, com.example.agent.service.ConversationManager manager) {
+        return false;
     }
 
     public static int repairAndCompact(Path transcriptFile) throws IOException {

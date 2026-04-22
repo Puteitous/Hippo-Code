@@ -1,16 +1,17 @@
 package com.example.agent.execute;
 
+import com.example.agent.application.ConversationService;
 import com.example.agent.console.AgentUi;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.console.InputHandler;
 import com.example.agent.core.AgentContext;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.exception.LlmTimeoutException;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.logging.WorkspaceManager;
-import com.example.agent.service.ConversationManager;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
@@ -23,6 +24,7 @@ import org.slf4j.MDC;
 
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 public class ConversationLoop {
 
@@ -31,7 +33,8 @@ public class ConversationLoop {
 
     private final AgentContext context;
     private final AgentTurnExecutor turnExecutor;
-    private final ConversationManager conversationManager;
+    private final ConversationService conversationService;
+    private final Conversation conversation;
     private final TokenEstimator tokenEstimator;
     private final InputHandler inputHandler;
     private final AgentUi ui;
@@ -52,7 +55,8 @@ public class ConversationLoop {
                             SessionStorage sessionStorage) {
         this.context = context;
         this.turnExecutor = turnExecutor;
-        this.conversationManager = context.getConversationManager();
+        this.conversationService = context.getConversationService();
+        this.conversation = context.getConversation();
         this.tokenEstimator = context.getTokenEstimator();
         this.inputHandler = inputHandler;
         this.ui = ui;
@@ -60,8 +64,8 @@ public class ConversationLoop {
     }
 
     private void ensureConversationInitialized() {
-        boolean managerWasReset = conversationManager.getMessageCount() == 1 
-                && conversationManager.getHistory().get(0).isSystem();
+        boolean managerWasReset = conversationService.getMessageCount(conversation) == 1 
+                && conversationService.getHistory(conversation).get(0).isSystem();
         
         if (currentSessionId == null || conversationLogger == null || managerWasReset) {
             startNewConversation();
@@ -72,19 +76,13 @@ public class ConversationLoop {
         String sessionId = String.valueOf(System.currentTimeMillis());
         currentSessionId = sessionId;
         conversationRound = 1;
-        conversationManager.reset();
-        context.getContextManager().clear();
-
-        conversationManager.setMessageSyncListener(
-            msg -> context.getContextManager().addMessage(msg)
-        );
+        conversationService.reset(conversation);
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(
             WorkspaceManager.getCurrentProjectKey(), sessionId
         );
         conversationLogger = new ConversationLogger(sessionId, logFile);
-        conversationManager.enableTranscript(sessionId);
         logger.info("新会话已启动: {}", sessionId);
     }
 
@@ -110,18 +108,12 @@ public class ConversationLoop {
 
         conversationLogger.logUserInput(userInput, inputTokens);
 
-        conversationManager.addUserMessage(userInput);
+        conversationService.addUserMessage(conversation, userInput);
 
-        // ✅ 新架构：ContextManager 上下文压缩自动处理
-        //    旧的 trimHistory 已废弃，原因：
-        //    1. 直接删除 ConversationManager（真相源）破坏 SSOT 原则
-        //    2. 现在通过 AutoCompactTrigger 三级阈值自动触发压缩
-        //    3. 90% → ContextClipper 零成本裁剪，95% → LLM 深度摘要
-        //    4. 压缩仅在 ContextWindow（工作窗口）执行，真相源永不删除
-        // conversationManager.trimHistory((messageCount, tokenCount) -> {
-        //     ui.println(ConsoleStyle.gray("  [历史已精简: ") + ConsoleStyle.yellow(String.valueOf(messageCount)) + ConsoleStyle.gray(" 条消息, 约 ") + ConsoleStyle.yellow(String.valueOf(tokenCount)) + ConsoleStyle.gray(" tokens]") );
-        //     ui.println();
-        // });
+        // ✅ 四层架构：Conversation 自动压缩处理
+        //    - 90% → ContextClipper 零成本裁剪
+        //    - 95% → LLM 深度摘要
+        //    - 压缩仅在工作窗口执行，真相源永不删除
 
         ui.println();
         ui.println(ConsoleStyle.conversationDivider(conversationRound));
@@ -221,7 +213,7 @@ public class ConversationLoop {
         
         try {
             SessionData.Status status = completed ? SessionData.Status.COMPLETED : SessionData.Status.INTERRUPTED;
-            SessionData sessionData = conversationManager.exportSession(currentSessionId, status);
+            SessionData sessionData = conversationService.exportSession(conversation, currentSessionId, status);
             SessionData saved = sessionStorage.saveSession(sessionData);
             
             if (saved != null) {
@@ -305,64 +297,35 @@ public class ConversationLoop {
         
         String sessionId = session.getSessionId();
         
-        boolean loadedFromTranscript = TranscriptLoader.loadToConversationManager(
-            sessionId, conversationManager
+        boolean loadedFromTranscript = TranscriptLoader.loadToConversation(
+            sessionId, conversation, conversationService
         );
         
         if (!loadedFromTranscript) {
-            conversationManager.importSession(session);
+            conversationService.importSession(conversation, session);
         }
         
-        conversationManager.fixUnfinishedToolCall();
+        conversationService.fixUnfinishedToolCall(conversation);
         
         currentSessionId = sessionId;
-        conversationRound = countUserMessages(conversationManager.getHistory());
+        conversationRound = countUserMessages(conversationService.getHistory(conversation));
         
+        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(
             WorkspaceManager.getCurrentProjectKey(), sessionId
         );
         conversationLogger = new ConversationLogger(sessionId, logFile);
-        conversationManager.enableTranscript(sessionId);
-        MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         
-        logger.info("会话已恢复: {}, 轮次: {}", sessionId, conversationRound);
-        
-        String shortId = session.getSessionId().substring(0, Math.min(12, session.getSessionId().length()));
-        String time = session.getLastActiveAt().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"));
-        
-        ui.println();
-        ui.println(ConsoleStyle.green("╔══════════════════════════════════════════════════════════════╗"));
-        ui.println(ConsoleStyle.green("║                    ✓ 会话已恢复                              ║"));
-        ui.println(ConsoleStyle.green("╠══════════════════════════════════════════════════════════════╣"));
-        ui.println(ConsoleStyle.green("║") + 
-            String.format("  会话: %-52s", shortId) + 
-            ConsoleStyle.green("║"));
-        ui.println(ConsoleStyle.green("║") + 
-            String.format("  时间: %-52s", time) + 
-            ConsoleStyle.green("║"));
-        ui.println(ConsoleStyle.green("║") + 
-            String.format("  消息: %-52d", session.getMessageCount()) + 
-            ConsoleStyle.green("║"));
-        
-        String toolCalls = session.getLastToolCalls();
-        if (toolCalls != null && !toolCalls.isEmpty()) {
-            ui.println(ConsoleStyle.green("║") + 
-                String.format("  工具: %-52s", toolCalls) + 
-                ConsoleStyle.green("║"));
-        }
-        
-        ui.println(ConsoleStyle.green("╚══════════════════════════════════════════════════════════════╝"));
-        ui.println();
-        ui.println(ConsoleStyle.gray("提示: 您可以继续之前的对话，或输入 'reset' 开始新会话"));
-        ui.println();
+        logger.info("恢复会话: {}, {} 轮对话", sessionId, conversationRound);
     }
 
-    private int countUserMessages(java.util.List<com.example.agent.llm.model.Message> messages) {
-        if (messages == null) {
-            return 0;
+    private int countUserMessages(List<Message> messages) {
+        int count = 0;
+        for (Message msg : messages) {
+            if (msg.isUser()) {
+                count++;
+            }
         }
-        return (int) messages.stream()
-            .filter(m -> "user".equals(m.getRole()))
-            .count();
+        return Math.max(1, count);
     }
 }
