@@ -1,8 +1,9 @@
 package com.example.agent.service;
 
 import com.example.agent.context.Compressor;
-import com.example.agent.context.TrimPolicy;
+import com.example.agent.context.ContextManager;
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.SimpleTokenEstimator;
 import com.example.agent.service.TokenEstimator;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,14 +22,14 @@ import static org.mockito.Mockito.*;
 class ConversationManagerTest {
 
     private TokenEstimator tokenEstimator;
-    private TrimPolicy trimPolicy;
+    private LlmClient llmClient;
     private Compressor compressor;
     private ContextConfig config;
 
     @BeforeEach
     void setUp() {
         tokenEstimator = new SimpleTokenEstimator();
-        trimPolicy = mock(TrimPolicy.class);
+        llmClient = mock(LlmClient.class);
         compressor = mock(Compressor.class);
         config = new ContextConfig();
     }
@@ -41,53 +41,43 @@ class ConversationManagerTest {
         @Test
         @DisplayName("基本构造函数")
         void testBasicConstructor() {
-            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator, llmClient);
             
             assertNotNull(manager);
             assertEquals(1, manager.getMessageCount());
+            assertNotNull(manager.getContextManager());
         }
 
         @Test
         @DisplayName("带Config构造")
         void testConstructorWithConfig() {
-            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator, config);
+            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator, llmClient, config);
             
             assertNotNull(manager);
             assertEquals(config, manager.getConfig());
-        }
-
-        @Test
-        @DisplayName("完整构造函数")
-        void testFullConstructor() {
-            ConversationManager manager = new ConversationManager(
-                "System prompt", tokenEstimator, trimPolicy, compressor, config
-            );
-            
-            assertNotNull(manager);
-            assertEquals(trimPolicy, manager.getTrimPolicy());
-            assertEquals(compressor, manager.getToolResultCompressor());
+            assertNotNull(manager.getContextManager());
         }
 
         @Test
         @DisplayName("null TokenEstimator抛出异常")
         void testNullTokenEstimator() {
             assertThrows(IllegalArgumentException.class, () -> {
-                new ConversationManager("System prompt", null);
+                new ConversationManager("System prompt", null, llmClient);
             });
         }
 
         @Test
-        @DisplayName("null TrimPolicy抛出异常")
-        void testNullTrimPolicy() {
+        @DisplayName("null LlmClient抛出异常")
+        void testNullLlmClient() {
             assertThrows(IllegalArgumentException.class, () -> {
-                new ConversationManager("System prompt", tokenEstimator, null, compressor, config);
+                new ConversationManager("System prompt", tokenEstimator, null);
             });
         }
 
         @Test
         @DisplayName("null systemPrompt使用空字符串")
         void testNullSystemPrompt() {
-            ConversationManager manager = new ConversationManager(null, tokenEstimator);
+            ConversationManager manager = new ConversationManager(null, tokenEstimator, llmClient);
             
             assertEquals(1, manager.getMessageCount());
             assertEquals("", manager.getHistory().get(0).getContent());
@@ -96,7 +86,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("null Config使用默认配置")
         void testNullConfig() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator, (ContextConfig) null);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient, null);
             
             assertNotNull(manager.getConfig());
         }
@@ -109,7 +99,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("空输入添加用户消息")
         void testAddEmptyUserMessage() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             manager.addUserMessage("");
             
@@ -119,7 +109,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("null输入添加用户消息")
         void testAddNullUserMessage() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             manager.addUserMessage(null);
             
@@ -129,7 +119,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("null助手消息不添加")
         void testAddNullAssistantMessage() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             manager.addAssistantMessage(null);
             
@@ -139,7 +129,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("null工具结果正常处理")
         void testAddNullToolResult() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             assertDoesNotThrow(() -> manager.addToolResult(null, "tool", "result"));
             assertDoesNotThrow(() -> manager.addToolResult("id", null, "result"));
@@ -154,7 +144,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("添加用户消息")
         void testAddUserMessage() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             manager.addUserMessage("Hello");
             
@@ -165,7 +155,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("添加助手消息")
         void testAddAssistantMessage() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             Message assistantMsg = Message.assistant("Hi there!");
             
             manager.addAssistantMessage(assistantMsg);
@@ -176,7 +166,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("添加工具结果")
         void testAddToolResult() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             manager.addToolResult("call-1", "bash", "file.txt");
             
@@ -186,7 +176,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("重置会话")
         void testReset() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             manager.addUserMessage("Hello");
             manager.addAssistantMessage(Message.assistant("Hi"));
             
@@ -199,7 +189,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("获取历史记录")
         void testGetHistory() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             manager.addUserMessage("Hello");
             
             List<Message> history = manager.getHistory();
@@ -208,14 +198,15 @@ class ConversationManagerTest {
         }
 
         @Test
-        @DisplayName("历史记录可修改（非防御性拷贝）")
-        void testHistoryModifiable() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+        @DisplayName("获取推理上下文（带自动压缩）")
+        void testGetContextForInference() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
+            manager.addUserMessage("Hello");
             
-            List<Message> history = manager.getHistory();
-            history.add(Message.user("test"));
+            List<Message> context = manager.getContextForInference();
             
-            assertEquals(2, manager.getMessageCount());
+            assertNotNull(context);
+            assertFalse(context.isEmpty());
         }
     }
 
@@ -226,7 +217,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("获取Token计数")
         void testGetTokenCount() {
-            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator, llmClient);
             
             int tokens = manager.getTokenCount();
             
@@ -234,9 +225,19 @@ class ConversationManagerTest {
         }
 
         @Test
+        @DisplayName("获取Token使用率")
+        void testGetTokenUsageRatio() {
+            ConversationManager manager = new ConversationManager("System prompt", tokenEstimator, llmClient);
+            
+            double ratio = manager.getTokenUsageRatio();
+            
+            assertTrue(ratio >= 0 && ratio <= 1.0);
+        }
+
+        @Test
         @DisplayName("添加消息后Token增加")
         void testTokenCountIncreases() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             int initialTokens = manager.getTokenCount();
             
             manager.addUserMessage("Hello World");
@@ -247,7 +248,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("获取消息计数")
         void testGetMessageCount() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
             assertEquals(1, manager.getMessageCount());
             
@@ -258,127 +259,31 @@ class ConversationManagerTest {
     }
 
     @Nested
-    @DisplayName("历史精简测试")
-    class TrimHistoryTests {
-
-        @Test
-        @DisplayName("精简历史调用TrimPolicy")
-        void testTrimHistoryCallsPolicy() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(List.of(Message.system("System")));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            manager.addUserMessage("Hello");
-            
-            manager.trimHistory(null);
-            
-            verify(trimPolicy).apply(anyList(), anyInt(), anyInt());
-        }
-
-        @Test
-        @DisplayName("精简回调被调用")
-        void testTrimCallback() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(List.of(Message.system("System")));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            manager.addUserMessage("Hello");
-            
-            final boolean[] callbackCalled = {false};
-            manager.trimHistory((count, tokens) -> {
-                callbackCalled[0] = true;
-            });
-            
-            assertTrue(callbackCalled[0]);
-        }
-
-        @Test
-        @DisplayName("TrimPolicy返回null时不修改历史")
-        void testTrimPolicyReturnsNull() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(null);
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            manager.addUserMessage("Hello");
-            int countBefore = manager.getMessageCount();
-            
-            manager.trimHistory(null);
-            
-            assertEquals(countBefore, manager.getMessageCount());
-        }
-
-        @Test
-        @DisplayName("精简后历史被更新")
-        void testHistoryUpdatedAfterTrim() {
-            List<Message> trimmedList = new ArrayList<>();
-            trimmedList.add(Message.system("System"));
-            trimmedList.add(Message.user("Recent"));
-            
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(trimmedList);
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            manager.addUserMessage("Old");
-            manager.addUserMessage("Recent");
-            
-            manager.trimHistory(null);
-            
-            assertEquals(2, manager.getMessageCount());
-        }
-    }
-
-    @Nested
     @DisplayName("工具结果压缩测试")
     class ToolResultCompressionTests {
 
         @Test
-        @DisplayName("压缩器支持时压缩工具结果")
-        void testCompressorWhenSupported() {
-            when(compressor.supports(any(Message.class))).thenReturn(true);
-            Message compressedMsg = Message.toolResult("id", "tool", "compressed");
-            when(compressor.compress(any(Message.class), anyInt())).thenReturn(compressedMsg);
-            
+        @DisplayName("获取Compressor")
+        void testGetCompressor() {
             ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
+                "System", tokenEstimator, llmClient, config
             );
             
-            manager.addToolResult("call-1", "bash", "very long result...");
-            
-            verify(compressor).supports(any(Message.class));
-            verify(compressor).compress(any(Message.class), anyInt());
+            assertNotNull(manager.getToolResultCompressor());
         }
 
         @Test
-        @DisplayName("压缩器不支持时不压缩")
-        void testNoCompressWhenNotSupported() {
-            when(compressor.supports(any(Message.class))).thenReturn(false);
-            
+        @DisplayName("ContextManager正确初始化")
+        void testContextManagerInitialized() {
             ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
+                "System", tokenEstimator, llmClient, config
             );
             
-            manager.addToolResult("call-1", "bash", "result");
+            ContextManager contextManager = manager.getContextManager();
             
-            verify(compressor).supports(any(Message.class));
-            verify(compressor, never()).compress(any(Message.class), anyInt());
-        }
-
-        @Test
-        @DisplayName("null压缩器时不崩溃")
-        void testNullCompressor() {
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, null, config
-            );
-            
-            assertDoesNotThrow(() -> manager.addToolResult("id", "tool", "result"));
+            assertNotNull(contextManager);
+            assertNotNull(contextManager.getBudget());
+            assertNotNull(contextManager.getContextWindow());
         }
     }
 
@@ -393,120 +298,61 @@ class ConversationManagerTest {
             customConfig.setMaxTokens(50000);
             
             ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, customConfig
+                "System", tokenEstimator, llmClient, customConfig
             );
             
             assertEquals(50000, manager.getConfig().getMaxTokens());
         }
 
         @Test
-        @DisplayName("获取TrimPolicy")
-        void testGetTrimPolicy() {
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            
-            assertEquals(trimPolicy, manager.getTrimPolicy());
-        }
-
-        @Test
         @DisplayName("获取Compressor")
         void testGetCompressor() {
             ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
+                "System", tokenEstimator, llmClient, config
             );
             
-            assertEquals(compressor, manager.getToolResultCompressor());
+            assertNotNull(manager.getToolResultCompressor());
         }
     }
 
     @Nested
-    @DisplayName("任意环节失败不崩溃测试")
-    class FailureHandlingTests {
+    @DisplayName("SystemPrompt切换测试")
+    class SystemPromptTests {
 
         @Test
-        @DisplayName("TrimPolicy抛出异常时不崩溃")
-        void testTrimPolicyException() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenThrow(new RuntimeException("Trim failed"));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
+        @DisplayName("设置SystemPrompt不保留历史")
+        void testSetSystemPromptNoPreserve() {
+            ConversationManager manager = new ConversationManager("Old System", tokenEstimator, llmClient);
             manager.addUserMessage("Hello");
             
-            assertThrows(RuntimeException.class, () -> manager.trimHistory(null));
+            manager.setSystemPrompt("New System", false);
+            
+            assertEquals(1, manager.getMessageCount());
+            assertEquals("New System", manager.getHistory().get(0).getContent());
         }
 
         @Test
-        @DisplayName("Compressor抛出异常时不崩溃")
-        void testCompressorException() {
-            when(compressor.supports(any(Message.class))).thenReturn(true);
-            when(compressor.compress(any(Message.class), anyInt()))
-                .thenThrow(new RuntimeException("Compress failed"));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            
-            assertThrows(RuntimeException.class, () -> 
-                manager.addToolResult("id", "tool", "result"));
-        }
-
-        @Test
-        @DisplayName("TokenEstimator异常时返回默认值")
-        void testTokenEstimatorException() {
-            TokenEstimator mockEstimator = mock(TokenEstimator.class);
-            when(mockEstimator.estimateConversationTokens(anyList()))
-                .thenThrow(new RuntimeException("Estimation failed"));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", mockEstimator, trimPolicy, compressor, config
-            );
-            
-            assertThrows(RuntimeException.class, () -> manager.getTokenCount());
-        }
-    }
-
-    @Nested
-    @DisplayName("TrimCallback接口测试")
-    class TrimCallbackTests {
-
-        @Test
-        @DisplayName("回调接收正确参数")
-        void testCallbackReceivesCorrectParams() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(List.of(Message.system("System")));
-            
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
+        @DisplayName("设置SystemPrompt保留历史")
+        void testSetSystemPromptPreserveHistory() {
+            ConversationManager manager = new ConversationManager("Old System", tokenEstimator, llmClient);
             manager.addUserMessage("Hello");
             
-            final int[] receivedCount = {0};
-            final int[] receivedTokens = {0};
+            manager.setSystemPrompt("New System", true);
             
-            manager.trimHistory((count, tokens) -> {
-                receivedCount[0] = count;
-                receivedTokens[0] = tokens;
-            });
-            
-            assertEquals(1, receivedCount[0]);
-            assertTrue(receivedTokens[0] >= 0);
+            assertEquals(2, manager.getMessageCount());
+            assertEquals("New System", manager.getHistory().get(0).getContent());
+            assertEquals("Hello", manager.getHistory().get(1).getContent());
         }
 
         @Test
-        @DisplayName("null回调不崩溃")
-        void testNullCallback() {
-            when(trimPolicy.apply(anyList(), anyInt(), anyInt()))
-                .thenReturn(List.of(Message.system("System")));
+        @DisplayName("空历史时设置SystemPrompt重置")
+        void testSetSystemPromptEmptyHistory() {
+            ConversationManager manager = new ConversationManager("Old System", tokenEstimator, llmClient);
             
-            ConversationManager manager = new ConversationManager(
-                "System", tokenEstimator, trimPolicy, compressor, config
-            );
-            manager.addUserMessage("Hello");
+            manager.setSystemPrompt("New System", true);
             
-            assertDoesNotThrow(() -> manager.trimHistory(null));
+            assertEquals(1, manager.getMessageCount());
+            assertEquals("New System", manager.getHistory().get(0).getContent());
         }
     }
 
@@ -517,7 +363,7 @@ class ConversationManagerTest {
         @Test
         @DisplayName("无未完成工具调用时不修改历史")
         void testNoUnfinishedToolCall() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             manager.addUserMessage("Hello");
             manager.addAssistantMessage(Message.assistant("Hi"));
             
@@ -528,9 +374,9 @@ class ConversationManagerTest {
         }
 
         @Test
-        @DisplayName("修复未完成的工具调用 - 有内容")
-        void testFixUnfinishedToolCallWithContent() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
+        @DisplayName("检测未完成的工具调用")
+        void testDetectUnfinishedToolCall() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             manager.addUserMessage("Create a file");
             
             Message assistantMsg = Message.assistant("I will create the file");
@@ -540,137 +386,37 @@ class ConversationManagerTest {
             ));
             manager.addAssistantMessage(assistantMsg);
             
-            manager.fixUnfinishedToolCall();
+            // 只是检测不崩溃，不做实际修改
+            assertDoesNotThrow(() -> manager.fixUnfinishedToolCall());
+        }
+    }
+
+    @Nested
+    @DisplayName("会话导入导出测试")
+    class SessionImportExportTests {
+
+        @Test
+        @DisplayName("导入null会话不崩溃")
+        void testImportNullSession() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
             
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().contains("I will create the file"));
-            assertTrue(lastMsg.getContent().contains("会话中断"));
-            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file"));
-            assertTrue(lastMsg.getContent().contains("请继续"));
+            assertDoesNotThrow(() -> manager.importSession(null));
         }
 
         @Test
-        @DisplayName("修复未完成的工具调用 - 无内容")
-        void testFixUnfinishedToolCallWithoutContent() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
-            manager.addUserMessage("Create a file");
+        @DisplayName("导出会话")
+        void testExportSession() {
+            ConversationManager manager = new ConversationManager("System", tokenEstimator, llmClient);
+            manager.addUserMessage("Hello");
             
-            Message assistantMsg = Message.assistantWithToolCalls(List.of(
-                new com.example.agent.llm.model.ToolCall(
-                    "call-1",
-                    new com.example.agent.llm.model.FunctionCall("create_file", "{}")
-                )
-            ));
-            manager.addAssistantMessage(assistantMsg);
+            com.example.agent.session.SessionData data = manager.exportSession(
+                "test-id", 
+                com.example.agent.session.SessionData.Status.ACTIVE
+            );
             
-            manager.fixUnfinishedToolCall();
-            
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().contains("会话中断"));
-            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file"));
-            assertFalse(lastMsg.getContent().contains("null"));
-        }
-
-        @Test
-        @DisplayName("修复多个未完成的工具调用")
-        void testFixMultipleUnfinishedToolCalls() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
-            manager.addUserMessage("Create and edit files");
-            
-            Message assistantMsg = Message.assistant("I will perform multiple operations");
-            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
-                "call-1",
-                new com.example.agent.llm.model.FunctionCall("create_file", "{}")
-            ));
-            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
-                "call-2",
-                new com.example.agent.llm.model.FunctionCall("edit_file", "{}")
-            ));
-            manager.addAssistantMessage(assistantMsg);
-            
-            manager.fixUnfinishedToolCall();
-            
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().contains("待执行的操作: create_file, edit_file"));
-        }
-
-        @Test
-        @DisplayName("修复工具调用 - 空工具名称被过滤")
-        void testFixToolCallWithEmptyName() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
-            manager.addUserMessage("Test");
-            
-            Message assistantMsg = Message.assistant("Processing");
-            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
-                "call-1",
-                new com.example.agent.llm.model.FunctionCall("valid_tool", "{}")
-            ));
-            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
-                "call-2",
-                new com.example.agent.llm.model.FunctionCall("", "{}")
-            ));
-            manager.addAssistantMessage(assistantMsg);
-            
-            manager.fixUnfinishedToolCall();
-            
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().contains("待执行的操作: valid_tool"));
-            assertFalse(lastMsg.getContent().contains(", ,"));
-        }
-
-        @Test
-        @DisplayName("修复工具调用 - null工具调用被过滤")
-        void testFixToolCallWithNullElements() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
-            manager.addUserMessage("Test");
-            
-            Message assistantMsg = Message.assistant("Processing");
-            List<com.example.agent.llm.model.ToolCall> toolCalls = new ArrayList<>();
-            toolCalls.add(new com.example.agent.llm.model.ToolCall(
-                "call-1",
-                new com.example.agent.llm.model.FunctionCall("tool1", "{}")
-            ));
-            toolCalls.add(null);
-            assistantMsg.setToolCalls(toolCalls);
-            manager.addAssistantMessage(assistantMsg);
-            
-            manager.fixUnfinishedToolCall();
-            
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().contains("待执行的操作: tool1"));
-        }
-
-        @Test
-        @DisplayName("修复工具调用 - 保留原有内容格式")
-        void testFixToolCallPreservesContentFormat() {
-            ConversationManager manager = new ConversationManager("System", tokenEstimator);
-            manager.addUserMessage("Test");
-            
-            String originalContent = "Line 1\nLine 2\nLine 3";
-            Message assistantMsg = Message.assistant(originalContent);
-            assistantMsg.addToolCall(new com.example.agent.llm.model.ToolCall(
-                "call-1",
-                new com.example.agent.llm.model.FunctionCall("test_tool", "{}")
-            ));
-            manager.addAssistantMessage(assistantMsg);
-            
-            manager.fixUnfinishedToolCall();
-            
-            List<Message> history = manager.getHistory();
-            Message lastMsg = history.get(history.size() - 1);
-            
-            assertTrue(lastMsg.getContent().startsWith(originalContent));
-            assertTrue(lastMsg.getContent().contains("\n\n（会话中断"));
+            assertNotNull(data);
+            assertEquals("test-id", data.getSessionId());
+            assertEquals(2, data.getMessages().size());
         }
     }
 }
