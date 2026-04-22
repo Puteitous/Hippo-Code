@@ -1,7 +1,9 @@
 package com.example.agent.console;
 
 import com.example.agent.config.Config;
+import com.example.agent.config.UserResourceManager;
 import com.example.agent.core.AgentContext;
+import com.example.agent.domain.rule.RuleManager;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.mcp.client.McpClient;
@@ -15,10 +17,15 @@ import com.example.agent.session.SessionStorage;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.UserInterruptException;
 
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Scanner;
 import java.util.function.Consumer;
+
+import com.example.agent.resource.RuleManager;
+import com.example.agent.resource.UserResourceManager;
 
 public class CommandDispatcher {
 
@@ -137,6 +144,16 @@ public class CommandDispatcher {
             conversationManager.reset();
             ui.println(ConsoleStyle.success("会话已重置"));
             ui.println();
+            return CommandResult.continueExecution();
+        }
+
+        if ("/rules".equalsIgnoreCase(line)) {
+            handleShowRules();
+            return CommandResult.continueExecution();
+        }
+
+        if ("/reload".equalsIgnoreCase(line)) {
+            handleReloadRules();
             return CommandResult.continueExecution();
         }
 
@@ -683,6 +700,47 @@ public class CommandDispatcher {
             mcpServiceManager.connectServer(serverConfig);
             ui.println(ConsoleStyle.green("重新连接命令已发送"));
         }
+    }
+
+    private void handleShowRules() {
+        ui.println(ConsoleStyle.cyan("\n📚 已加载的规则和记忆文件:"));
+        ui.println(ConsoleStyle.cyan("═══════════════════════════════════════"));
+        
+        List<Path> ruleFiles = UserResourceManager.findAllRuleFiles();
+        List<Path> memoryFiles = UserResourceManager.findAllMemoryFiles();
+        
+        ui.println(ConsoleStyle.cyan("\n📋 规则文件 (" + ruleFiles.size() + "):"));
+        for (Path file : ruleFiles) {
+            ui.println("   - " + file.getFileName());
+        }
+        
+        ui.println(ConsoleStyle.cyan("\n🧠 记忆文件 (" + memoryFiles.size() + "):"));
+        for (Path file : memoryFiles) {
+            ui.println("   - " + file.getFileName());
+        }
+        
+        RuleManager ruleManager = context.getRuleManager();
+        int totalTokens = ruleManager.getTotalTokens();
+        ui.println(ConsoleStyle.cyan("\n💡 总计 Token: " + totalTokens));
+        ui.println(ConsoleStyle.gray("\n提示: 编辑文件后执行 /reload 热重载"));
+        ui.println(ConsoleStyle.cyan("═══════════════════════════════════════\n"));
+    }
+    
+    private void handleReloadRules() {
+        ui.println(ConsoleStyle.cyan("\n🔄 正在重新加载规则和记忆..."));
+        
+        RuleManager ruleManager = context.getRuleManager();
+        ruleManager.reload();
+        
+        int ruleCount = UserResourceManager.findAllRuleFiles().size();
+        int memoryCount = UserResourceManager.findAllMemoryFiles().size();
+        int totalTokens = ruleManager.getTotalTokens();
+        
+        ui.println(ConsoleStyle.success("✅ 重载完成!"));
+        ui.println("   - 规则文件: " + ruleCount + " 个");
+        ui.println("   - 记忆文件: " + memoryCount + " 个");
+        ui.println("   - 总计 Token: " + totalTokens);
+        ui.println();
     }
 
     public boolean validateConfig() {
