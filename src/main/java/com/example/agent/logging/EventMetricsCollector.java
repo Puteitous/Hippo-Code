@@ -1,7 +1,6 @@
 package com.example.agent.logging;
 
 import com.example.agent.core.event.EventBus;
-import com.example.agent.core.event.IntentRecognizedEvent;
 import com.example.agent.core.event.LlmRequestEvent;
 import com.example.agent.core.event.MessageEvent;
 import com.example.agent.core.event.ToolExecutedEvent;
@@ -39,7 +38,6 @@ public class EventMetricsCollector {
         EventBus.subscribe(ToolExecutedEvent.class, this::onToolExecuted);
         EventBus.subscribe(LlmRequestEvent.class, this::onLlmRequest);
         EventBus.subscribe(MessageEvent.class, this::onMessage);
-        EventBus.subscribe(IntentRecognizedEvent.class, this::onIntentRecognized);
     }
 
     private void onToolExecuted(ToolExecutedEvent event) {
@@ -62,10 +60,6 @@ public class EventMetricsCollector {
     }
 
     private void onMessage(MessageEvent event) {
-    }
-
-    private void onIntentRecognized(IntentRecognizedEvent event) {
-        logger.debug("识别意图: {}, 置信度: {:.2f}", event.intentType(), event.confidence());
     }
 
     public String getSummary() {

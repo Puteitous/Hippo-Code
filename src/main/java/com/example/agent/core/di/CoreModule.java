@@ -2,7 +2,6 @@ package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.di.ServiceLocator;
-import com.example.agent.core.ThinkingEngine;
 import com.example.agent.core.blocker.EditBeforeReadBlocker;
 import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
@@ -90,10 +89,6 @@ public final class CoreModule {
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
         logger.info("✅ [Level 3] 工具层: ConcurrentToolExecutor");
-
-        ThinkingEngine thinkingEngine = new ThinkingEngine(llmClient, toolRegistry, concurrentToolExecutor, objectMapper);
-        ServiceLocator.registerSingleton(ThinkingEngine.class, thinkingEngine);
-        logger.info("✅ [Level 4] 引擎层: ThinkingEngine");
 
         healthRegistry.register(new LlmHealthIndicator(llmClient, costMetrics));
         logger.info("✅ [收尾] LLM 健康检查器已注册");
