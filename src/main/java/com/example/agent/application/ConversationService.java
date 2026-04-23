@@ -2,6 +2,7 @@ package com.example.agent.application;
 
 import com.example.agent.context.BudgetWarningInjector;
 import com.example.agent.context.Compressor;
+import com.example.agent.context.ContextWindow;
 import com.example.agent.context.SessionCompactionState;
 import com.example.agent.context.compressor.AutoCompactTrigger;
 import com.example.agent.context.compressor.TruncateCompressor;
@@ -23,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -84,11 +84,14 @@ public class ConversationService {
     }
 
     public Conversation create(String systemPrompt) {
-        return create(systemPrompt, defaultConfig.getMaxTokens());
+        return create(systemPrompt, defaultConfig.getMaxTokens(), String.valueOf(System.currentTimeMillis()));
     }
 
     public Conversation create(String systemPrompt, int maxTokens) {
-        String sessionId = UUID.randomUUID().toString();
+        return create(systemPrompt, maxTokens, String.valueOf(System.currentTimeMillis()));
+    }
+
+    public Conversation create(String systemPrompt, int maxTokens, String sessionId) {
         Conversation conversation = new Conversation(maxTokens, tokenEstimator, sessionId);
         conversation.setSystemPrompt(systemPrompt != null ? systemPrompt : "");
 
@@ -103,16 +106,21 @@ public class ConversationService {
         return conversation;
     }
 
-    private void initializeComponents(Conversation conversation) {
+    public void ensureSessionComponents(Conversation conversation) {
+        if (!componentRegistry.containsKey(conversation.getSessionId())) {
+            createSessionComponents(conversation, new SessionCompactionState());
+        }
+    }
+
+    private void createSessionComponents(Conversation conversation, SessionCompactionState compactionState) {
         String sessionId = conversation.getSessionId();
-        
+        ContextWindow contextWindow = conversation.getContextWindow();
         SessionTranscript transcript = new SessionTranscript(sessionId);
-        BudgetWarningInjector warningInjector = new BudgetWarningInjector(conversation.getContextWindow());
+        BudgetWarningInjector warningInjector = new BudgetWarningInjector(contextWindow);
         warningInjector.register();
 
-        SessionCompactionState compactionState = new SessionCompactionState();
         AutoCompactTrigger autoCompactTrigger = new AutoCompactTrigger(
-            conversation.getContextWindow(),
+            contextWindow,
             tokenEstimator,
             llmClient,
             sessionId,
@@ -140,6 +148,10 @@ public class ConversationService {
         ));
         
         sessionLastAccessTime.put(sessionId, System.currentTimeMillis());
+    }
+
+    private void initializeComponents(Conversation conversation) {
+        createSessionComponents(conversation, new SessionCompactionState());
     }
 
     private ConversationComponents getComponents(Conversation conversation) {

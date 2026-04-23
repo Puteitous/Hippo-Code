@@ -68,7 +68,7 @@ public class AgentContext {
 
     public AgentContext() throws IOException {
         this.config = Config.getInstance();
-        this.sessionId = java.util.UUID.randomUUID().toString();
+        this.sessionId = String.valueOf(System.currentTimeMillis());
         this.terminal = TerminalBuilder.builder()
                 .system(true)
                 .build();

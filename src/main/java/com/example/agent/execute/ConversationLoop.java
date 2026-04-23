@@ -73,10 +73,11 @@ public class ConversationLoop {
     }
 
     public void startNewConversation() {
-        String sessionId = String.valueOf(System.currentTimeMillis());
-        currentSessionId = sessionId;
         conversationRound = 1;
         conversationService.reset(conversation);
+        conversationService.ensureSessionComponents(conversation);
+        String sessionId = conversation.getSessionId();
+        currentSessionId = sessionId;
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(

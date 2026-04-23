@@ -7,7 +7,6 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class Conversation {
@@ -19,7 +18,7 @@ public class Conversation {
     private String systemPrompt;
 
     public Conversation(int maxTokens, TokenEstimator tokenEstimator) {
-        this(maxTokens, tokenEstimator, UUID.randomUUID().toString());
+        this(maxTokens, tokenEstimator, String.valueOf(System.currentTimeMillis()));
     }
 
     public Conversation(int maxTokens, TokenEstimator tokenEstimator, String sessionId) {

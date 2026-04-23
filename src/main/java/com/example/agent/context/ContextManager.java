@@ -5,14 +5,12 @@ import com.example.agent.core.AgentContext;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
-import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryStore;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionTranscript;
 
 import java.util.List;
-import java.util.UUID;
 
 public class ContextManager {
 
@@ -21,14 +19,13 @@ public class ContextManager {
     private final AutoCompactTrigger autoCompactTrigger;
     private final BlockingGuard blockingGuard;
     private final MemoryRetriever memoryRetriever;
-    private final BackgroundExtractor backgroundExtractor;
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
     private final String sessionId;
     private final SessionTranscript transcript;
 
     public ContextManager(int maxTokens, TokenEstimator tokenEstimator, LlmClient llmClient) {
-        this(maxTokens, tokenEstimator, llmClient, UUID.randomUUID().toString());
+        this(maxTokens, tokenEstimator, llmClient, String.valueOf(System.currentTimeMillis()));
     }
 
     public ContextManager(int maxTokens, TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
@@ -55,13 +52,6 @@ public class ContextManager {
 
         MemoryStore memoryStore = new MemoryStore(llmClient);
         this.memoryRetriever = new MemoryRetriever(memoryStore);
-
-        this.backgroundExtractor = new BackgroundExtractor(
-            sessionId, 
-            tokenEstimator, 
-            llmClient, 
-            autoCompactTrigger.getState()
-        );
     }
 
     public void addMessage(Message message) {
@@ -69,8 +59,6 @@ public class ContextManager {
             throw new IllegalStateException(blockingGuard.getStatusMessage());
         }
         contextWindow.addMessage(message);
-
-        backgroundExtractor.onMessageAdded(message, contextWindow.getRawMessages());
 
         if (shouldMarkForMemory(message)) {
             memoryRetriever.markForMemory(message.getContent());
@@ -86,9 +74,7 @@ public class ContextManager {
         }
         contextWindow.addMessages(messages);
         
-        List<Message> rawMessages = contextWindow.getRawMessages();
         for (Message msg : messages) {
-            backgroundExtractor.onMessageAdded(msg, rawMessages);
             if (shouldMarkForMemory(msg)) {
                 memoryRetriever.markForMemory(msg.getContent());
             }
@@ -139,10 +125,6 @@ public class ContextManager {
         return memoryRetriever;
     }
 
-    public BackgroundExtractor getBackgroundExtractor() {
-        return backgroundExtractor;
-    }
-
     public String getCompactionStats() {
         return autoCompactTrigger.getMetrics().getSummary();
     }
@@ -176,15 +158,4 @@ public class ContextManager {
                (message.isAssistant() && content.contains("已完成") && content.length() > 200);
     }
 
-    public static void initialize(AgentContext context) {
-        int maxTokens = context.getConfig().getMaxTokens();
-        String sessionId = context.getSessionId();
-        ContextManager instance = new ContextManager(
-            maxTokens,
-            context.getTokenEstimator(),
-            context.getLlmClient(),
-            sessionId
-        );
-        ServiceLocator.registerSingleton(ContextManager.class, instance);
-    }
 }
