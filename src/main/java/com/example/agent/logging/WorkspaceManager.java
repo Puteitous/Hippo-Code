@@ -118,11 +118,15 @@ public class WorkspaceManager {
     }
     
     public static Path getSessionDir(String projectKey, String sessionId) {
-        return getProjectDir(projectKey).resolve("resources").resolve(sessionId);
+        return getProjectDir(projectKey).resolve("sessions").resolve(sessionId);
     }
     
     public static Path getSessionMessagesFile(String projectKey, String sessionId) {
-        return getProjectDir(projectKey).resolve("sessions").resolve(sessionId + ".jsonl");
+        return getSessionDir(projectKey, sessionId).resolve("conversation.jsonl");
+    }
+    
+    public static Path getSessionMetadataFile(String projectKey, String sessionId) {
+        return getSessionDir(projectKey, sessionId).resolve("session.json");
     }
     
     public static Path getSessionLogFile(String projectKey, String sessionId) {
@@ -139,6 +143,10 @@ public class WorkspaceManager {
     
     public static Path getSubagentSessionPath(String projectKey, String sessionId, String agentId) {
         return getSessionDir(projectKey, sessionId).resolve("subagents").resolve("agent-" + agentId + ".jsonl");
+    }
+
+    public static Path getSessionMemoryPath(String projectKey, String sessionId) {
+        return getSessionDir(projectKey, sessionId).resolve("memory").resolve("session-memory.md");
     }
     
     public static Path getProjectCacheDir(String projectKey) {

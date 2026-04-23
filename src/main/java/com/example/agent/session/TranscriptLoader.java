@@ -60,9 +60,7 @@ public class TranscriptLoader {
             conversation.addMessages(messages);
         }
 
-        @Deprecated
-        public void applyToConversationManager(com.example.agent.service.ConversationManager manager) {
-        }
+
 
         public List<Message> getMessages() {
             return messages;
@@ -307,10 +305,7 @@ public class TranscriptLoader {
         return true;
     }
 
-    @Deprecated
-    public static boolean loadToConversationManager(String sessionId, com.example.agent.service.ConversationManager manager) {
-        return false;
-    }
+
 
     public static int repairAndCompact(Path transcriptFile) throws IOException {
         if (!Files.exists(transcriptFile)) {

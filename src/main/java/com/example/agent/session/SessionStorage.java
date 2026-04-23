@@ -117,6 +117,7 @@ public class SessionStorage {
             SessionData indexOnly = createIndexSession(session);
             
             Path sessionFile = getSessionFilePath(sessionId);
+            Files.createDirectories(sessionFile.getParent());
             Path tempFile = sessionFile.resolveSibling(sessionFile.getFileName() + ".tmp");
             
             try {
@@ -187,8 +188,11 @@ public class SessionStorage {
 
         Path sessionFile = getSessionFilePath(safeSessionId);
         
-        if (!Files.exists(sessionFile) && safeSessionId.matches("^\\d+$")) {
-            sessionFile = getSessionFilePath("session_" + safeSessionId);
+        if (!Files.exists(sessionFile)) {
+            Path legacyFile = storageDirectory.resolve(SESSION_FILE_PREFIX + safeSessionId + SESSION_FILE_SUFFIX);
+            if (Files.exists(legacyFile)) {
+                sessionFile = legacyFile;
+            }
         }
         
         if (!Files.exists(sessionFile)) {
@@ -256,15 +260,15 @@ public class SessionStorage {
         }
 
         try (Stream<Path> files = Files.list(storageDirectory)) {
-            List<SessionData> legacySessions = files
-                .filter(this::isSessionFile)
-                .map(this::loadSessionFromFile)
+            List<SessionData> allSessions = files
+                .filter(path -> isSessionDirectory(path) || isLegacySessionFile(path))
+                .map(this::loadSessionFromPath)
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .filter(s -> !seenIds.contains(s.getSessionId()))
                 .collect(Collectors.toList());
             
-            sessions.addAll(legacySessions);
+            sessions.addAll(allSessions);
         } catch (IOException e) {
             logger.error("列出会话失败", e);
         }
@@ -290,14 +294,31 @@ public class SessionStorage {
         }
 
         String safeSessionId = sanitizeSessionId(sessionId);
-        Path sessionFile = getSessionFilePath(safeSessionId);
-        
-        if (!Files.exists(sessionFile) && safeSessionId.matches("^\\d+$")) {
-            sessionFile = getSessionFilePath("session_" + safeSessionId);
-        }
+        Path sessionDir = storageDirectory.resolve(safeSessionId);
+        Path legacySessionFile = storageDirectory.resolve(SESSION_FILE_PREFIX + safeSessionId + SESSION_FILE_SUFFIX);
         
         try {
-            boolean deleted = Files.deleteIfExists(sessionFile);
+            boolean deleted = false;
+            
+            if (Files.isDirectory(sessionDir)) {
+                try (Stream<Path> walk = Files.walk(sessionDir)) {
+                    walk.sorted((a, b) -> b.compareTo(a))
+                        .forEach(path -> {
+                            try {
+                                Files.delete(path);
+                            } catch (IOException e) {
+                                logger.warn("删除会话文件失败: {}", path);
+                            }
+                        });
+                }
+                deleted = true;
+            }
+            
+            if (Files.exists(legacySessionFile)) {
+                Files.delete(legacySessionFile);
+                deleted = true;
+            }
+            
             if (deleted) {
                 logger.info("会话已删除: {}", sessionId);
             }
@@ -426,16 +447,20 @@ public class SessionStorage {
                 logger.warn("生成唯一会话ID尝试次数过多，添加纳秒后缀");
                 break;
             }
-        } while (Files.exists(getSessionFilePath(sessionId)));
+        } while (Files.exists(storageDirectory.resolve(sessionId)));
         
         return sessionId;
     }
 
     private Path getSessionFilePath(String sessionId) {
-        return storageDirectory.resolve(SESSION_FILE_PREFIX + sessionId + SESSION_FILE_SUFFIX);
+        return storageDirectory.resolve(sessionId).resolve("session.json");
     }
 
-    private boolean isSessionFile(Path path) {
+    private boolean isSessionDirectory(Path path) {
+        return Files.isDirectory(path) && Files.exists(path.resolve("session.json"));
+    }
+    
+    private boolean isLegacySessionFile(Path path) {
         String fileName = path.getFileName().toString();
         return fileName.startsWith(SESSION_FILE_PREFIX) && fileName.endsWith(SESSION_FILE_SUFFIX);
     }
@@ -449,11 +474,17 @@ public class SessionStorage {
         return true;
     }
 
-    private Optional<SessionData> loadSessionFromFile(Path file) {
+    private Optional<SessionData> loadSessionFromPath(Path path) {
         try {
-            return Optional.of(objectMapper.readValue(file.toFile(), SessionData.class));
+            Path sessionFile;
+            if (Files.isDirectory(path)) {
+                sessionFile = path.resolve("session.json");
+            } else {
+                sessionFile = path;
+            }
+            return Optional.of(objectMapper.readValue(sessionFile.toFile(), SessionData.class));
         } catch (IOException e) {
-            logger.warn("加载会话文件失败: {}", file, e);
+            logger.warn("加载会话失败: {}", path, e);
             return Optional.empty();
         }
     }

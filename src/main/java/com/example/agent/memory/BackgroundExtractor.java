@@ -4,7 +4,10 @@ import com.example.agent.context.SessionCompactionState;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,6 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackgroundExtractor {
+
+    private static final Logger logger = LoggerFactory.getLogger(BackgroundExtractor.class);
 
     private static final int INITIAL_TOKEN_THRESHOLD = 10000;
     private static final int TOKEN_GROWTH_THRESHOLD = 5000;
@@ -28,7 +33,7 @@ public class BackgroundExtractor {
     private String lastExtractedMessageId;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
 
-    private static final String EXTRACTION_PROMPT = """
+    private static final String SYSTEM_PROMPT = """
         ## 会话记忆提取任务
 
         请仔细阅读以下对话历史，按以下 3 个维度提取结构化记忆：
@@ -53,15 +58,8 @@ public class BackgroundExtractor {
         要求：
         - 只保留真正重要的，不要记录临时调试信息
         - 使用 Markdown 列表，每条简洁
-        - 相同/相似的内容合并
+        - 相同/相似的内容合并去重
         - 输出只包含 3 个章节，不要其他解释
-
-        对话历史：
-        ```
-        %s
-        ```
-
-        结构化记忆：
         """;
 
     public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient) {
@@ -111,7 +109,11 @@ public class BackgroundExtractor {
             return false;
         }
 
-        boolean hasMetTokenGrowth = currentTokens - lastExtractedTokenCount >= TOKEN_GROWTH_THRESHOLD;
+        boolean isFirstExtraction = lastExtractedTokenCount == 0;
+        boolean hasMetTokenGrowth = isFirstExtraction 
+            ? true 
+            : currentTokens - lastExtractedTokenCount >= TOKEN_GROWTH_THRESHOLD;
+            
         boolean hasMetToolCallThreshold = toolCallCountSinceLastExtraction.get() >= TOOL_CALL_THRESHOLD;
         boolean atNaturalPause = !hasToolCallsInLastAssistantTurn(fullConversation);
 
@@ -120,12 +122,14 @@ public class BackgroundExtractor {
     }
 
     private void performExtraction(List<Message> fullConversation) {
-        String conversationText = formatConversation(fullConversation);
+        int currentTokens = tokenEstimator.estimate(fullConversation);
+        logger.info("开始提取会话记忆，当前会话 Token: {}, 工具调用: {}, 上次提取 MessageId: {}", 
+            currentTokens, toolCallCountSinceLastExtraction.get(), lastExtractedMessageId);
 
-        String prompt = String.format(EXTRACTION_PROMPT, truncate(conversationText, 15000));
+        List<Message> extractionMessages = buildExtractionContext(fullConversation);
 
         try {
-            String extractedMemory = llmClient.generateSync(prompt);
+            String extractedMemory = llmClient.chat(extractionMessages).getMessage().getContent();
 
             String existingMemory = memoryManager.read();
             String finalMemory = mergeMemories(existingMemory, extractedMemory);
@@ -136,20 +140,50 @@ public class BackgroundExtractor {
             lastExtractedTokenCount = tokenEstimator.estimate(fullConversation);
 
             updateLastSummarizedMessageIdIfSafe(fullConversation);
+            
+            logger.info("✅ 会话记忆提取成功，写入: {}", memoryManager.getMemoryFilePath());
 
         } catch (Exception e) {
+            logger.error("❌ 会话记忆提取失败", e);
         }
     }
 
-    private String formatConversation(List<Message> messages) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = Math.max(0, messages.size() - 100); i < messages.size(); i++) {
-            Message msg = messages.get(i);
-            String role = msg.getRole();
-            String content = truncate(msg.getContent(), 500);
-            sb.append("[").append(role).append("] ").append(content).append("\n\n");
+    private List<Message> buildExtractionContext(List<Message> fullConversation) {
+        List<Message> result = new ArrayList<>();
+
+        result.add(Message.system(SYSTEM_PROMPT));
+
+        String existing = memoryManager.read();
+        if (existing != null && !existing.isBlank()) {
+            result.add(Message.user("这是当前已有的记忆内容，请基于此进行增量更新：\n\n" + existing));
         }
-        return sb.toString();
+
+        int startIndex = findBoundaryIndex(fullConversation);
+        logger.debug("记忆提取对话范围: [{} - {}] 条消息", startIndex, fullConversation.size());
+
+        for (int i = startIndex; i < fullConversation.size(); i++) {
+            Message msg = fullConversation.get(i);
+            if (!msg.isSystem()) {
+                result.add(msg);
+            }
+        }
+
+        return result;
+    }
+
+    private int findBoundaryIndex(List<Message> messages) {
+        if (lastExtractedMessageId == null) {
+            return Math.max(0, messages.size() - 100);
+        }
+
+        for (int i = 0; i < messages.size(); i++) {
+            Message msg = messages.get(i);
+            if (lastExtractedMessageId.equals(msg.getId())) {
+                return Math.max(0, i - 5);
+            }
+        }
+
+        return Math.max(0, messages.size() - 100);
     }
 
     private String mergeMemories(String existing, String extracted) {
@@ -157,7 +191,34 @@ public class BackgroundExtractor {
             return "# Session Memory\n\n" + extracted + "\n\n---\n> Auto-extracted at " + System.currentTimeMillis();
         }
 
-        return existing + "\n\n---\n\n" + extracted;
+        String cleanExtracted = removeSessionMemoryHeader(extracted);
+
+        int splitPos = existing.lastIndexOf("---\n> Auto-extracted at ");
+        if (splitPos > 0) {
+            String baseContent = existing.substring(0, splitPos).trim();
+            return baseContent + "\n\n---\n\n" + cleanExtracted + "\n\n---\n> Auto-extracted at " + System.currentTimeMillis();
+        }
+
+        return existing + "\n\n---\n\n" + cleanExtracted + "\n\n---\n> Auto-extracted at " + System.currentTimeMillis();
+    }
+
+    private String removeSessionMemoryHeader(String extracted) {
+        String result = extracted;
+        if (result.startsWith("# ")) {
+            int firstNewline = result.indexOf("\n");
+            if (firstNewline > 0) {
+                result = result.substring(firstNewline).trim();
+            }
+        }
+        while (result.startsWith("---\n> Auto-extracted")) {
+            int endOfLine = result.indexOf("\n", 20);
+            if (endOfLine > 0) {
+                result = result.substring(endOfLine).trim();
+            } else {
+                break;
+            }
+        }
+        return result;
     }
 
     private void updateLastSummarizedMessageIdIfSafe(List<Message> messages) {
@@ -187,49 +248,11 @@ public class BackgroundExtractor {
         return false;
     }
 
-    private String truncate(String content, int maxLength) {
-        if (content == null) return "";
-        if (content.length() <= maxLength) return content;
-        return content.substring(0, maxLength) + "\n... [truncated]";
-    }
-
     public boolean hasMemory() {
-        return memoryManager.exists();
-    }
-
-    public String getMemory() {
-        return memoryManager.read();
-    }
-
-    public int getToolCallCount() {
-        return toolCallCountSinceLastExtraction.get();
-    }
-
-    public boolean isExtractionInProgress() {
-        return extractionInProgress.get();
-    }
-
-    public String getLastExtractedMessageId() {
-        return lastExtractedMessageId;
+        return memoryManager.hasActualContent();
     }
 
     public SessionMemoryManager getMemoryManager() {
         return memoryManager;
-    }
-
-    public boolean waitForExtractionCompletion(long timeoutMillis) {
-        long start = System.currentTimeMillis();
-        while (extractionInProgress.get()) {
-            if (System.currentTimeMillis() - start > timeoutMillis) {
-                return false;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
-        return true;
     }
 }

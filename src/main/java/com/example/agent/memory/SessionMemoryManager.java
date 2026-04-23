@@ -1,24 +1,23 @@
 package com.example.agent.memory;
 
+import com.example.agent.logging.WorkspaceManager;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 public class SessionMemoryManager {
 
-    private static final String SESSION_DIR = ".hippo/sessions";
     private static final String MEMORY_FILE = "session-memory.md";
 
     private final String sessionId;
-    private final Path sessionPath;
     private final Path memoryFilePath;
 
     public SessionMemoryManager(String sessionId) {
         this.sessionId = sessionId;
-        this.sessionPath = Paths.get(System.getProperty("user.dir"), SESSION_DIR, sessionId);
-        this.memoryFilePath = sessionPath.resolve(MEMORY_FILE);
+        String projectKey = WorkspaceManager.getCurrentProjectKey();
+        this.memoryFilePath = WorkspaceManager.getSessionMemoryPath(projectKey, sessionId);
         ensureDirectory();
     }
 
@@ -73,7 +72,7 @@ public class SessionMemoryManager {
 
     private void ensureDirectory() {
         try {
-            Files.createDirectories(sessionPath);
+            Files.createDirectories(memoryFilePath.getParent());
         } catch (IOException e) {
             throw new RuntimeException("Failed to create session directory", e);
         }
