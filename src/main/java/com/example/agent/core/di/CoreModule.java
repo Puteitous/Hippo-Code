@@ -116,6 +116,7 @@ public final class CoreModule {
         registry.register(new BashTool());
         registry.register(new TodoWriteTool(ServiceLocator.get(TodoManager.class)));
         registry.register(new com.example.agent.tools.ForkAgentTool());
+        registry.register(new ForkAgentsTool());
         registry.register(new ListSubAgentsTool());
 
         FileOperationStateMachine stateMachine = new FileOperationStateMachine();

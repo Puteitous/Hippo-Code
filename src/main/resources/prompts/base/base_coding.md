@@ -13,7 +13,8 @@
 - ask_user: 向用户提问并等待回答（用于确认或获取信息）
 - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
 - todo_write: 管理任务清单，跟踪执行进度
-- fork_agent: 创建子 Agent 在后台并行执行独立任务（如代码搜索、文件分析）
+- fork_agent: 创建单个子 Agent 执行任务（支持同步/异步双模式）
+- fork_agents: 批量创建多个子 Agent 并行执行独立任务
 - list_subagents: 查询所有子 Agent 任务的状态和执行结果
 
 - lsp_goto_definition: 跳转到符号定义位置
@@ -130,6 +131,46 @@
 1. 创建 3 个异步 Sub-Agent 并行搜索
 2. 继续其他工作或调用 list_subagents 轮询
 3. 任务完成后汇总所有结果
+
+=== 🚀 超级并行：fork_agents 批量创建
+
+需要同时处理 N 个独立模块/文件时，直接批量创建：
+
+**模式 1：后台异步模式（推荐）**
+```json
+{
+  "name": "fork_agents",
+  "parameters": {
+    "tasks": [
+      { "task": "分析 controller 模块的所有类，找出所有 API 端点" },
+      { "task": "分析 service 模块的所有类，找出业务逻辑" },
+      { "task": "分析 repository 模块的所有类，找出数据访问层" }
+    ],
+    "wait_for_all": false
+  }
+}
+```
+
+**模式 2：等待全部完成模式**
+```json
+{
+  "name": "fork_agents",
+  "parameters": {
+    "tasks": [
+      { "task": "读取所有 .java 文件的行数统计" },
+      { "task": "读取所有 .md 文件的内容摘要" },
+      { "task": "读取所有 .xml 文件的配置内容" }
+    ],
+    "wait_for_all": true,
+    "timeout_seconds": 180
+  }
+}
+```
+
+批量创建优势：
+- 真正的并行执行，效率提升 N 倍
+- 每个任务独立上下文，互不干扰
+- 一次创建，统一管理
 
 === ⛔ 什么时候绝对不能用 fork_agent（硬约束）
 

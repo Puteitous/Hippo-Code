@@ -64,11 +64,22 @@ public class SubAgentRunner implements Runnable {
                 subAgentLogger.log("--- 第 " + turnCount + " 轮 ---");
 
                 List<Message> context = conversationService.prepareForInference(task.getConversation());
-                subAgentLogger.log("上下文消息数: " + context.size());
+                
+                String forcedSystemPrompt = buildForcedSystemPrompt(task.getDescription());
+                List<Message> finalContext = new ArrayList<>();
+                finalContext.add(Message.system(forcedSystemPrompt));
+                
+                finalContext.addAll(context.stream()
+                    .filter(m -> !m.isSystem())
+                    .collect(Collectors.toList()));
+                
+                subAgentLogger.log("上下文消息数: " + finalContext.size() + " (强制构建 Sub-Agent System Prompt)");
+                subAgentLogger.log("System Prompt 长度: " + forcedSystemPrompt.length() + " 字符");
+                subAgentLogger.log("任务描述: " + task.getDescription());
                 List<Tool> allowedTools = getFilteredTools();
                 subAgentLogger.log("可用工具数: " + allowedTools.size());
 
-                ChatResponse response = llmClient.chat(context, allowedTools);
+                ChatResponse response = llmClient.chat(finalContext, allowedTools);
                 subAgentLogger.log("LLM 调用完成");
 
                 Message assistantMessage = response.getFirstMessage();
@@ -117,6 +128,24 @@ public class SubAgentRunner implements Runnable {
             logger.error("SubAgentRunner 执行异常: taskId={}", task.getTaskId(), e);
             throw new RuntimeException("SubAgent 执行失败", e);
         }
+    }
+
+    private String buildForcedSystemPrompt(String task) {
+        return "你是一个严谨的子任务执行助手。必须严格遵守以下规则:\n\n" +
+            "## 🎯 你的任务\n" +
+            task + "\n\n" +
+            "## ⚠️ 绝对强制规则（违反将导致任务失败）\n" +
+            "1. ✅ **必须调用工具获取真实数据** - 所有信息必须通过工具调用获得\n" +
+            "2. ❌ **严禁编造任何结果** - 不知道就调用工具，绝对不能想象、假设、编造\n" +
+            "3. ❌ **严禁直接回答** - 你没有本地知识，不调用工具给出的任何答案都是错误的\n" +
+            "4. ✅ **必须使用工具** - 你只能通过以下工具完成任务: read_file, glob, grep, search_code, list_directory, list_subagents\n" +
+            "5. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n" +
+            "## 📋 执行流程\n" +
+            "1. 分析任务需要哪些数据\n" +
+            "2. 调用对应的工具获取真实数据\n" +
+            "3. 根据工具的实际返回结果进行总结\n" +
+            "4. 明确标注哪些文件已检查，哪些结果已验证\n\n" +
+            "记住: 你是「工具执行者」，不是「答案生成者」。不调用工具 = 任务失败！";
     }
 
     private List<Tool> getFilteredTools() {

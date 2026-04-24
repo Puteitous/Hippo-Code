@@ -45,9 +45,12 @@ public class SubAgentManager {
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt) {
         String parentSessionId = getParentSessionId();
+        String finalPrompt = buildSubAgentSystemPrompt(taskDescription, systemPrompt);
+        logger.info("forkAgent: taskDescription={}, systemPrompt={}, finalPrompt长度={}", 
+            taskDescription, systemPrompt, finalPrompt.length());
         
         Conversation subConversation = conversationService.createSubAgentConversation(
-            buildSubAgentSystemPrompt(taskDescription, systemPrompt),
+            finalPrompt,
             parentSessionId
         );
 
@@ -98,7 +101,6 @@ public class SubAgentManager {
                 subAgentLogger.saveDetails();
 
                 task.markCompleted();
-                injectResultToParentSession(task, resultSummary, null);
 
                 com.example.agent.core.event.EventBus.publish(
                     new SubAgentCompletedEvent(task.getTaskId(), task.getDescription(), resultSummary)
@@ -113,7 +115,6 @@ public class SubAgentManager {
                 subAgentLogger.saveDetails();
 
                 task.markFailed(e);
-                injectResultToParentSession(task, null, e.getMessage());
 
                 com.example.agent.core.event.EventBus.publish(
                     new SubAgentFailedEvent(task.getTaskId(), task.getDescription(), e.getMessage())
