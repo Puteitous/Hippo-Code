@@ -45,3 +45,5 @@ MEMORY.md
 .classpath
 .project
 .settings/
+
+.trae/

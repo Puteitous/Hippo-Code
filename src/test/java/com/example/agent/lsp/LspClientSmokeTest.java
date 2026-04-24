@@ -1,7 +1,7 @@
 // src/test/java/com/example/agent/lsp/LspClientSmokeTest.java
 package com.example.agent.lsp;
 
-import com.example.agent.lsp.model.LocationLink;
+import com.example.agent.lsp.model.Location;
 import com.example.agent.lsp.model.SymbolInformation;
 
 import java.nio.file.Paths;
@@ -41,12 +41,12 @@ public class LspClientSmokeTest {
         System.out.println("\n[3/5] 测试: goToDefinition");
         System.out.println("   文件: " + testFile);
         System.out.println("   位置: 行 " + testLine + ", 列 " + testColumn);
-        List<LocationLink> defs = client.definition(testFile, testLine, testColumn)
+        List<Location> defs = client.definition(testFile, testLine, testColumn)
                 .get(30, java.util.concurrent.TimeUnit.SECONDS);
         System.out.println("✅ 找到 " + defs.size() + " 个定义:");
-        for (LocationLink link : defs) {
-            System.out.println("   -> " + link.toFilePath() +
-                    " (行" + link.getTargetRange().getStart().getLine() + ")");
+        for (Location loc : defs) {
+            System.out.println("   -> " + loc.toFilePath() +
+                    " (行" + loc.getRange().getStart().getLine() + ")");
         }
 
         System.out.println("\n[4/5] 测试: documentSymbol");
