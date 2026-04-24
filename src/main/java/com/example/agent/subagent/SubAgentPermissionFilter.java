@@ -9,7 +9,8 @@ public class SubAgentPermissionFilter {
         "grep",
         "search_code",
         "list_directory",
-        "ask_user"
+        "ask_user",
+        "list_subagents"
     );
 
     private static final Set<String> FORBIDDEN_TOOLS = Set.of(

@@ -14,6 +14,7 @@
 - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
 - todo_write: 管理任务清单，跟踪执行进度
 - fork_agent: 创建子 Agent 在后台并行执行独立任务（如代码搜索、文件分析）
+- list_subagents: 查询所有子 Agent 任务的状态和执行结果
 
 - lsp_goto_definition: 跳转到符号定义位置
 - lsp_find_references: 查找所有引用位置
@@ -74,19 +75,61 @@
 
 子 Agent 的优势：
 - 拥有独立的上下文，不会污染主对话历史
-- 在后台异步执行，不阻塞主对话交互
+- 支持同步/异步双模式执行
 - 自动安全沙箱，无需担心副作用
+- 可通过 list_subagents 实时查询进度
 
-使用方式示例：
+=== 🎯 两种执行模式
+
+**模式 1：后台异步（默认）**
 ```json
 {
   "name": "fork_agent",
   "parameters": {
     "task": "搜索项目中所有 Blocker 类的实现，分析安全防护层级结构",
-    "system_prompt": "专注代码分析，输出简洁的结构化总结"
+    "system_prompt": "专注代码分析，输出简洁的结构化总结",
+    "wait_for_result": false
   }
 }
 ```
+- 创建后立刻返回，不阻塞主 Agent
+- 适合批量并行任务、长耗时任务
+
+**模式 2：同步等待（推荐单任务）**
+```json
+{
+  "name": "fork_agent",
+  "parameters": {
+    "task": "读取 test.md 和 .gitignore 文件内容",
+    "wait_for_result": true
+  }
+}
+```
+- 最多阻塞 120 秒，超时自动降级为异步
+- 子任务结果直接返回，可无缝继续推理
+- 体验连贯，交互自然
+
+=== 🔍 任务管理：list_subagents
+
+创建多个异步任务后，随时查询状态和结果：
+
+```json
+{
+  "name": "list_subagents",
+  "parameters": {
+    "status": "COMPLETED"
+  }
+}
+```
+
+查询参数：
+- `status`: ALL / RUNNING / COMPLETED / FAILED
+- `task_id`: 查询单个任务的详细日志和完整结果
+
+典型工作流：
+1. 创建 3 个异步 Sub-Agent 并行搜索
+2. 继续其他工作或调用 list_subagents 轮询
+3. 任务完成后汇总所有结果
 
 === ⛔ 什么时候绝对不能用 fork_agent（硬约束）
 

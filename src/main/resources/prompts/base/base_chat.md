@@ -38,6 +38,7 @@
 - grep: 文本搜索
 - search_code: 代码语义检索
 - fork_agent: 创建子 Agent 在后台并行执行独立任务（如代码搜索、文件分析）
+- list_subagents: 查询所有子 Agent 任务的状态和执行结果
 
 - lsp_goto_definition: 跳转到符号定义位置
 - lsp_find_references: 查找所有引用位置
