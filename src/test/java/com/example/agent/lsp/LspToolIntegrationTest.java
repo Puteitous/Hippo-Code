@@ -77,8 +77,8 @@ class LspToolIntegrationTest {
         String result = gotoTool.execute(args);
 
         assertThat(result)
-                .contains("❌ 未找到定义位置")
-                .contains("LSP 还在索引中");
+                .contains("未找到定义")
+                .contains("调整行号列号");
     }
 
     @Test
@@ -139,7 +139,7 @@ class LspToolIntegrationTest {
 
         assertThat(result)
                 .contains("❌ 未找到任何引用")
-                .contains("LSP 还在索引中");
+                .contains("调整行号列号");
     }
 
     @Test

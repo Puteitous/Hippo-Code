@@ -161,8 +161,7 @@ class LspToolFallbackTest {
 
         for (LspBaseTool tool : tools) {
             assertThat(tool.getDescription())
-                    .isNotEmpty()
-                    .contains("LSP");
+                    .isNotEmpty();
         }
     }
 

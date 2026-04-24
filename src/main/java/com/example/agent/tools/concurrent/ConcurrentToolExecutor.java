@@ -163,6 +163,9 @@ public class ConcurrentToolExecutor {
         }
         long startTime = System.currentTimeMillis();
         
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(ToolRegistry.class.getClassLoader());
+        
         try {
             LoggingContext.restore(mdcSnapshot);
             LoggingContext.setTool(toolName);
@@ -220,6 +223,7 @@ public class ConcurrentToolExecutor {
             }
             return execResult;
         } finally {
+            Thread.currentThread().setContextClassLoader(contextClassLoader);
             LoggingContext.clearTool();
         }
     }

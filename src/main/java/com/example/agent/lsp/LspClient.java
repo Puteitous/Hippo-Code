@@ -290,19 +290,13 @@ public class LspClient {
                 .thenApply(result -> {
                     logger.info("【LSP definition】原始响应 JSON: {}", result);
                     
-                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
-                    try {
-                        if (result == null || result.isNull()) {
-                            return Collections.emptyList();
-                        }
-                        if (result.isArray()) {
-                            return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
-                        }
-                        return Collections.singletonList(objectMapper.convertValue(result, Location.class));
-                    } finally {
-                        Thread.currentThread().setContextClassLoader(contextClassLoader);
+                    if (result == null || result.isNull()) {
+                        return Collections.emptyList();
                     }
+                    if (result.isArray()) {
+                        return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
+                    }
+                    return Collections.singletonList(objectMapper.convertValue(result, Location.class));
                 });
     }
 
@@ -334,14 +328,7 @@ public class LspClient {
                         return Collections.emptyList();
                     }
                     logger.info("【LSP references】原始响应 JSON: {}", result);
-                    
-                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
-                    try {
-                        return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
-                    } finally {
-                        Thread.currentThread().setContextClassLoader(contextClassLoader);
-                    }
+                    return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
                 });
     }
 
@@ -368,16 +355,10 @@ public class LspClient {
                     return sendRequest("textDocument/hover", params);
                 })
                 .thenApply(result -> {
-                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
-                    try {
-                        if (result == null || result.isNull()) {
-                            return new Hover();
-                        }
-                        return objectMapper.convertValue(result, Hover.class);
-                    } finally {
-                        Thread.currentThread().setContextClassLoader(contextClassLoader);
+                    if (result == null || result.isNull()) {
+                        return new Hover();
                     }
+                    return objectMapper.convertValue(result, Hover.class);
                 });
     }
 
@@ -396,16 +377,10 @@ public class LspClient {
                     return sendRequest("textDocument/documentSymbol", params);
                 })
                 .thenApply(result -> {
-                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
-                    try {
-                        if (result == null || result.isNull()) {
-                            return Collections.emptyList();
-                        }
-                        return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
-                    } finally {
-                        Thread.currentThread().setContextClassLoader(contextClassLoader);
+                    if (result == null || result.isNull()) {
+                        return Collections.emptyList();
                     }
+                    return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
                 });
     }
 
@@ -423,16 +398,10 @@ public class LspClient {
             }
             return sendRequest("workspace/symbol", params)
                 .thenApply(result -> {
-                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
-                    try {
-                        if (result == null || result.isNull()) {
-                            return Collections.emptyList();
-                        }
-                        return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
-                    } finally {
-                        Thread.currentThread().setContextClassLoader(contextClassLoader);
+                    if (result == null || result.isNull()) {
+                        return Collections.emptyList();
                     }
+                    return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
                 });
         } catch (Exception e) {
             CompletableFuture<List<SymbolInformation>> failedFuture = new CompletableFuture<>();
