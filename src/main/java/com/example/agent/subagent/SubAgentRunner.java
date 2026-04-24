@@ -120,9 +120,22 @@ public class SubAgentRunner implements Runnable {
     }
 
     private List<Tool> getFilteredTools() {
-        return toolRegistry.toTools().stream()
-            .filter(tool -> permissionFilter.isToolAllowed(tool.getFunction().getName()))
+        List<Tool> allTools = toolRegistry.toTools();
+        subAgentLogger.log("注册的总工具数: " + allTools.size());
+        
+        List<Tool> filtered = allTools.stream()
+            .filter(tool -> {
+                String name = tool.getFunction().getName();
+                boolean allowed = permissionFilter.isToolAllowed(name);
+                return allowed;
+            })
             .collect(Collectors.toList());
+        
+        subAgentLogger.log("过滤后可用工具: " + filtered.stream()
+            .map(t -> t.getFunction().getName())
+            .collect(Collectors.toList()));
+        
+        return filtered;
     }
 
     private void executeToolCalls(List<ToolCall> toolCalls) {

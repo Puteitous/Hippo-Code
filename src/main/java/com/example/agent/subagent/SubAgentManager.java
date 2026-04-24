@@ -13,6 +13,7 @@ import com.example.agent.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,7 +24,7 @@ public class SubAgentManager {
     private final Map<String, SubAgentLogger> loggers;
     private final ConversationService conversationService;
     private final LlmClient llmClient;
-    private final ToolRegistry toolRegistry;
+    private ToolRegistry toolRegistry;
     private final SubAgentPermissionFilter permissionFilter;
 
     public SubAgentManager() {
@@ -31,8 +32,15 @@ public class SubAgentManager {
         this.loggers = new ConcurrentHashMap<>();
         this.conversationService = ServiceLocator.get(ConversationService.class);
         this.llmClient = ServiceLocator.get(LlmClient.class);
-        this.toolRegistry = ServiceLocator.get(ToolRegistry.class);
         this.permissionFilter = new SubAgentPermissionFilter();
+    }
+
+    private ToolRegistry getToolRegistry() {
+        if (toolRegistry == null) {
+            toolRegistry = ServiceLocator.get(ToolRegistry.class);
+            logger.info("SubAgentManager 延迟加载 ToolRegistry: 注册工具数 = {}", toolRegistry.toTools().size());
+        }
+        return toolRegistry;
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt) {
@@ -67,7 +75,7 @@ public class SubAgentManager {
             task,
             subAgentLogger,
             llmClient,
-            toolRegistry,
+            getToolRegistry(),
             conversationService,
             permissionFilter
         );
@@ -83,11 +91,17 @@ public class SubAgentManager {
                 runner.run();
 
                 task.setStatus(SubAgentStatus.COMPLETED);
-                task.setResultSummary("任务完成");
+                String resultSummary = extractResultSummary(task);
+                task.setResultSummary(resultSummary);
                 subAgentLogger.logStatusChange(SubAgentStatus.COMPLETED);
+                subAgentLogger.log("执行结果: " + resultSummary);
                 subAgentLogger.saveDetails();
+
+                task.markCompleted();
+                injectResultToParentSession(task, resultSummary, null);
+
                 com.example.agent.core.event.EventBus.publish(
-                    new SubAgentCompletedEvent(task.getTaskId(), task.getDescription(), "任务执行完成")
+                    new SubAgentCompletedEvent(task.getTaskId(), task.getDescription(), resultSummary)
                 );
 
             } catch (Exception e) {
@@ -97,6 +111,10 @@ public class SubAgentManager {
                 subAgentLogger.logStatusChange(SubAgentStatus.FAILED);
                 subAgentLogger.logError("执行失败", e);
                 subAgentLogger.saveDetails();
+
+                task.markFailed(e);
+                injectResultToParentSession(task, null, e.getMessage());
+
                 com.example.agent.core.event.EventBus.publish(
                     new SubAgentFailedEvent(task.getTaskId(), task.getDescription(), e.getMessage())
                 );
@@ -104,6 +122,54 @@ public class SubAgentManager {
                 cleanupExpiredTasks();
             }
         });
+    }
+
+    private String extractResultSummary(SubAgentTask task) {
+        List<com.example.agent.llm.model.Message> messages = task.getConversation().getMessages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            com.example.agent.llm.model.Message msg = messages.get(i);
+            if (msg.isAssistant() && msg.getContent() != null && !msg.getContent().isBlank()) {
+                String content = msg.getContent().trim();
+                return content.length() > 500 ? content.substring(0, 500) + "..." : content;
+            }
+        }
+        return "任务执行完成";
+    }
+
+    private void injectResultToParentSession(SubAgentTask task, String result, String error) {
+        String parentSessionId = getParentSessionId();
+        if (parentSessionId == null) {
+            return;
+        }
+
+        try {
+            com.example.agent.core.AgentContext ctx = ServiceLocator.getOrNull(com.example.agent.core.AgentContext.class);
+            if (ctx != null && ctx.getConversation() != null) {
+                String status = error != null ? "失败" : "成功";
+                String marker = error != null ? "❌" : "✅";
+                String messageContent = String.format("""
+                    
+                    %s === Sub-Agent 任务执行%s ===
+                    任务 ID: %s
+                    任务描述: %s
+                    %s
+                    
+                    """,
+                    marker, status,
+                    task.getTaskId(),
+                    task.getDescription(),
+                    error != null ? "错误信息: " + error : "执行结果: " + result
+                );
+
+                ctx.getConversation().addMessage(
+                    com.example.agent.llm.model.Message.system(messageContent)
+                );
+
+                logger.debug("Sub-Agent 结果已注入父会话: taskId={}", task.getTaskId());
+            }
+        } catch (Exception e) {
+            logger.warn("注入 Sub-Agent 结果到父会话失败: {}", e.getMessage());
+        }
     }
 
     private String getParentSessionId() {
@@ -119,16 +185,25 @@ public class SubAgentManager {
     }
 
     private String buildSubAgentSystemPrompt(String task, String customPrompt) {
-        String basePrompt = customPrompt != null && !customPrompt.isBlank() ? customPrompt :
-            "你是一个专注的子任务执行助手。你的任务是: " + task + "\n\n" +
-            "重要约束:\n" +
-            "1. 专注完成分配给你的任务，不要超出范围\n" +
-            "2. 只能使用允许的工具: 文件读取、代码搜索、信息查询\n" +
-            "3. 将执行结果清晰地总结出来\n" +
-            "4. 遇到不确定的地方不要猜测，如实报告\n" +
-            "5. 完成后给出明确的完成总结";
-
-        return basePrompt;
+        if (customPrompt != null && !customPrompt.isBlank()) {
+            return customPrompt;
+        }
+        
+        return "你是一个严谨的子任务执行助手。必须严格遵守以下规则:\n\n" +
+            "## 🎯 你的任务\n" +
+            task + "\n\n" +
+            "## ⚠️ 绝对强制规则（违反将导致任务失败）\n" +
+            "1. ✅ **必须调用工具获取真实数据** - 所有信息必须通过工具调用获得\n" +
+            "2. ❌ **严禁编造任何结果** - 不知道就调用工具，绝对不能想象、假设、编造\n" +
+            "3. ❌ **严禁直接回答** - 你没有本地知识，不调用工具给出的任何答案都是错误的\n" +
+            "4. ✅ **必须使用工具** - 你只能通过以下工具完成任务: read_file, glob, grep, search_code, list_directory\n" +
+            "5. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n" +
+            "## 📋 执行流程\n" +
+            "1. 分析任务需要哪些数据\n" +
+            "2. 调用对应的工具获取真实数据\n" +
+            "3. 根据工具的实际返回结果进行总结\n" +
+            "4. 明确标注哪些文件已检查，哪些结果已验证\n\n" +
+            "记住: 你是「工具执行者」，不是「答案生成者」。不调用工具 = 任务失败！";
     }
 
     private void cleanupExpiredTasks() {

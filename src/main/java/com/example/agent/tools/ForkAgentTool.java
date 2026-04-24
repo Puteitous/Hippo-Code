@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class ForkAgentTool implements ToolExecutor {
     private SubAgentManager subAgentManager;
@@ -46,6 +47,11 @@ public class ForkAgentTool implements ToolExecutor {
                     "system_prompt": {
                         "type": "string",
                         "description": "可选的自定义系统提示词，用于指导子 Agent 的行为"
+                    },
+                    "wait_for_result": {
+                        "type": "boolean",
+                        "description": "是否等待执行完成并返回结果。true=阻塞等待并返回完整结果，false=后台异步执行",
+                        "default": false
                     }
                 },
                 "required": ["task"]
@@ -64,6 +70,11 @@ public class ForkAgentTool implements ToolExecutor {
     }
 
     @Override
+    public boolean shouldRunInBackground() {
+        return false;
+    }
+
+    @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
         SubAgentManager manager = getManager();
         if (manager == null) {
@@ -78,14 +89,46 @@ public class ForkAgentTool implements ToolExecutor {
         String systemPrompt = arguments.has("system_prompt") && !arguments.get("system_prompt").isNull()
             ? arguments.get("system_prompt").asText()
             : null;
+        boolean waitForResult = arguments.has("wait_for_result") 
+            && arguments.get("wait_for_result").asBoolean();
 
         SubAgentTask subTask = manager.forkAgent(task, systemPrompt);
 
-        return "✅ Sub-Agent 已启动\n" +
-               "Task ID: " + subTask.getTaskId() + "\n" +
-               "任务: " + task + "\n" +
-               "状态: 后台执行中...\n\n" +
-               "子 Agent 将在后台独立执行任务，完成后会在控制台通知结果。" +
-               "你可以继续当前的工作，不需要等待子任务完成。";
+        if (!waitForResult) {
+            return "✅ Sub-Agent 已启动\n" +
+                   "Task ID: " + subTask.getTaskId() + "\n" +
+                   "任务: " + task + "\n" +
+                   "执行模式: 后台异步\n" +
+                   "状态: 后台执行中...\n\n" +
+                   "子 Agent 将在后台独立执行任务，完成后会在控制台通知结果。" +
+                   "你可以继续当前的工作，不需要等待子任务完成。";
+        }
+
+        try {
+            SubAgentTask completed = subTask.awaitCompletion(120, TimeUnit.SECONDS);
+            
+            if (completed.getError() != null) {
+                return "❌ Sub-Agent 执行失败\n" +
+                       "Task ID: " + completed.getTaskId() + "\n" +
+                       "任务: " + task + "\n" +
+                       "执行模式: 同步等待\n" +
+                       "错误: " + completed.getError().getMessage() + "\n";
+            }
+
+            return "✅ Sub-Agent 执行完成\n" +
+                   "Task ID: " + completed.getTaskId() + "\n" +
+                   "任务: " + task + "\n" +
+                   "执行模式: 同步等待\n\n" +
+                   "=== 执行结果 ===\n" +
+                   completed.getResultSummary() + "\n";
+
+        } catch (Exception e) {
+            return "⏱️ Sub-Agent 执行超时或中断\n" +
+                   "Task ID: " + subTask.getTaskId() + "\n" +
+                   "任务: " + task + "\n" +
+                   "执行模式: 同步等待\n" +
+                   "状态: 后台继续执行中...\n" +
+                   "提示: 将在后台继续执行，完成后会通知结果。";
+        }
     }
 }

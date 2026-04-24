@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class SubAgentTask {
@@ -20,6 +22,7 @@ public class SubAgentTask {
     private Instant evictAfter;
     private String resultSummary;
     private Throwable error;
+    private final CompletableFuture<SubAgentTask> completionFuture;
 
     public SubAgentTask(String description, Conversation conversation) {
         this.taskId = UUID.randomUUID().toString().substring(0, 8);
@@ -30,6 +33,23 @@ public class SubAgentTask {
         this.outputLog = Collections.synchronizedList(new ArrayList<>());
         this.createdAt = Instant.now();
         this.evictAfter = Instant.now().plusSeconds(3600);
+        this.completionFuture = new CompletableFuture<>();
+    }
+
+    public void markCompleted() {
+        completionFuture.complete(this);
+    }
+
+    public void markFailed(Throwable e) {
+        completionFuture.completeExceptionally(e);
+    }
+
+    public SubAgentTask awaitCompletion(long timeout, TimeUnit unit) throws Exception {
+        return completionFuture.get(timeout, unit);
+    }
+
+    public CompletableFuture<SubAgentTask> getCompletionFuture() {
+        return completionFuture;
     }
 
     public void addLog(String message) {

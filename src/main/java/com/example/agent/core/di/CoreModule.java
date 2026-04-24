@@ -82,13 +82,13 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(LlmClient.class, llmClient);
         logger.info("✅ [Level 2] 领域服务: LlmClient");
 
-        ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class,
-            new com.example.agent.subagent.SubAgentManager());
-        logger.info("✅ [Level 3] 工具层: SubAgentManager");
-
         ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
         logger.info("✅ [Level 3] 工具层: ToolRegistry (11 个内置工具, 9 个 Blocker)");
+
+        ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class,
+            new com.example.agent.subagent.SubAgentManager());
+        logger.info("✅ [Level 3] 工具层: SubAgentManager");
 
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
