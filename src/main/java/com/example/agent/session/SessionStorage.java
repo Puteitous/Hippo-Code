@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public class SessionStorage {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionStorage.class);
     private static final DateTimeFormatter FILE_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+    private static final DateTimeFormatter DATE_DIR_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final String SESSION_FILE_PREFIX = "session_";
     private static final String SESSION_FILE_SUFFIX = ".json";
     private static final String INVALID_FILENAME_CHARS = "<>:\"/\\|?*";
@@ -260,8 +262,21 @@ public class SessionStorage {
         }
 
         try (Stream<Path> files = Files.list(storageDirectory)) {
-            List<SessionData> allSessions = files
+            List<Path> sessionPaths = files
+                .flatMap(path -> {
+                    try {
+                        if (Files.isDirectory(path) && !isSessionDirectory(path)) {
+                            return Files.list(path);
+                        }
+                        return Stream.of(path);
+                    } catch (IOException e) {
+                        return Stream.empty();
+                    }
+                })
                 .filter(path -> isSessionDirectory(path) || isLegacySessionFile(path))
+                .collect(Collectors.toList());
+            
+            List<SessionData> allSessions = sessionPaths.stream()
                 .map(this::loadSessionFromPath)
                 .filter(Optional::isPresent)
                 .map(Optional::get)
@@ -294,7 +309,7 @@ public class SessionStorage {
         }
 
         String safeSessionId = sanitizeSessionId(sessionId);
-        Path sessionDir = storageDirectory.resolve(safeSessionId);
+        Path sessionDir = getSessionDir(safeSessionId);
         Path legacySessionFile = storageDirectory.resolve(SESSION_FILE_PREFIX + safeSessionId + SESSION_FILE_SUFFIX);
         
         try {
@@ -302,6 +317,22 @@ public class SessionStorage {
             
             if (Files.isDirectory(sessionDir)) {
                 try (Stream<Path> walk = Files.walk(sessionDir)) {
+                    walk.sorted((a, b) -> b.compareTo(a))
+                        .forEach(path -> {
+                            try {
+                                Files.delete(path);
+                            } catch (IOException e) {
+                                logger.warn("删除会话文件失败: {}", path);
+                            }
+                        });
+                }
+                cleanupEmptyDateDir(sessionDir.getParent());
+                deleted = true;
+            }
+            
+            Path flatSessionDir = storageDirectory.resolve(safeSessionId);
+            if (Files.isDirectory(flatSessionDir)) {
+                try (Stream<Path> walk = Files.walk(flatSessionDir)) {
                     walk.sorted((a, b) -> b.compareTo(a))
                         .forEach(path -> {
                             try {
@@ -326,6 +357,21 @@ public class SessionStorage {
         } catch (IOException e) {
             logger.error("删除会话失败: {}", sessionId, e);
             return false;
+        }
+    }
+    
+    private void cleanupEmptyDateDir(Path dateDir) {
+        try {
+            if (dateDir != null && dateDir.getParent() != null 
+                && dateDir.getParent().equals(storageDirectory)) {
+                try (Stream<Path> entries = Files.list(dateDir)) {
+                    if (entries.findAny().isEmpty()) {
+                        Files.delete(dateDir);
+                        logger.debug("已清理空的日期目录: {}", dateDir.getFileName());
+                    }
+                }
+            }
+        } catch (IOException e) {
         }
     }
 
@@ -447,17 +493,33 @@ public class SessionStorage {
                 logger.warn("生成唯一会话ID尝试次数过多，添加纳秒后缀");
                 break;
             }
-        } while (Files.exists(storageDirectory.resolve(sessionId)));
+        } while (Files.exists(getSessionDir(sessionId)));
         
         return sessionId;
     }
 
+    private Path getSessionDir(String sessionId) {
+        String dateDir = extractDateFromSessionId(sessionId);
+        return storageDirectory.resolve(dateDir).resolve(sessionId);
+    }
+    
     private Path getSessionFilePath(String sessionId) {
-        return storageDirectory.resolve(sessionId).resolve("session.json");
+        return getSessionDir(sessionId).resolve("session.json");
     }
 
     private boolean isSessionDirectory(Path path) {
         return Files.isDirectory(path) && Files.exists(path.resolve("session.json"));
+    }
+    
+    private String extractDateFromSessionId(String sessionId) {
+        try {
+            if (sessionId != null && sessionId.length() >= 13) {
+                long timestamp = Long.parseLong(sessionId.substring(0, 13));
+                return LocalDate.ofEpochDay(timestamp / 86400000).format(DATE_DIR_FORMAT);
+            }
+        } catch (NumberFormatException e) {
+        }
+        return LocalDate.now().format(DATE_DIR_FORMAT);
     }
     
     private boolean isLegacySessionFile(Path path) {

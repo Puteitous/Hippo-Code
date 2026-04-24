@@ -46,6 +46,7 @@ public class AgentUi {
         println(ConsoleStyle.green("  help     ") + ConsoleStyle.gray(" - 显示帮助"));
         println(ConsoleStyle.green("  multi    ") + ConsoleStyle.gray(" - 多行输入模式（粘贴代码/日志）"));
         println(ConsoleStyle.green("  reset    ") + ConsoleStyle.gray(" - 重置会话"));
+        println(ConsoleStyle.cyan("  /compact ") + ConsoleStyle.gray(" - 手动压缩上下文历史"));
         println(ConsoleStyle.blue("  /mcp     ") + ConsoleStyle.gray(" - MCP服务管理"));
         println(ConsoleStyle.green("  exit     ") + ConsoleStyle.gray(" - 退出程序"));
         println();
@@ -75,6 +76,8 @@ public class AgentUi {
         println(ConsoleStyle.green("  help    ") + " - 显示帮助信息");
         println(ConsoleStyle.green("  clear   ") + " - 清屏");
         println(ConsoleStyle.green("  reset   ") + " - 重置会话历史");
+        println(ConsoleStyle.cyan("  /compact") + " - 手动压缩上下文历史");
+        println(ConsoleStyle.cyan("  /compact <指令>") + " - 按自定义指令压缩上下文");
         println(ConsoleStyle.green("  config  ") + " - 显示当前配置");
         println(ConsoleStyle.green("  tokens  ") + " - 显示今日Token统计");
         println(ConsoleStyle.green("  showlog ") + " - 显示最近对话日志");

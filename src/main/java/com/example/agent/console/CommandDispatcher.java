@@ -2,8 +2,10 @@ package com.example.agent.console;
 
 import com.example.agent.config.Config;
 import com.example.agent.config.UserResourceManager;
+import com.example.agent.context.ManualCompactor;
 import com.example.agent.core.AgentContext;
 import com.example.agent.domain.rule.RuleManager;
+import com.example.agent.llm.model.Message;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.mcp.McpServiceManager;
 import com.example.agent.mcp.client.McpClient;
@@ -220,7 +222,61 @@ public class CommandDispatcher {
             return CommandResult.continueExecution();
         }
 
+        if (line.toLowerCase().startsWith("/compact")) {
+            return handleCompactCommand(line);
+        }
+
         return CommandResult.processInput(line);
+    }
+
+    private CommandResult handleCompactCommand(String line) {
+        ui.println(ConsoleStyle.cyan("🗜️ 正在压缩上下文..."));
+        ui.println();
+        
+        try {
+            String userInstruction = null;
+            int spaceIndex = line.indexOf(' ');
+            if (spaceIndex > 0) {
+                userInstruction = line.substring(spaceIndex).trim();
+            }
+
+            int maxTokens = context.getConfig().getMaxTokens();
+            ManualCompactor compactor = new ManualCompactor(
+                context.getTokenEstimator(),
+                context.getLlmClient()
+            );
+
+            var originalMessages = conversation.getMessages();
+            int originalCount = originalMessages.size();
+            int originalTokens = context.getTokenEstimator().estimateConversationTokens(originalMessages);
+            
+            var result = compactor.compact(originalMessages, userInstruction, maxTokens);
+
+            conversation.replaceMessages(result.getMessages());
+
+            int compactedCount = result.getMessages().size();
+            int savedTokens = result.getSavedTokens();
+
+            ui.println(ConsoleStyle.success("✅ 压缩完成!"));
+            ui.println(ConsoleStyle.info("   算法: " + result.getMethod().getDisplayName()));
+            ui.println(ConsoleStyle.info("   原消息数: " + originalCount));
+            ui.println(ConsoleStyle.info("   压缩后: " + compactedCount));
+            ui.println(ConsoleStyle.info("   减少: " + (originalCount - compactedCount) + " 条消息"));
+            
+            if (savedTokens > 0) {
+                double savedPercent = savedTokens * 100.0 / Math.max(1, originalTokens);
+                ui.println(ConsoleStyle.info(String.format("   释放: %d tokens (节省 %.1f%%)", 
+                    savedTokens, savedPercent)));
+            }
+            
+            ui.println(ConsoleStyle.gray("   " + result.getSummary()));
+            ui.println();
+        } catch (Exception e) {
+            ui.println(ConsoleStyle.error("❌ 压缩失败: " + e.getMessage()));
+            ui.println();
+        }
+        
+        return CommandResult.continueExecution();
     }
 
     private CommandResult handleMultilineInput() {

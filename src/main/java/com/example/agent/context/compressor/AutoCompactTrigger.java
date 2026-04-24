@@ -116,6 +116,7 @@ public class AutoCompactTrigger implements BudgetListener {
 
             ContextSummarizer.CompactionResult llmResult = summarizer.getLastResult();
             injectSummarySuccess(llmResult, currentTokens, maxTokens);
+            printSummarySuccessToConsole(llmResult, currentTokens, maxTokens);
         } catch (Exception e) {
             state.recordFailure();
             metrics.recordEvent(
@@ -215,6 +216,16 @@ public class AutoCompactTrigger implements BudgetListener {
         writeBoundaryMarker(result.getMessages());
 
         injectClippingSuccess(result, incremental);
+        printClippingSuccessToConsole(result, incremental);
+    }
+
+    private void printClippingSuccessToConsole(ContextClipper.CompactionResult result, boolean incremental) {
+        System.out.println();
+        System.out.println("\u001B[36m✅ " + (incremental ? "增量" : "") + "零成本裁剪完成（动态滑动窗口）\u001B[0m");
+        System.out.println("\u001B[36m   算法：动态 token 范围（10K-40K），无 LLM 调用\u001B[0m");
+        System.out.println("\u001B[36m   保留 " + (result.getTotalTurns() - result.getRemovedTurns()) + " / " + result.getTotalTurns() + " 个完整对话回合\u001B[0m");
+        System.out.println("\u001B[36m   释放 " + result.getSavedTokens() + " tokens\u001B[0m");
+        System.out.println();
     }
 
     private void writeBoundaryMarker(List<Message> messages) {
@@ -290,6 +301,18 @@ public class AutoCompactTrigger implements BudgetListener {
             (double) savedTokens / beforeTokens * 100
         );
         contextWindow.injectWarning(Message.system(content));
+    }
+
+    private void printSummarySuccessToConsole(ContextSummarizer.CompactionResult result, int beforeTokens, int maxTokens) {
+        int savedTokens = beforeTokens - result.getTokenCountAfter();
+        double savedPercent = (double) savedTokens / beforeTokens * 100;
+        System.out.println();
+        System.out.println("\u001B[33m🔄 智能摘要压缩完成（第 " + state.getCompactionCount() + " 次压缩）\u001B[0m");
+        System.out.println("\u001B[33m   算法：LLM 结构化摘要\u001B[0m");
+        System.out.println("\u001B[33m   融合 " + result.getMergedCount() + " 条早期历史为摘要\u001B[0m");
+        System.out.println("\u001B[33m   释放 " + savedTokens + " tokens (节省 " + String.format("%.1f", savedPercent) + "%)\u001B[0m");
+        System.out.println("\u001B[33m   注：动态滑动窗口无效，已降级为深度压缩\u001B[0m");
+        System.out.println();
     }
 
     public void reset() {

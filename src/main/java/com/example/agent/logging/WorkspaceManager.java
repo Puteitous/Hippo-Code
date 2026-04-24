@@ -25,12 +25,7 @@ public class WorkspaceManager {
     private WorkspaceManager() {}
     
     public static String sanitizePath(String path) {
-        String safe = path.replaceAll("[^a-zA-Z0-9]", "-");
-        if (safe.length() > 64) {
-            int hash = Math.abs(path.hashCode());
-            return safe.substring(0, 48) + "-" + hash;
-        }
-        return safe;
+        return ProjectKeyPropertyDefiner.sanitize(path);
     }
     
     public static String getCurrentWorkingDir() {
@@ -67,7 +62,8 @@ public class WorkspaceManager {
             Path projectDir = getProjectDir(projectKey);
             Path[] dirs = {
                 projectDir.resolve("sessions"),      // 🤖 会话 JSON（程序用）
-                projectDir.resolve("logs"),          // 👤 会话日志（人类用）
+                projectDir.resolve("logs").resolve("system"),      // 🖥️  系统日志
+                projectDir.resolve("logs").resolve("conversations"), // 💬 会话日志（人类用）
                 projectDir.resolve("resources"),     // 📦 资源分片
                 projectDir.resolve("cache")          // ⚡ 项目缓存
             };
@@ -118,7 +114,19 @@ public class WorkspaceManager {
     }
     
     public static Path getSessionDir(String projectKey, String sessionId) {
-        return getProjectDir(projectKey).resolve("sessions").resolve(sessionId);
+        String dateDir = extractDateFromSessionId(sessionId);
+        return getProjectDir(projectKey).resolve("sessions").resolve(dateDir).resolve(sessionId);
+    }
+    
+    private static String extractDateFromSessionId(String sessionId) {
+        try {
+            if (sessionId != null && sessionId.length() >= 13) {
+                long timestamp = Long.parseLong(sessionId.substring(0, 13));
+                return LocalDate.ofEpochDay(timestamp / 86400000).format(DATE_FORMAT);
+            }
+        } catch (NumberFormatException e) {
+        }
+        return LocalDate.now().format(DATE_FORMAT);
     }
     
     public static Path getSessionMessagesFile(String projectKey, String sessionId) {
@@ -130,7 +138,8 @@ public class WorkspaceManager {
     }
     
     public static Path getSessionLogFile(String projectKey, String sessionId) {
-        return getProjectDir(projectKey).resolve("logs").resolve(sessionId + ".log");
+        String date = LocalDate.now().format(DATE_FORMAT);
+        return getProjectDir(projectKey).resolve("logs").resolve("conversations").resolve(date).resolve(sessionId + ".log");
     }
     
     public static Path getToolResultPath(String projectKey, String sessionId, String toolCallId) {
