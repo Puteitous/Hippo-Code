@@ -32,6 +32,9 @@ public class Location {
     }
 
     public Path toFilePath() {
+        if (uri == null) {
+            throw new IllegalStateException("Location.uri is null. 反序列化可能失败，请检查 JSON 字段映射");
+        }
         try {
             return Paths.get(URI.create(uri));
         } catch (Exception e) {

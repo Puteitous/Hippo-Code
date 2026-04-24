@@ -105,8 +105,10 @@ public class DagExecutor {
         prepareForTransaction(node);
 
         try {
-            ToolExecutionResult result = fallbackExecutor.executeConcurrently(
-                    List.of(node.getToolCall())).get(0);
+            int index = findOriginalIndex(node.getToolCall(), originalCalls);
+            int total = originalCalls.size();
+            ToolExecutionResult result = fallbackExecutor.executeSingle(
+                    node.getToolCall(), index, total);
             results.put(node.getToolCallId(), result);
             node.setStatus(ExecutionStatus.SUCCESS);
             node.setResult(result);
@@ -116,6 +118,15 @@ public class DagExecutor {
             node.setError(e);
             logger.warn("{} 执行异常: {}", node.getToolName(), e.getMessage());
         }
+    }
+
+    private int findOriginalIndex(ToolCall toolCall, List<ToolCall> originalCalls) {
+        for (int i = 0; i < originalCalls.size(); i++) {
+            if (toolCall.getId().equals(originalCalls.get(i).getId())) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     private static final ObjectMapper objectMapper = new ObjectMapper();

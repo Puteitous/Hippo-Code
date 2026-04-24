@@ -16,14 +16,12 @@ public class DocumentSymbolTool extends LspBaseTool {
 
     @Override
     public String getName() {
-        return "lsp_" + languageId + "_document_symbol";
+        return "lsp_document_symbol";
     }
 
     @Override
     public String getDescription() {
-        return "【LSP " + languageId + "】列出文件中的所有符号（类、方法、字段等）。" +
-               "返回符号名称、类型（CLASS/METHOD/FIELD等）和位置。" +
-               "用于：快速了解文件结构，概览类中有哪些方法和字段。";
+        return "列出文件中的所有结构，包括类、方法、字段等";
     }
 
     @Override
@@ -44,6 +42,12 @@ public class DocumentSymbolTool extends LspBaseTool {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
+        if (!lspClient.isInitialized()) {
+            return "ℹ️ LSP 服务正在启动中，暂时无法使用文档符号功能。\n" +
+                   "建议：可以先用 read_file 读取文件结构，等待 LSP 初始化完成后再重试。\n" +
+                   "提示：jdtls 首次启动需要 60-120 秒建立索引。";
+        }
+        
         try {
             String file = arguments.get("file").asText();
 
@@ -52,7 +56,13 @@ public class DocumentSymbolTool extends LspBaseTool {
 
             return formatResults(symbols);
         } catch (Exception e) {
-            throw new ToolExecutionException("执行 documentSymbol 失败", e);
+            String msg = e.getMessage() != null ? e.getMessage() : "未知错误";
+            if (msg.contains("未初始化") || msg.contains("连接未建立")) {
+                return "ℹ️ LSP 服务正在启动中，暂时无法使用文档符号功能。\n" +
+                       "建议：可以先用 read_file 读取文件结构，等待 LSP 初始化完成后再重试。";
+            }
+            return "⚠️ 获取文档符号失败: " + msg + "\n" +
+                   "建议：检查文件路径是否正确。";
         }
     }
 

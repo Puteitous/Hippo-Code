@@ -2,6 +2,7 @@ package com.example.agent.lsp.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,16 +15,28 @@ public class LspConfig {
     private Map<String, LspServerConfig> servers = new HashMap<>();
 
     public LspConfig() {
+        String userHome = System.getProperty("user.home");
+        String jdtlsConfigDir = userHome + File.separator + ".jdtls" + File.separator + "config";
+        String jdtlsWorkspaceDir = userHome + File.separator + ".jdtls" + File.separator + "workspace";
+        
         LspServerConfig javaConfig = new LspServerConfig();
         javaConfig.setEnabled(true);
-        javaConfig.setCommand("jdtls");
+        javaConfig.setCommand(detectJdtlsCommand());
         javaConfig.setArgs(List.of(
             "-configuration",
-            System.getProperty("user.home") + "\\.jdtls\\config",
+            jdtlsConfigDir,
             "-data",
-            System.getProperty("user.home") + "\\.jdtls\\workspace"
+            jdtlsWorkspaceDir
         ));
         servers.put("java", javaConfig);
+    }
+    
+    private static String detectJdtlsCommand() {
+        String os = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT);
+        if (os.contains("win")) {
+            return "jdtls.bat";
+        }
+        return "jdtls";
     }
 
     public boolean isEnabled() {

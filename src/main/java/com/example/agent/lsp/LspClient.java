@@ -2,7 +2,6 @@ package com.example.agent.lsp;
 
 import com.example.agent.lsp.model.Hover;
 import com.example.agent.lsp.model.Location;
-import com.example.agent.lsp.model.LocationLink;
 import com.example.agent.lsp.model.SymbolInformation;
 import com.example.agent.mcp.protocol.JsonRpcHandler;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -37,6 +36,10 @@ public class LspClient {
 
     private static final Logger logger = LoggerFactory.getLogger(LspClient.class);
     private static final Pattern CONTENT_LENGTH_PATTERN = Pattern.compile("Content-Length: (\\d+)");
+    private static final TypeReference<List<Location>> LOCATION_LIST_TYPE = new TypeReference<List<Location>>() {};
+    private static final TypeReference<List<SymbolInformation>> SYMBOL_LIST_TYPE = new TypeReference<List<SymbolInformation>>() {};
+
+
 
     private final String languageId;
     private final String command;
@@ -55,7 +58,16 @@ public class LspClient {
 
     private volatile boolean connected = false;
     private volatile boolean initialized = false;
+    private volatile long initializedTimestamp = 0;
     private volatile boolean shuttingDown = false;
+
+    public boolean isIndexingInProgress() {
+        return initialized && (System.currentTimeMillis() - initializedTimestamp) < 120000;
+    }
+
+    public long getInitializedTimestamp() {
+        return initializedTimestamp;
+    }
 
     public LspClient(String languageId, String command, List<String> args, Path workspaceRoot) {
         this(languageId, command, args, workspaceRoot, Collections.emptyMap());
@@ -200,6 +212,8 @@ public class LspClient {
                 .thenCompose(result -> {
                     logger.info("✅ LSP initialize 成功！服务器信息: {}", result.path("serverInfo"));
                     initialized = true;
+                    initializedTimestamp = System.currentTimeMillis();
+                    logger.info("LSP 初始化完成，开始建立索引（预计需要 60-120 秒）");
                     return sendNotification("initialized", Map.of());
                 })
                 .exceptionally(e -> {
@@ -212,7 +226,9 @@ public class LspClient {
 
     private CompletableFuture<Void> didOpen(String filePath) {
         if (!initialized) {
-            throw new IllegalStateException("LSP 未初始化");
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException("LSP 未初始化或正在启动中"));
+            return future;
         }
 
         Path absolutePath = workspaceRoot.resolve(filePath).normalize();
@@ -220,6 +236,12 @@ public class LspClient {
 
         if (openedDocuments.containsKey(uri)) {
             return CompletableFuture.completedFuture(null);
+        }
+
+        if (!Files.exists(absolutePath)) {
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("文件不存在: " + filePath));
+            return future;
         }
 
         try {
@@ -243,7 +265,22 @@ public class LspClient {
         }
     }
 
-    public CompletableFuture<List<LocationLink>> definition(String filePath, int line, int column) {
+    public CompletableFuture<List<Location>> definition(String filePath, int line, int column) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("文件路径不能为空"));
+            return future;
+        }
+        if (line < 0) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("行号不能为负数: " + line));
+            return future;
+        }
+        if (column < 0) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("列号不能为负数: " + column));
+            return future;
+        }
         return didOpen(filePath)
                 .thenCompose(v -> {
                     Path absolutePath = workspaceRoot.resolve(filePath).normalize();
@@ -251,24 +288,44 @@ public class LspClient {
                     return sendRequest("textDocument/definition", params);
                 })
                 .thenApply(result -> {
-                    if (result == null || result.isNull()) {
-                        return Collections.emptyList();
+                    logger.info("【LSP definition】原始响应 JSON: {}", result);
+                    
+                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
+                    try {
+                        if (result == null || result.isNull()) {
+                            return Collections.emptyList();
+                        }
+                        if (result.isArray()) {
+                            return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
+                        }
+                        return Collections.singletonList(objectMapper.convertValue(result, Location.class));
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(contextClassLoader);
                     }
-                    if (result.isArray()) {
-                        return objectMapper.convertValue(
-                                result,
-                                new TypeReference<List<LocationLink>>() {}
-                        );
-                    }
-                    return Collections.singletonList(objectMapper.convertValue(result, LocationLink.class));
                 });
     }
 
     public CompletableFuture<List<Location>> references(String filePath, int line, int column) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("文件路径不能为空"));
+            return future;
+        }
+        if (line < 0) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("行号不能为负数: " + line));
+            return future;
+        }
+        if (column < 0) {
+            CompletableFuture<List<Location>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("列号不能为负数: " + column));
+            return future;
+        }
         return didOpen(filePath)
                 .thenCompose(v -> {
                     Path absolutePath = workspaceRoot.resolve(filePath).normalize();
-                    Map<String, Object> params = buildPositionParams(absolutePath, line, column);
+                    Map<String, Object> params = new HashMap<>(buildPositionParams(absolutePath, line, column));
                     params.put("context", Map.of("includeDeclaration", true));
                     return sendRequest("textDocument/references", params);
                 })
@@ -276,14 +333,34 @@ public class LspClient {
                     if (result == null || result.isNull()) {
                         return Collections.emptyList();
                     }
-                    return objectMapper.convertValue(
-                            result,
-                            new TypeReference<List<Location>>() {}
-                    );
+                    logger.info("【LSP references】原始响应 JSON: {}", result);
+                    
+                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
+                    try {
+                        return objectMapper.convertValue(result, LOCATION_LIST_TYPE);
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(contextClassLoader);
+                    }
                 });
     }
 
     public CompletableFuture<Hover> hover(String filePath, int line, int column) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            CompletableFuture<Hover> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("文件路径不能为空"));
+            return future;
+        }
+        if (line < 0) {
+            CompletableFuture<Hover> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("行号不能为负数: " + line));
+            return future;
+        }
+        if (column < 0) {
+            CompletableFuture<Hover> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("列号不能为负数: " + column));
+            return future;
+        }
         return didOpen(filePath)
                 .thenCompose(v -> {
                     Path absolutePath = workspaceRoot.resolve(filePath).normalize();
@@ -291,14 +368,25 @@ public class LspClient {
                     return sendRequest("textDocument/hover", params);
                 })
                 .thenApply(result -> {
-                    if (result == null || result.isNull()) {
-                        return new Hover();
+                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
+                    try {
+                        if (result == null || result.isNull()) {
+                            return new Hover();
+                        }
+                        return objectMapper.convertValue(result, Hover.class);
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(contextClassLoader);
                     }
-                    return objectMapper.convertValue(result, Hover.class);
                 });
     }
 
     public CompletableFuture<List<SymbolInformation>> documentSymbol(String filePath) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            CompletableFuture<List<SymbolInformation>> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalArgumentException("文件路径不能为空"));
+            return future;
+        }
         return didOpen(filePath)
                 .thenCompose(v -> {
                     Path absolutePath = workspaceRoot.resolve(filePath).normalize();
@@ -308,45 +396,73 @@ public class LspClient {
                     return sendRequest("textDocument/documentSymbol", params);
                 })
                 .thenApply(result -> {
-                    if (result == null || result.isNull()) {
-                        return Collections.emptyList();
+                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
+                    try {
+                        if (result == null || result.isNull()) {
+                            return Collections.emptyList();
+                        }
+                        return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(contextClassLoader);
                     }
-                    return objectMapper.convertValue(
-                            result,
-                            new TypeReference<List<SymbolInformation>>() {}
-                    );
                 });
     }
 
     public CompletableFuture<List<SymbolInformation>> workspaceSymbol(String query) {
-        Map<String, Object> params = Map.of("query", query);
-        return sendRequest("workspace/symbol", params)
+        CompletableFuture<List<SymbolInformation>> future = new CompletableFuture<>();
+        try {
+            if (!initialized) {
+                throw new IllegalStateException("LSP 未初始化或正在启动中");
+            }
+            Map<String, Object> params;
+            if (query != null) {
+                params = Map.of("query", query);
+            } else {
+                params = Map.of("query", "");
+            }
+            return sendRequest("workspace/symbol", params)
                 .thenApply(result -> {
-                    if (result == null || result.isNull()) {
-                        return Collections.emptyList();
+                    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(LspClient.class.getClassLoader());
+                    try {
+                        if (result == null || result.isNull()) {
+                            return Collections.emptyList();
+                        }
+                        return objectMapper.convertValue(result, SYMBOL_LIST_TYPE);
+                    } finally {
+                        Thread.currentThread().setContextClassLoader(contextClassLoader);
                     }
-                    return objectMapper.convertValue(
-                            result,
-                            new TypeReference<List<SymbolInformation>>() {}
-                    );
                 });
+        } catch (Exception e) {
+            CompletableFuture<List<SymbolInformation>> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(e);
+            return failedFuture;
+        }
     }
 
     private Map<String, Object> buildPositionParams(Path filePath, int line, int column) {
-        return Map.of(
-                "textDocument", Map.of("uri", filePath.toUri().toString()),
-                "position", Map.of("line", line, "character", column)
-        );
+        Map<String, Object> params = new HashMap<>();
+        params.put("textDocument", Map.of("uri", filePath.toUri().toString()));
+        params.put("position", Map.of("line", line, "character", column));
+        return params;
     }
 
     private CompletableFuture<JsonNode> sendRequest(String method, Object params) {
-        int id = jsonRpcHandler.nextId();
-        CompletableFuture<JsonNode> future = jsonRpcHandler.registerPendingRequest(id);
+        CompletableFuture<JsonNode> future;
+        try {
+            int id = jsonRpcHandler.nextId();
+            future = jsonRpcHandler.registerPendingRequest(id);
 
-        String json = jsonRpcHandler.createRequest(id, method, params);
-        doSendMessage(json);
+            String json = jsonRpcHandler.createRequest(id, method, params);
+            doSendMessage(json);
 
-        return future.orTimeout(60, TimeUnit.SECONDS);
+            return future.orTimeout(60, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            CompletableFuture<JsonNode> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(e);
+            return failedFuture;
+        }
     }
 
     private CompletableFuture<Void> sendNotification(String method, Object params) {
@@ -356,6 +472,9 @@ public class LspClient {
     }
 
     private void doSendMessage(String messageJson) {
+        if (stdinWriter == null) {
+            throw new IllegalStateException("LSP 连接未建立，请检查服务器是否启动成功");
+        }
         try {
             String message = "Content-Length: " + messageJson.getBytes(StandardCharsets.UTF_8).length +
                     "\r\n\r\n" +
@@ -366,9 +485,9 @@ public class LspClient {
                 stdinWriter.flush();
             }
 
-            logger.trace("发送 LSP 消息: {}", messageJson);
+            logger.debug("发送 LSP 消息: {}", messageJson);
         } catch (Exception e) {
-            throw new RuntimeException("发送 LSP 消息失败", e);
+            throw new RuntimeException("发送 LSP 消息失败: " + e.getMessage(), e);
         }
     }
 
@@ -490,8 +609,6 @@ public class LspClient {
 
     public void shutdown() {
         shuttingDown = true;
-        connected = false;
-        initialized = false;
 
         if (initialized) {
             try {
@@ -501,6 +618,9 @@ public class LspClient {
                 logger.debug("LSP 优雅关闭失败，强制终止");
             }
         }
+
+        connected = false;
+        initialized = false;
 
         cleanupResources(process, stdoutReader, stdinWriter, stderrReader);
         logger.info("LSP 客户端已关闭");

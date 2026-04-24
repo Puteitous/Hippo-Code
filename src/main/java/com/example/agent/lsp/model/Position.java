@@ -1,3 +1,4 @@
+
 package com.example.agent.lsp.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;

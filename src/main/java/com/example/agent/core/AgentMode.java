@@ -5,12 +5,16 @@ import java.util.Set;
 public enum AgentMode {
 
     CHAT("💬", "聊天模式", "只读探索，提供建议，不修改文件",
-        Set.of("glob", "grep", "list_directory", "read_file", "search_code", "ask_user")
+        Set.of("glob", "grep", "list_directory", "read_file", "search_code", "ask_user",
+               "lsp_goto_definition", "lsp_find_references", "lsp_hover", 
+               "lsp_document_symbol", "lsp_workspace_symbol")
     ),
 
     CODING("🛠️", "编程模式", "全权限执行，自动完成任务",
         Set.of("glob", "grep", "list_directory", "read_file", "search_code", 
-               "write_file", "edit_file", "bash", "ask_user", "todo_write")
+               "write_file", "edit_file", "bash", "ask_user", "todo_write",
+               "lsp_goto_definition", "lsp_find_references", "lsp_hover", 
+               "lsp_document_symbol", "lsp_workspace_symbol")
     );
 
     private final String icon;

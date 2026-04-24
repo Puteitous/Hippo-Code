@@ -103,3 +103,38 @@ session:
   # session_directory 配置已废弃，由 WorkspaceManager 自动管理
   auto_resume: true           # 启动时自动检查可恢复会话
   resume_timeout_hours: 72    # 超过 72 小时的会话自动标记为 IGNORED
+
+# =============================================================================
+# LSP 语言服务器配置（高级代码理解能力）
+# 启用后会获得 IDE 级别的代码理解能力：跳转到定义、查找引用、代码文档等
+# 安装 jdtls: 下载 Eclipse JDT LS 并将 bin 目录加入 PATH
+# 下载地址: https://download.eclipse.org/jdtls/milestones/
+# =============================================================================
+lsp:
+  enabled: true               # 全局启用 LSP 功能（推荐启用！）
+  
+  servers:
+    java:
+      enabled: true
+      # jdtls 启动命令（Windows 自动用 .bat，Linux/Mac 用 shell 脚本）
+      command: jdtls
+      args:
+        - "-configuration"
+        - "${user_home}/.jdtls/config"    # jdtls 配置目录（自动创建）
+        - "-data"
+        - "${user_home}/.jdtls/workspace" # jdtls 工作区（自动创建）
+        # 可选：添加 JVM 参数调优
+        # - "-vmargs"
+        # - "-Xmx4G"
+        # - "-XX:+UseG1GC"
+      
+      # 可选：环境变量配置
+      # env:
+      #   JAVA_HOME: /path/to/jdk-17+
+
+# 💡 LSP 故障排查:
+# 1. 确保 Java 版本 >= 17 (jdtls 要求)
+# 2. 命令行输入 jdtls --version 能执行
+# 3. 首次启动需要 60-120 秒建索引
+# 4. Windows 用户: 确保 jdtls.bat 在 PATH 中
+# 5. 有问题可设置 enabled: false 临时禁用

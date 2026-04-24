@@ -17,14 +17,12 @@ public class WorkspaceSymbolTool extends LspBaseTool {
 
     @Override
     public String getName() {
-        return "lsp_" + languageId + "_workspace_symbol";
+        return "lsp_workspace_symbol";
     }
 
     @Override
     public String getDescription() {
-        return "【LSP " + languageId + "】在整个项目中搜索符号。" +
-               "支持模糊匹配，快速找到类、方法、字段的定义位置。" +
-               "用于：跨文件查找，不需要知道符号在哪个文件中。";
+        return "整个项目范围内搜索符号，可以跨文件查找类、方法等";
     }
 
     @Override
@@ -45,6 +43,12 @@ public class WorkspaceSymbolTool extends LspBaseTool {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
+        if (!lspClient.isInitialized()) {
+            return "ℹ️ LSP 服务正在启动中，暂时无法使用工作区符号功能。\n" +
+                   "建议：可以先用 search_code 或 glob 工具进行搜索，等待 LSP 初始化完成后再重试。\n" +
+                   "提示：jdtls 首次启动需要 60-120 秒建立索引。";
+        }
+        
         try {
             String query = arguments.get("query").asText();
 
@@ -53,7 +57,13 @@ public class WorkspaceSymbolTool extends LspBaseTool {
 
             return formatResults(symbols);
         } catch (Exception e) {
-            throw new ToolExecutionException("执行 workspace/symbol 失败", e);
+            String msg = e.getMessage() != null ? e.getMessage() : "未知错误";
+            if (msg.contains("未初始化") || msg.contains("连接未建立")) {
+                return "ℹ️ LSP 服务正在启动中，暂时无法使用工作区符号功能。\n" +
+                       "建议：可以先用 search_code 或 glob 工具进行搜索，等待 LSP 初始化完成后再重试。";
+            }
+            return "⚠️ 搜索工作区符号失败: " + msg + "\n" +
+                   "建议：检查搜索词是否正确。";
         }
     }
 

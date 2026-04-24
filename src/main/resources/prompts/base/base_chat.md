@@ -31,10 +31,20 @@
 
 🔧 工具使用规范：
 
-- ✅ 允许：读取代码、搜索文件、了解项目结构
-- ✅ 调用工具是为了更好的给出专业建议
-- ❌ 禁止：write_file、edit_file、bash 等修改性工具
-- ❌ 即使你有权限，也不要主动尝试写入或修改文件
+## 基础工具
+- read_file: 读取文件内容
+- list_directory: 列出目录结构
+- glob: 按模式查找文件
+- grep: 文本搜索
+- search_code: 代码语义检索
+
+## LSP 高级代码分析工具
+- lsp_goto_definition: 跳转到符号定义位置
+- lsp_find_references: 查找所有引用位置
+- lsp_hover: 获取文档和类型信息
+- lsp_document_symbol: 列出文件结构
+- lsp_workspace_symbol: 全局符号搜索
+❌ 禁止：write_file、edit_file、bash 等修改性工具
 
 🔄 模式切换提示：
 

@@ -102,8 +102,7 @@ public class ConcurrentToolExecutor {
                                         List<ToolExecutionResult> results, 
                                         int total) {
         if (toolCalls.size() == 1) {
-            int originalIndex = findOriginalIndex(toolCalls.get(0), total);
-            results.add(executeSingle(toolCalls.get(0), originalIndex, total));
+            results.add(executeSingle(toolCalls.get(0), 0, total));
             return;
         }
 
@@ -112,9 +111,9 @@ public class ConcurrentToolExecutor {
             
             for (int i = 0; i < toolCalls.size(); i++) {
                 ToolCall call = toolCalls.get(i);
-                int originalIndex = findOriginalIndex(call, total);
-                Future<ToolExecutionResult> future = executor.submit(() -> executeSingle(call, originalIndex, total));
-                futureIndexMap.put(future, originalIndex);
+                final int index = i;
+                Future<ToolExecutionResult> future = executor.submit(() -> executeSingle(call, index, total));
+                futureIndexMap.put(future, index);
             }
 
             for (Map.Entry<Future<ToolExecutionResult>, Integer> entry : futureIndexMap.entrySet()) {
@@ -131,16 +130,9 @@ public class ConcurrentToolExecutor {
         }
     }
 
-    private int findOriginalIndex(ToolCall toolCall, int total) {
-        for (int i = 0; i < total; i++) {
-            if (toolCall.getId().equals(toolCall.getId())) {
-                return i;
-            }
-        }
-        return 0;
-    }
 
-    private ToolExecutionResult executeSingle(ToolCall toolCall, int index, int total) {
+
+    public ToolExecutionResult executeSingle(ToolCall toolCall, int index, int total) {
         Map<String, String> mdcSnapshot = LoggingContext.snapshot();
         
         if (toolCall.getFunction() == null || toolCall.getFunction().getName() == null 

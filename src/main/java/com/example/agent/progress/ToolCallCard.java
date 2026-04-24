@@ -107,13 +107,12 @@ public class ToolCallCard {
         if (spinnerThread != null) {
             spinnerThread.interrupt();
             try {
-                spinnerThread.join(200);
+                spinnerThread.join(500);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
             spinnerThread = null;
         }
-        clearLine();
     }
 
     private void clearLine() {
@@ -135,6 +134,9 @@ public class ToolCallCard {
         String displayDetail = truncate(detail, 60);
 
         StringBuilder line = new StringBuilder();
+        line.append("\r");
+        line.append(" ".repeat(TERMINAL_WIDTH));
+        line.append("\r");
         line.append("  ");
         line.append(ConsoleStyle.gray(prefix));
         line.append(" ");

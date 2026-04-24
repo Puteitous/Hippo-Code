@@ -1,7 +1,7 @@
 package com.example.agent.lsp.tools;
 
 import com.example.agent.lsp.LspClient;
-import com.example.agent.lsp.model.LocationLink;
+import com.example.agent.lsp.model.Location;
 import com.example.agent.tools.ToolExecutionException;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -16,15 +16,12 @@ public class GoToDefinitionTool extends LspBaseTool {
 
     @Override
     public String getName() {
-        return "lsp_" + languageId + "_definition";
+        return "lsp_goto_definition";
     }
 
     @Override
     public String getDescription() {
-        return "【LSP " + languageId + "】精准查找符号的定义位置。比 grep 准确 100 倍！" +
-               "返回定义所在的文件路径、行号和列号。" +
-               "用于：找到方法定义、类声明、变量创建位置。" +
-               "注意：行号和列号从 0 开始！";
+        return "跳转到符号定义位置，返回定义所在的文件路径和准确位置";
     }
 
     @Override
@@ -53,34 +50,70 @@ public class GoToDefinitionTool extends LspBaseTool {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        try {
-            String file = arguments.get("file").asText();
-            int line = arguments.get("line").asInt();
-            int column = arguments.get("column").asInt();
+        logger.info("【GoToDefinition】收到调用请求，完整参数: {}", arguments);
+        
+        if (!lspClient.isInitialized()) {
+            logger.warn("【GoToDefinition】LSP 未初始化，请求参数: {}", arguments);
+            return "ℹ️ LSP 服务正在启动中，暂时无法使用跳转到定义功能。\n" +
+                   "建议：可以先用 grep 工具进行简单搜索，等待 LSP 初始化完成后再重试。\n" +
+                   "提示：jdtls 首次启动需要 60-120 秒建立索引。";
+        }
+        
+        String file = arguments.get("file").asText();
+        int line = arguments.get("line").asInt();
+        int column = arguments.get("column").asInt();
 
-            List<LocationLink> results = lspClient.definition(file, line, column)
+        try {
+            logger.info("【GoToDefinition】调用 LSP definition: file={}, line={}, column={}", file, line, column);
+
+            List<Location> results = lspClient.definition(file, line, column)
                     .get(30, java.util.concurrent.TimeUnit.SECONDS);
+
+            logger.info("【GoToDefinition】LSP 响应成功，结果数量: {}", results.size());
+            for (int i = 0; i < results.size(); i++) {
+                Location loc = results.get(i);
+                logger.info("【GoToDefinition】结果 {}: uri={}, range={}", 
+                        i + 1, loc.getUri(), loc.getRange());
+            }
 
             return formatResults(results);
         } catch (Exception e) {
-            throw new ToolExecutionException("执行 definition 失败", e);
+            Throwable actual = unwrapException(e);
+            String msg = actual.getMessage() != null ? actual.getMessage() : "未知错误";
+            
+            logger.error("【GoToDefinition】调用失败! 请求参数: file={}, line={}, column={}", 
+                    file, line, column, actual);
+            logger.error("【GoToDefinition】异常堆栈: ", actual);
+            
+            if (msg.contains("未初始化") || msg.contains("连接未建立")) {
+                return "ℹ️ LSP 服务正在启动中，暂时无法使用跳转到定义功能。\n" +
+                       "建议：可以先用 grep 工具进行简单搜索，等待 LSP 初始化完成后再重试。";
+            }
+            return "⚠️ 跳转到定义失败: " + msg + "\n" +
+                   "建议：检查文件路径是否正确，行号/列号是否有效。";
         }
     }
 
-    private String formatResults(List<LocationLink> links) {
-        if (links.isEmpty()) {
-            return "❌ 未找到定义位置。\n可能原因：LSP 还在索引中，或光标不在符号上。";
+    private String formatResults(List<Location> locations) {
+        if (locations.isEmpty()) {
+            if (lspClient.isIndexingInProgress()) {
+                long elapsedSeconds = (System.currentTimeMillis() - lspClient.getInitializedTimestamp()) / 1000;
+                return "ℹ️ LSP 正在建立索引中（已运行 " + elapsedSeconds + " 秒），暂未找到结果。\n" +
+                       "提示：jdtls 完整索引通常需要 60-120 秒。\n" +
+                       "建议：可以先用 grep 工具搜索，或稍后再重试跳转到定义。";
+            }
+            return "❌ 未找到定义位置。\n可能原因：光标不在符号名称上，请调整行号列号后重试。";
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("✅ 找到 ").append(links.size()).append(" 个定义位置：\n\n");
+        sb.append("✅ 找到 ").append(locations.size()).append(" 个定义位置：\n\n");
 
-        for (int i = 0; i < links.size(); i++) {
-            LocationLink link = links.get(i);
-            Path path = link.toFilePath();
+        for (int i = 0; i < locations.size(); i++) {
+            Location loc = locations.get(i);
+            Path path = loc.toFilePath();
             sb.append(i + 1).append(". ").append(path).append("\n");
-            sb.append("   行: ").append(link.getTargetRange().getStart().getLine());
-            sb.append("  列: ").append(link.getTargetRange().getStart().getCharacter()).append("\n\n");
+            sb.append("   行: ").append(loc.getRange().getStart().getLine());
+            sb.append("  列: ").append(loc.getRange().getStart().getCharacter()).append("\n\n");
         }
 
         return sb.toString();
