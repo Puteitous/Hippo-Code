@@ -227,8 +227,9 @@ public class AgentContext {
         conversation.addMessage(Message.system(content));
     }
 
-    public void addToolResult(String toolCallId, String toolName, String content) {
-        conversation.addMessage(Message.toolResult(toolCallId, toolName, content));
+    public void AgentContext(String toolCallId, String toolName, String content) {
+        String compressed = conversationService.getToolResultCompressor().compress(content);
+        conversation.addMessage(Message.toolResult(toolCallId, toolName, compressed));
     }
 
     public List<Message> prepareForInference() {

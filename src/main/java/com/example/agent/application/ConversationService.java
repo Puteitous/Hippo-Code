@@ -7,6 +7,7 @@ import com.example.agent.context.SessionCompactionState;
 import com.example.agent.context.compressor.AutoCompactTrigger;
 import com.example.agent.context.compressor.TruncateCompressor;
 import com.example.agent.context.config.ContextConfig;
+import com.example.agent.logging.CompactionMetricsCollector;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
@@ -304,6 +305,13 @@ public class ConversationService {
         return components != null 
             ? components.autoCompactTrigger.getMetrics().getSummary() 
             : "No compaction data available";
+    }
+
+    public CompactionMetricsCollector getCompactionMetrics(Conversation conversation) {
+        ConversationComponents components = getComponents(conversation);
+        return components != null 
+            ? components.autoCompactTrigger.getMetrics() 
+            : null;
     }
 
     public int getTokenCount(Conversation conversation) {

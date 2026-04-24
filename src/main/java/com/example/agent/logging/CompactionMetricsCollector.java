@@ -73,6 +73,18 @@ public class CompactionMetricsCollector {
         }
     }
 
+    public int getTotalCompactions() {
+        return totalCompactions.get();
+    }
+
+    public int getSlidingWindowSuccess() {
+        return slidingWindowSuccess.get();
+    }
+
+    public int getLlmSummaryFallback() {
+        return llmSummaryFallback.get();
+    }
+
     public String getSummary() {
         int total = totalCompactions.get();
         int success = slidingWindowSuccess.get();

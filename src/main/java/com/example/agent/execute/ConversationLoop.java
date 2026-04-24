@@ -198,7 +198,52 @@ public class ConversationLoop {
                     conversationLogger.logInterruptedSummary();
                 }
             }
+            
+            if (context.getConfig().getUi().isShowTokenUsage()) {
+                printContextProgressBar();
+            }
         }
+    }
+
+    private void printContextProgressBar() {
+        int currentTokens;
+        boolean isEstimated = false;
+        
+        if (conversation.hasKnownUsage()) {
+            currentTokens = conversation.getLastKnownTotalTokens();
+        } else {
+            List<Message> fullContext = conversationService.prepareForInference(conversation);
+            int messageTokens = tokenEstimator.estimateConversationTokens(fullContext);
+            int toolDefinitionOverhead = 2400;
+            currentTokens = messageTokens + toolDefinitionOverhead;
+            isEstimated = true;
+        }
+        
+        int maxTokens = context.getConfig().getContext().getMaxTokens();
+        double ratio = (double) currentTokens / maxTokens;
+        
+        int percent = (int) (ratio * 100);
+        String bar = ConsoleStyle.progressBar(ratio, 20);
+        
+        String status;
+        if (ratio < 0.7) {
+            status = "✓ 正常";
+        } else if (ratio < 0.85) {
+            status = "⚡ 良好";
+        } else if (ratio < 0.95) {
+            status = "⚠️ 警告";
+        } else {
+            status = "🔄 压缩中";
+        }
+        
+        String label = ConsoleStyle.gray("上下文: ");
+        String accuracyMark = isEstimated ? ConsoleStyle.gray("~") : ConsoleStyle.green("✓");
+        String tokenInfo = ConsoleStyle.gray(String.format(" %,d/%,d tokens (%d%%) ", 
+            currentTokens, maxTokens, percent));
+        
+        ui.println();
+        ui.println(accuracyMark + " " + label + bar + tokenInfo + ConsoleStyle.gray(status));
+        ui.println();
     }
 
     private void saveSession(boolean completed) {

@@ -143,6 +143,47 @@ public final class ConsoleStyle {
                 .toAnsi();
     }
 
+    public static String progressBar(double ratio, int width) {
+        int filled = (int) Math.round(ratio * width);
+        filled = Math.max(0, Math.min(width, filled));
+        
+        AttributedStringBuilder bar = new AttributedStringBuilder();
+        bar.append("[");
+        
+        String color;
+        if (ratio < 0.7) {
+            color = GREEN;
+        } else if (ratio < 0.85) {
+            color = CYAN;
+        } else if (ratio < 0.95) {
+            color = "YELLOW";
+        } else {
+            color = "RED";
+        }
+        
+        for (int i = 0; i < width; i++) {
+            if (i < filled) {
+                if (GREEN.equals(color)) {
+                    bar.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
+                } else if (CYAN.equals(color)) {
+                    bar.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN));
+                } else if ("YELLOW".equals(color)) {
+                    bar.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW));
+                } else {
+                    bar.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.RED));
+                }
+                bar.append("█");
+            } else {
+                bar.style(AttributedStyle.DEFAULT.foreground(AttributedStyle.BRIGHT | AttributedStyle.BLACK));
+                bar.append("░");
+            }
+        }
+        
+        bar.style(AttributedStyle.DEFAULT);
+        bar.append("]");
+        return bar.toAnsi();
+    }
+
     public static String boldBlue(String text) {
         if (text == null) {
             return "";

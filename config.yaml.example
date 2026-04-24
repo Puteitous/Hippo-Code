@@ -48,8 +48,7 @@ ui:
 context:
   policy: simple
   max_tokens: 30000
-  max_messages: 20
-  keep_recent_turns: 6
+  # 兜底压缩策略
   tool_result:
     max_tokens: 2000
     truncate_strategy: tail

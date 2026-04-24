@@ -1,5 +1,6 @@
 package com.example.agent.context.compressor;
 
+import com.example.agent.console.ConsoleStyle;
 import com.example.agent.context.ContextWindow;
 import com.example.agent.context.SessionCompactionState;
 import com.example.agent.context.budget.BudgetListener;
@@ -221,10 +222,10 @@ public class AutoCompactTrigger implements BudgetListener {
 
     private void printClippingSuccessToConsole(ContextClipper.CompactionResult result, boolean incremental) {
         System.out.println();
-        System.out.println("\u001B[36m✅ " + (incremental ? "增量" : "") + "零成本裁剪完成（动态滑动窗口）\u001B[0m");
-        System.out.println("\u001B[36m   算法：动态 token 范围（10K-40K），无 LLM 调用\u001B[0m");
-        System.out.println("\u001B[36m   保留 " + (result.getTotalTurns() - result.getRemovedTurns()) + " / " + result.getTotalTurns() + " 个完整对话回合\u001B[0m");
-        System.out.println("\u001B[36m   释放 " + result.getSavedTokens() + " tokens\u001B[0m");
+        System.out.println(ConsoleStyle.cyan("✅ " + (incremental ? "增量" : "") + "零成本裁剪完成（动态滑动窗口）"));
+        System.out.println(ConsoleStyle.info("   算法：动态 token 范围（10K-40K），无 LLM 调用"));
+        System.out.println(ConsoleStyle.info("   保留 " + (result.getTotalTurns() - result.getRemovedTurns()) + " / " + result.getTotalTurns() + " 个完整对话回合"));
+        System.out.println(ConsoleStyle.info("   释放 " + result.getSavedTokens() + " tokens"));
         System.out.println();
     }
 
@@ -307,11 +308,11 @@ public class AutoCompactTrigger implements BudgetListener {
         int savedTokens = beforeTokens - result.getTokenCountAfter();
         double savedPercent = (double) savedTokens / beforeTokens * 100;
         System.out.println();
-        System.out.println("\u001B[33m🔄 智能摘要压缩完成（第 " + state.getCompactionCount() + " 次压缩）\u001B[0m");
-        System.out.println("\u001B[33m   算法：LLM 结构化摘要\u001B[0m");
-        System.out.println("\u001B[33m   融合 " + result.getMergedCount() + " 条早期历史为摘要\u001B[0m");
-        System.out.println("\u001B[33m   释放 " + savedTokens + " tokens (节省 " + String.format("%.1f", savedPercent) + "%)\u001B[0m");
-        System.out.println("\u001B[33m   注：动态滑动窗口无效，已降级为深度压缩\u001B[0m");
+        System.out.println(ConsoleStyle.yellow("🔄 智能摘要压缩完成（第 " + state.getCompactionCount() + " 次压缩）"));
+        System.out.println(ConsoleStyle.info("   算法：LLM 结构化摘要"));
+        System.out.println(ConsoleStyle.info("   融合 " + result.getMergedCount() + " 条早期历史为摘要"));
+        System.out.println(ConsoleStyle.info("   释放 " + savedTokens + " tokens (节省 " + String.format("%.1f", savedPercent) + "%)"));
+        System.out.println(ConsoleStyle.gray("   注：动态滑动窗口无效，已降级为深度压缩"));
         System.out.println();
     }
 

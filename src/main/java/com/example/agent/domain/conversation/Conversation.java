@@ -4,6 +4,7 @@ import com.example.agent.context.BlockingGuard;
 import com.example.agent.context.ContextWindow;
 import com.example.agent.context.TokenBudget;
 import com.example.agent.llm.model.Message;
+import com.example.agent.llm.model.Usage;
 import com.example.agent.service.TokenEstimator;
 
 import java.util.List;
@@ -16,6 +17,7 @@ public class Conversation {
     private final String sessionId;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private String systemPrompt;
+    private volatile Usage lastKnownUsage;
 
     public Conversation(int maxTokens, TokenEstimator tokenEstimator) {
         this(maxTokens, tokenEstimator, String.valueOf(System.currentTimeMillis()));
@@ -151,6 +153,22 @@ public class Conversation {
 
     public BlockingGuard getBlockingGuard() {
         return blockingGuard;
+    }
+
+    public void updateLastKnownUsage(Usage usage) {
+        this.lastKnownUsage = usage;
+    }
+
+    public Usage getLastKnownUsage() {
+        return lastKnownUsage;
+    }
+
+    public boolean hasKnownUsage() {
+        return lastKnownUsage != null;
+    }
+
+    public int getLastKnownTotalTokens() {
+        return lastKnownUsage != null ? lastKnownUsage.getTotalTokens() : 0;
     }
 
     public String getSessionId() {

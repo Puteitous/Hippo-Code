@@ -168,6 +168,7 @@ public class CommandDispatcher {
         }
 
         if ("tokens".equalsIgnoreCase(line)) {
+            printTokenDashboard();
             tokenMetricsCollector.printDailySummary();
             return CommandResult.continueExecution();
         }
@@ -277,6 +278,83 @@ public class CommandDispatcher {
         }
         
         return CommandResult.continueExecution();
+    }
+
+    private void printTokenDashboard() {
+        final int LINE_WIDTH = 58;
+        ui.println();
+        ui.println(ConsoleStyle.boldCyan("╔══════════════════════════════════════════════════════════╗"));
+        ui.println(ConsoleStyle.boldCyan("║                    📊 Token 仪表盘                      ║"));
+        ui.println(ConsoleStyle.boldCyan("╠══════════════════════════════════════════════════════════╣"));
+        
+        int maxTokens = context.getConfig().getContext().getMaxTokens();
+        String accuracyMark = ConsoleStyle.gray("~");
+        int currentTokens;
+        
+        if (conversation.hasKnownUsage()) {
+            accuracyMark = ConsoleStyle.green("✓");
+            var usage = conversation.getLastKnownUsage();
+            currentTokens = conversation.getLastKnownTotalTokens();
+            
+            int prompt = usage.getPromptTokens();
+            int completion = usage.getCompletionTokens();
+            
+            double ratio = Math.min(1.0, (double) currentTokens / maxTokens);
+            int percent = (int) (ratio * 100);
+            String bar = ConsoleStyle.progressBar(ratio, 36);
+            
+            String line1 = "  " + accuracyMark + ConsoleStyle.gray("  当前上下文: ") + 
+                String.format("%,d / %,d tokens", currentTokens, maxTokens);
+            ui.println(ConsoleStyle.boldCyan("║") + line1 + pad(LINE_WIDTH - line1.length()) + ConsoleStyle.boldCyan("║"));
+            
+            String line2 = "     " + bar + String.format(" %d%%", percent);
+            ui.println(ConsoleStyle.boldCyan("║") + line2 + pad(LINE_WIDTH - line2.length()) + ConsoleStyle.boldCyan("║"));
+            
+            String line3 = ConsoleStyle.gray("     ├─ Prompt:     ") + String.format("%,d", prompt);
+            ui.println(ConsoleStyle.boldCyan("║") + line3 + pad(LINE_WIDTH - line3.length()) + ConsoleStyle.boldCyan("║"));
+            String line4 = ConsoleStyle.gray("     └─ Completion: ") + String.format("%,d", completion);
+            ui.println(ConsoleStyle.boldCyan("║") + line4 + pad(LINE_WIDTH - line4.length()) + ConsoleStyle.boldCyan("║"));
+        } else {
+            List<Message> fullContext = conversationService.prepareForInference(conversation);
+            int messageTokens = context.getTokenEstimator().estimateConversationTokens(fullContext);
+            currentTokens = messageTokens + 2400;
+            
+            double ratio = Math.min(1.0, (double) currentTokens / maxTokens);
+            int percent = (int) (ratio * 100);
+            String bar = ConsoleStyle.progressBar(ratio, 36);
+            
+            String line1 = "  " + accuracyMark + ConsoleStyle.gray("  当前上下文: ") + 
+                String.format("%,d / %,d tokens", currentTokens, maxTokens);
+            ui.println(ConsoleStyle.boldCyan("║") + line1 + pad(LINE_WIDTH - line1.length()) + ConsoleStyle.boldCyan("║"));
+            
+            String line2 = "     " + bar + String.format(" %d%%", percent);
+            ui.println(ConsoleStyle.boldCyan("║") + line2 + pad(LINE_WIDTH - line2.length()) + ConsoleStyle.boldCyan("║"));
+            
+            String line3 = ConsoleStyle.gray("     (估算值，首轮回退模式)");
+            ui.println(ConsoleStyle.boldCyan("║") + line3 + pad(LINE_WIDTH - line3.length()) + ConsoleStyle.boldCyan("║"));
+        }
+        
+        var metrics = conversationService.getCompactionMetrics(conversation);
+        if (metrics != null && metrics.getTotalCompactions() > 0) {
+            ui.println(ConsoleStyle.boldCyan("╠══════════════════════════════════════════════════════════╣"));
+            String header = ConsoleStyle.cyan("  🗜️  压缩统计");
+            ui.println(ConsoleStyle.boldCyan("║") + header + pad(LINE_WIDTH - header.length()) + ConsoleStyle.boldCyan("║"));
+            
+            String stats = String.format("     滑动窗口 %d 次, LLM摘要 %d 次", 
+                metrics.getSlidingWindowSuccess(), metrics.getLlmSummaryFallback());
+            ui.println(ConsoleStyle.boldCyan("║") + stats + pad(LINE_WIDTH - stats.length()) + ConsoleStyle.boldCyan("║"));
+        }
+        
+        ui.println(ConsoleStyle.boldCyan("╚══════════════════════════════════════════════════════════╝"));
+        ui.println();
+        ui.println(ConsoleStyle.gray("  ✓ = 真实值，来自 LLM 返回； ~ = 估算值"));
+        ui.println();
+    }
+    
+    private String pad(int spaces) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < spaces; i++) sb.append(' ');
+        return sb.toString();
     }
 
     private CommandResult handleMultilineInput() {

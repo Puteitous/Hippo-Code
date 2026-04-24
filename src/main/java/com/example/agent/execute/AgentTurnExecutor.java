@@ -105,6 +105,9 @@ public class AgentTurnExecutor {
                 assistantMessage.setContent(contentBuilder.toString());
             }
 
+            if (usage != null) {
+                conversation.updateLastKnownUsage(usage);
+            }
             conversationService.addAssistantMessage(conversation, assistantMessage, usage);
 
             List<ToolCall> toolCalls = assistantMessage.getToolCalls();
@@ -143,6 +146,9 @@ public class AgentTurnExecutor {
                 return AgentTurnResult.EMPTY_RESPONSE;
             }
 
+            if (usage != null) {
+                conversation.updateLastKnownUsage(usage);
+            }
             conversationService.addAssistantMessage(conversation, assistantMessage, usage);
 
             if (conversationLogger != null) {
