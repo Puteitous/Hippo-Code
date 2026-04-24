@@ -251,6 +251,10 @@ public class AgentUi {
         terminal.writer().flush();
     }
 
+    public void printPrompt() {
+        print(ConsoleStyle.prompt());
+    }
+
     public void clearScreen() {
         if (!isTerminalAvailable()) {
             return;

@@ -107,6 +107,32 @@ public class ConversationService {
         return conversation;
     }
 
+    public Conversation createSubAgentConversation(String systemPrompt, String parentSessionId) {
+        String subSessionId = parentSessionId != null 
+            ? parentSessionId + "_sub_" + System.nanoTime() % 1000000
+            : "sub_" + System.currentTimeMillis();
+            
+        Conversation conversation = new Conversation(
+            defaultConfig.getMaxTokens(), 
+            tokenEstimator, 
+            subSessionId
+        );
+        conversation.setSystemPrompt(systemPrompt != null ? systemPrompt : "");
+
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            conversation.addMessage(Message.system(systemPrompt));
+        }
+
+        logger.debug("创建 Sub-Agent 轻量级会话: sessionId={}, parent={}", 
+            subSessionId, parentSessionId);
+        return conversation;
+    }
+
+    @Deprecated
+    public Conversation createSubAgentConversation(String systemPrompt) {
+        return createSubAgentConversation(systemPrompt, null);
+    }
+
     public void ensureSessionComponents(Conversation conversation) {
         if (!componentRegistry.containsKey(conversation.getSessionId())) {
             createSessionComponents(conversation, new SessionCompactionState());

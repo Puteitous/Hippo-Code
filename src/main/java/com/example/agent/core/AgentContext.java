@@ -48,7 +48,7 @@ public class AgentContext {
     private final Config config;
     private final Terminal terminal;
     private final LineReader reader;
-    private final String sessionId;
+    private String sessionId;
     
     private LlmClient llmClient;
     private ToolRegistry toolRegistry;
@@ -262,6 +262,10 @@ public class AgentContext {
 
     public String getSessionId() {
         return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public Terminal getTerminal() {

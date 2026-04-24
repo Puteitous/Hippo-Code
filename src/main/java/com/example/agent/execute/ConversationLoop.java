@@ -78,6 +78,7 @@ public class ConversationLoop {
         conversationService.ensureSessionComponents(conversation);
         String sessionId = conversation.getSessionId();
         currentSessionId = sessionId;
+        context.setSessionId(sessionId);
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(
@@ -354,6 +355,7 @@ public class ConversationLoop {
         conversationService.fixUnfinishedToolCall(conversation);
         
         currentSessionId = sessionId;
+        context.setSessionId(sessionId);
         conversationRound = countUserMessages(conversationService.getHistory(conversation));
         
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));

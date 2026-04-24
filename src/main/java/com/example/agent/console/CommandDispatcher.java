@@ -881,6 +881,8 @@ public class CommandDispatcher {
     }
 
     public boolean validateConfig() {
+        registerSubAgentEventListeners();
+
         if (config.getApiKey() == null || config.getApiKey().isEmpty()) {
             ui.printConfigValidationError();
             return false;
@@ -911,5 +913,52 @@ public class CommandDispatcher {
 
     public String getCurrentSessionId() {
         return currentSessionId;
+    }
+
+    private void registerSubAgentEventListeners() {
+        com.example.agent.core.event.EventBus.subscribe(
+            com.example.agent.subagent.event.SubAgentStartedEvent.class,
+            event -> {
+                ui.println();
+                ui.println(ConsoleStyle.boldCyan("🔄 Sub-Agent 启动"));
+                ui.println(ConsoleStyle.gray("  Task ID: ") + event.getTaskId());
+                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
+                ui.println();
+            }
+        );
+
+        com.example.agent.core.event.EventBus.subscribe(
+            com.example.agent.subagent.event.SubAgentProgressEvent.class,
+            event -> {
+                String msg = event.getMessage().length() > 60
+                    ? event.getMessage().substring(0, 60) + "..."
+                    : event.getMessage();
+                ui.println(ConsoleStyle.gray("  [" + event.getTaskId() + "] ") + ConsoleStyle.cyan(msg));
+            }
+        );
+
+        com.example.agent.core.event.EventBus.subscribe(
+            com.example.agent.subagent.event.SubAgentCompletedEvent.class,
+            event -> {
+                ui.println();
+                ui.println(ConsoleStyle.boldGreen("✅ Sub-Agent 完成: " + event.getTaskId()));
+                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
+                ui.println(ConsoleStyle.gray("  结果: ") + event.getResult());
+                ui.println();
+                ui.printPrompt();
+            }
+        );
+
+        com.example.agent.core.event.EventBus.subscribe(
+            com.example.agent.subagent.event.SubAgentFailedEvent.class,
+            event -> {
+                ui.println();
+                ui.println(ConsoleStyle.boldRed("❌ Sub-Agent 失败: " + event.getTaskId()));
+                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
+                ui.println(ConsoleStyle.gray("  错误: ") + event.getErrorMessage());
+                ui.println();
+                ui.printPrompt();
+            }
+        );
     }
 }
