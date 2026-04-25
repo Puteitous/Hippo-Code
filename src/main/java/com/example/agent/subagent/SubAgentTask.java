@@ -145,6 +145,13 @@ public class SubAgentTask {
         return Collections.unmodifiableList(dependsOn);
     }
 
+    public void setDependsOn(List<String> dependsOn) {
+        if (dependsOn != null) {
+            this.dependsOn.clear();
+            this.dependsOn.addAll(dependsOn);
+        }
+    }
+
     public boolean hasDependencies() {
         return !dependsOn.isEmpty();
     }

@@ -133,6 +133,15 @@
 ]}}
 ```
 
+DAG 依赖执行（任务 2 依赖任务 0 和 1）：
+```json
+{"name": "fork_agents", "parameters": {"tasks": [
+  {"task": "扫描目录结构"},
+  {"task": "读取配置文件"},
+  {"task": "生成架构报告", "depends_on_index": [0, 1]}
+]}}
+```
+
 单任务同步等待结果：
 ```json
 {"name": "fork_agent", "parameters": {"task": "读取 config.yml", "wait_for_result": true}}

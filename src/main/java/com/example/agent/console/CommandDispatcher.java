@@ -917,34 +917,48 @@ public class CommandDispatcher {
 
     private void registerSubAgentEventListeners() {
         com.example.agent.core.event.EventBus.subscribe(
+            com.example.agent.subagent.event.SubAgentWaitingEvent.class,
+            event -> {
+                String deps = event.getDependsOn().stream()
+                    .map(id -> id.length() > 4 ? id.substring(0, 4) : id)
+                    .collect(java.util.stream.Collectors.joining(", "));
+                String shortId = event.getTaskId().length() > 8
+                    ? event.getTaskId().substring(0, 8)
+                    : event.getTaskId();
+                ui.println(ConsoleStyle.yellow("⏳ ") + shortId + "  → [" + deps + "]  等待依赖");
+            }
+        );
+
+        com.example.agent.core.event.EventBus.subscribe(
             com.example.agent.subagent.event.SubAgentStartedEvent.class,
             event -> {
-                ui.println();
-                ui.println(ConsoleStyle.boldCyan("🔄 Sub-Agent 启动"));
-                ui.println(ConsoleStyle.gray("  Task ID: ") + event.getTaskId());
-                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
-                ui.println();
+                String shortId = event.getTaskId().length() > 8
+                    ? event.getTaskId().substring(0, 8)
+                    : event.getTaskId();
+                String shortDesc = event.getDescription().length() > 25
+                    ? event.getDescription().substring(0, 25) + "..."
+                    : event.getDescription();
+                ui.println(ConsoleStyle.cyan("🔄 ") + shortId + "  " + String.format("%-28s", shortDesc) + "  执行中");
             }
         );
 
         com.example.agent.core.event.EventBus.subscribe(
             com.example.agent.subagent.event.SubAgentProgressEvent.class,
             event -> {
-                String msg = event.getMessage().length() > 60
-                    ? event.getMessage().substring(0, 60) + "..."
-                    : event.getMessage();
-                ui.println(ConsoleStyle.gray("  [" + event.getTaskId() + "] ") + ConsoleStyle.cyan(msg));
             }
         );
 
         com.example.agent.core.event.EventBus.subscribe(
             com.example.agent.subagent.event.SubAgentCompletedEvent.class,
             event -> {
-                ui.println();
-                ui.println(ConsoleStyle.boldGreen("✅ Sub-Agent 完成: " + event.getTaskId()));
-                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
-                ui.println(ConsoleStyle.gray("  结果: ") + event.getResult());
-                ui.println();
+                String shortId = event.getTaskId().length() > 8
+                    ? event.getTaskId().substring(0, 8)
+                    : event.getTaskId();
+                String shortResult = event.getResult().length() > 28
+                    ? event.getResult().substring(0, 28) + "..."
+                    : event.getResult();
+                String firstLine = shortResult.split("\n")[0];
+                ui.println(ConsoleStyle.green("✅ ") + shortId + "  " + String.format("%-28s", firstLine) + "  完成");
                 ui.printPrompt();
             }
         );
@@ -952,11 +966,13 @@ public class CommandDispatcher {
         com.example.agent.core.event.EventBus.subscribe(
             com.example.agent.subagent.event.SubAgentFailedEvent.class,
             event -> {
-                ui.println();
-                ui.println(ConsoleStyle.boldRed("❌ Sub-Agent 失败: " + event.getTaskId()));
-                ui.println(ConsoleStyle.gray("  任务: ") + event.getDescription());
-                ui.println(ConsoleStyle.gray("  错误: ") + event.getErrorMessage());
-                ui.println();
+                String shortId = event.getTaskId().length() > 8
+                    ? event.getTaskId().substring(0, 8)
+                    : event.getTaskId();
+                String error = event.getErrorMessage().length() > 28
+                    ? event.getErrorMessage().substring(0, 28) + "..."
+                    : event.getErrorMessage();
+                ui.println(ConsoleStyle.red("❌ ") + shortId + "  " + String.format("%-28s", error) + "  失败");
                 ui.printPrompt();
             }
         );

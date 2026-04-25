@@ -106,6 +106,7 @@ public class ForkAgentTool implements ToolExecutor {
         }
 
         SubAgentTask subTask = manager.forkAgent(task, systemPrompt, timeoutSeconds);
+        manager.scheduleTask(subTask);
 
         if (!waitForResult) {
             return "✅ Sub-Agent 已启动\n" +

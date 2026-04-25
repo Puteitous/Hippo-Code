@@ -99,11 +99,16 @@ public class SubAgentManager {
         }
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
 
-        startExecution(task, subAgentLogger);
-
-        logger.info("SubAgent 已启动: taskId={}, dependsOn={}, description={}",
+        logger.info("SubAgent 已创建: taskId={}, dependsOn={}, description={}",
             task.getTaskId(), task.getDependsOn(), taskDescription);
         return task;
+    }
+
+    public void scheduleTask(SubAgentTask task) {
+        SubAgentLogger subAgentLogger = loggers.get(task.getTaskId());
+        if (subAgentLogger != null) {
+            startExecution(task, subAgentLogger);
+        }
     }
 
     private void startExecution(SubAgentTask task, SubAgentLogger subAgentLogger) {
@@ -111,6 +116,11 @@ public class SubAgentManager {
             task.setStatus(SubAgentStatus.WAITING);
             subAgentLogger.log("任务等待依赖完成: " + task.getDependsOn());
             task.addLog("等待依赖任务完成: " + task.getDependsOn());
+            com.example.agent.core.event.EventBus.publish(
+                new com.example.agent.subagent.event.SubAgentWaitingEvent(
+                    task.getTaskId(), task.getDescription(), task.getDependsOn()
+                )
+            );
             return;
         }
 
@@ -203,6 +213,11 @@ public class SubAgentManager {
                 if (areDependenciesSatisfied(task)) {
                     task.addLog("依赖已满足，开始执行");
                     SubAgentLogger logger = loggers.get(task.getTaskId());
+                    com.example.agent.core.event.EventBus.publish(
+                        new com.example.agent.subagent.event.SubAgentStartedEvent(
+                            task.getTaskId(), task.getDescription() + " (依赖已满足)"
+                        )
+                    );
                     submitTask(task, logger);
                 }
             }

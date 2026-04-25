@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -88,11 +89,24 @@ public class SubAgentRunner implements Runnable {
                     .filter(m -> !m.isSystem())
                     .collect(Collectors.toList()));
                 
-                subAgentLogger.log("上下文消息数: " + finalContext.size() + " (强制构建 Sub-Agent System Prompt)");
+                boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
+                if (!hasUserMessage) {
+                    finalContext.add(Message.user("请执行任务。"));
+                }
+                
+                boolean isFinalRound = (turnCount == MAX_TURNS - 1);
+                
+                if (isFinalRound) {
+                    finalContext.add(Message.user("这是最后一轮执行机会，请基于所有工具调用结果，输出最终总结，不能再调用任何工具！"));
+                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (最后一轮 - 强制总结)");
+                } else {
+                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (强制构建 Sub-Agent System Prompt)");
+                }
+                
                 subAgentLogger.log("System Prompt 长度: " + forcedSystemPrompt.length() + " 字符");
                 subAgentLogger.log("任务描述: " + task.getDescription());
-                List<Tool> allowedTools = getFilteredTools();
-                subAgentLogger.log("可用工具数: " + allowedTools.size());
+                List<Tool> allowedTools = isFinalRound ? Collections.emptyList() : getFilteredTools();
+                subAgentLogger.log("可用工具数: " + allowedTools.size() + (isFinalRound ? " (最后一轮禁用工具，强制总结)" : ""));
 
                 ChatResponse response = null;
                 int llmRetryCount = 0;
@@ -175,14 +189,20 @@ public class SubAgentRunner implements Runnable {
             "1. ✅ **必须调用工具获取真实数据** - 所有信息必须通过工具调用获得\n" +
             "2. ❌ **严禁编造任何结果** - 不知道就调用工具，绝对不能想象、假设、编造\n" +
             "3. ❌ **严禁直接回答** - 你没有本地知识，不调用工具给出的任何答案都是错误的\n" +
-            "4. ✅ **必须使用工具** - 你只能通过以下工具完成任务: read_file, glob, grep, search_code, list_directory, list_subagents\n" +
-            "5. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n" +
+            "4. ❌ **严禁询问用户** - 绝对不能问用户任何问题、不能要求补充信息\n" +
+            "7. ❌ **禁止无意义循环** - 同样参数的工具最多调用 2 次，重复无济于事\n" +
+            "5. ✅ **信息不足就如实说** - 找不到就说「未找到」，信息不足就说「信息不足」，不要追问\n" +
+            "6. ✅ **结果明确立即结束** - 一旦获得确定结果（文件不存在/信息已足够），立刻输出最终总结，不再调用工具\n" +
+            "6. ✅ **必须使用工具** - 你只能通过以下工具完成任务: read_file, glob, grep, search_code, list_directory, list_subagents\n" +
+            "7. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n" +
             "## 📋 执行流程\n" +
             "1. 分析任务需要哪些数据\n" +
             "2. 调用对应的工具获取真实数据\n" +
             "3. 根据工具的实际返回结果进行总结\n" +
             "4. 明确标注哪些文件已检查，哪些结果已验证\n\n" +
-            "记住: 你是「工具执行者」，不是「答案生成者」。不调用工具 = 任务失败！";
+            "记住: 你是「工具执行者」，不是「答案生成者」。\n" +
+            "信息不足 → 调用更多工具；找不到 → 如实报告；绝对不要问用户！\n" +
+            "不调用工具 + 询问用户 = 任务失败！";
     }
 
     private List<Tool> getFilteredTools() {

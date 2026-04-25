@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class ForkAgentsTool implements ToolExecutor {
@@ -61,10 +63,10 @@ public class ForkAgentsTool implements ToolExecutor {
                                     "description": "该子任务的超时时间（秒），默认 300 秒（5分钟）",
                                     "default": 300
                                 },
-                                "depends_on": {
+                                "depends_on_index": {
                                     "type": "array",
-                                    "items": { "type": "string" },
-                                    "description": "依赖的任务 ID 列表，这些任务完成后本任务才会开始执行（用于构建 DAG 工作流）"
+                                    "items": { "type": "integer" },
+                                    "description": "依赖的任务索引列表（在本次 tasks 数组中的位置），这些任务完成后本任务才会开始执行。示例: [0, 1] 表示本任务依赖第 0 和第 1 个任务"
                                 }
                             }
                         }
@@ -118,9 +120,12 @@ public class ForkAgentsTool implements ToolExecutor {
             : 180;
 
         List<SubAgentTask> launchedTasks = new ArrayList<>();
+        Map<Integer, Integer> indexToTaskPosition = new HashMap<>();
 
+        int taskIndex = 0;
         for (JsonNode taskNode : tasksNode) {
             if (!taskNode.has("task") || taskNode.get("task").isNull()) {
+                taskIndex++;
                 continue;
             }
             String task = taskNode.get("task").asText();
@@ -134,18 +139,48 @@ public class ForkAgentsTool implements ToolExecutor {
                 taskTimeoutSeconds = Math.max(30, Math.min(3600, taskTimeoutSeconds));
             }
             
-            List<String> dependsOn = null;
-            if (taskNode.has("depends_on") && taskNode.get("depends_on").isArray()) {
-                dependsOn = new ArrayList<>();
-                for (JsonNode dep : taskNode.get("depends_on")) {
-                    if (!dep.isNull()) {
-                        dependsOn.add(dep.asText());
+            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds, null);
+            launchedTasks.add(subTask);
+            indexToTaskPosition.put(taskIndex, launchedTasks.size() - 1);
+            taskIndex++;
+        }
+
+        taskIndex = 0;
+        for (JsonNode taskNode : tasksNode) {
+            if (!taskNode.has("task") || taskNode.get("task").isNull()) {
+                taskIndex++;
+                continue;
+            }
+            
+            if (taskNode.has("depends_on_index") && taskNode.get("depends_on_index").isArray()) {
+                Integer pos = indexToTaskPosition.get(taskIndex);
+                if (pos != null) {
+                    SubAgentTask currentTask = launchedTasks.get(pos);
+                    List<String> dependsOn = currentTask.getDependsOn() != null 
+                        ? new ArrayList<>(currentTask.getDependsOn()) 
+                        : new ArrayList<>();
+                    
+                    for (JsonNode depIndexNode : taskNode.get("depends_on_index")) {
+                        if (depIndexNode.isInt()) {
+                            int depIndex = depIndexNode.asInt();
+                            Integer depPos = indexToTaskPosition.get(depIndex);
+                            if (depPos != null && depPos < launchedTasks.size()) {
+                                String depTaskId = launchedTasks.get(depPos).getTaskId();
+                                dependsOn.add(depTaskId);
+                            }
+                        }
+                    }
+                    
+                    if (!dependsOn.isEmpty()) {
+                        currentTask.setDependsOn(dependsOn);
                     }
                 }
             }
-            
-            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds, dependsOn);
-            launchedTasks.add(subTask);
+            taskIndex++;
+        }
+
+        for (SubAgentTask task : launchedTasks) {
+            manager.scheduleTask(task);
         }
 
         if (launchedTasks.isEmpty()) {

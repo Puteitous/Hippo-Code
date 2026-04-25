@@ -9,7 +9,6 @@ public class SubAgentPermissionFilter {
         "grep",
         "search_code",
         "list_directory",
-        "ask_user",
         "list_subagents"
     );
 
