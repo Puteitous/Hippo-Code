@@ -223,4 +223,26 @@ public class SubAgentManager {
     public int getActiveTaskCount() {
         return activeTasks.size();
     }
+
+    public void shutdown() {
+        int runningCount = 0;
+        for (SubAgentTask task : activeTasks.values()) {
+            if (task.getStatus() == SubAgentStatus.RUNNING || task.getStatus() == SubAgentStatus.PENDING) {
+                if (task.cancel()) {
+                    runningCount++;
+                }
+            }
+        }
+
+        for (SubAgentLogger taskLogger : loggers.values()) {
+            taskLogger.log("系统退出，任务已被取消");
+        }
+
+        activeTasks.clear();
+        loggers.clear();
+
+        if (runningCount > 0) {
+            logger.info("SubAgentManager shutdown: 已取消 {} 个运行中的子任务", runningCount);
+        }
+    }
 }

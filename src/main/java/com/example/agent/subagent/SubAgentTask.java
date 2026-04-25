@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class SubAgentTask {
@@ -20,11 +21,17 @@ public class SubAgentTask {
     private final List<String> outputLog;
     private final Instant createdAt;
     private Instant evictAfter;
+    private final int timeoutSeconds;
+    private final AtomicBoolean cancelled;
     private String resultSummary;
     private Throwable error;
     private final CompletableFuture<SubAgentTask> completionFuture;
 
     public SubAgentTask(String description, Conversation conversation) {
+        this(description, conversation, 300);
+    }
+
+    public SubAgentTask(String description, Conversation conversation, int timeoutSeconds) {
         this.taskId = UUID.randomUUID().toString().substring(0, 8);
         this.parentTaskId = null;
         this.description = description;
@@ -32,7 +39,9 @@ public class SubAgentTask {
         this.conversation = conversation;
         this.outputLog = Collections.synchronizedList(new ArrayList<>());
         this.createdAt = Instant.now();
+        this.timeoutSeconds = timeoutSeconds;
         this.evictAfter = Instant.now().plusSeconds(3600);
+        this.cancelled = new AtomicBoolean(false);
         this.completionFuture = new CompletableFuture<>();
     }
 
@@ -42,6 +51,28 @@ public class SubAgentTask {
 
     public void markFailed(Throwable e) {
         completionFuture.completeExceptionally(e);
+    }
+
+    public boolean cancel() {
+        if (cancelled.compareAndSet(false, true)) {
+            setStatus(SubAgentStatus.CANCELLED);
+            addLog("任务已被取消");
+            completionFuture.cancel(true);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean isCancelled() {
+        return cancelled.get();
+    }
+
+    public boolean isTimeout() {
+        return Instant.now().isAfter(createdAt.plusSeconds(timeoutSeconds));
+    }
+
+    public boolean shouldStopExecution() {
+        return isCancelled() || isTimeout();
     }
 
     public SubAgentTask awaitCompletion(long timeout, TimeUnit unit) throws Exception {
@@ -98,5 +129,13 @@ public class SubAgentTask {
 
     public boolean isExpired() {
         return Instant.now().isAfter(evictAfter);
+    }
+
+    public int getTimeoutSeconds() {
+        return timeoutSeconds;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 }

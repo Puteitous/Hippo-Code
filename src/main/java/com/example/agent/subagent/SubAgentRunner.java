@@ -59,6 +59,18 @@ public class SubAgentRunner implements Runnable {
 
         try {
             while (turnCount < MAX_TURNS) {
+                if (task.shouldStopExecution()) {
+                    String reason = task.isCancelled() ? "任务已被取消" : "执行超时 (" + task.getTimeoutSeconds() + " 秒)";
+                    task.addLog("执行终止: " + reason);
+                    subAgentLogger.log("执行终止: " + reason);
+                    if (task.isTimeout()) {
+                        task.markFailed(new Exception("执行超时"));
+                    } else {
+                        task.markCompleted();
+                    }
+                    break;
+                }
+
                 turnCount++;
                 task.addLog("\n--- 第 " + turnCount + " 轮 ---");
                 subAgentLogger.log("--- 第 " + turnCount + " 轮 ---");

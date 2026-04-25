@@ -118,6 +118,7 @@ public final class CoreModule {
         registry.register(new com.example.agent.tools.ForkAgentTool());
         registry.register(new ForkAgentsTool());
         registry.register(new ListSubAgentsTool());
+        registry.register(new com.example.agent.tools.CancelSubAgentTool());
 
         FileOperationStateMachine stateMachine = new FileOperationStateMachine();
         EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();

@@ -40,6 +40,12 @@
 - fork_agent: 创建单个子 Agent 执行任务（支持同步/异步双模式）
 - fork_agents: 批量创建多个子 Agent 并行执行独立任务
 - list_subagents: 查询所有子 Agent 任务的状态和执行结果
+- cancel_subagent: 取消运行中的子 Agent 任务（支持单个取消或批量取消全部）
+
+超时机制说明：
+- 每个 Sub-Agent 默认 5 分钟自动超时终止
+- 超过最大执行时间将被强制终止，防止无限执行
+- 可通过 list_subagents 查看任务执行时间和剩余时间
 
 - lsp_goto_definition: 跳转到符号定义位置
 - lsp_find_references: 查找所有引用位置

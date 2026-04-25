@@ -154,6 +154,8 @@ public class AgentApplication {
                 } catch (EndOfFileException e) {
                     ui.printGoodbye();
                     break;
+                } catch (IllegalStateException e) {
+                    break;
                 }
             }
 

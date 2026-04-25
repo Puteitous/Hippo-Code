@@ -7,6 +7,7 @@ import com.example.agent.context.config.ContextConfig;
 import com.example.agent.core.di.CoreModule;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.rule.RuleManager;
+import com.example.agent.subagent.SubAgentManager;
 
 import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
@@ -343,6 +344,11 @@ public class AgentContext {
 
     public void close() {
         logger.info("开始清理 AgentContext 资源...");
+
+        SubAgentManager subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
+        if (subAgentManager != null) {
+            subAgentManager.shutdown();
+        }
 
         if (mcpServiceManager != null) {
             mcpServiceManager.shutdown();

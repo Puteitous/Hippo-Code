@@ -17,7 +17,9 @@ public class SubAgentPermissionFilter {
         "write_file",
         "edit_file",
         "bash",
-        "fork_agent"
+        "fork_agent",
+        "fork_agents",
+        "cancel_subagent"
     );
 
     public boolean isToolAllowed(String toolName) {
