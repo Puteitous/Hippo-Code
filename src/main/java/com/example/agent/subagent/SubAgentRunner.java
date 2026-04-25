@@ -22,7 +22,10 @@ import java.util.stream.Collectors;
 public class SubAgentRunner implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(SubAgentRunner.class);
     private static final int MAX_TURNS = 10;
-    private static final int MAX_EMPTY_RESPONSE_RETRIES = 2;
+    private static final int MAX_EMPTY_RESPONSE_RETRIES = 3;
+    private static final int MAX_LLM_ERROR_RETRIES = 3;
+    private static final int MAX_TOOL_ERROR_RETRIES = 2;
+    private static final int RETRY_DELAY_MS = 1000;
 
     private final SubAgentTask task;
     private final SubAgentLogger subAgentLogger;
@@ -91,8 +94,30 @@ public class SubAgentRunner implements Runnable {
                 List<Tool> allowedTools = getFilteredTools();
                 subAgentLogger.log("可用工具数: " + allowedTools.size());
 
-                ChatResponse response = llmClient.chat(finalContext, allowedTools);
-                subAgentLogger.log("LLM 调用完成");
+                ChatResponse response = null;
+                int llmRetryCount = 0;
+                while (llmRetryCount < MAX_LLM_ERROR_RETRIES) {
+                    try {
+                        response = llmClient.chat(finalContext, allowedTools);
+                        break;
+                    } catch (Exception e) {
+                        llmRetryCount++;
+                        String msg = String.format("LLM 调用异常，第 %d/%d 次重试: %s", 
+                            llmRetryCount, MAX_LLM_ERROR_RETRIES, e.getMessage());
+                        task.addLog(msg);
+                        subAgentLogger.log(msg);
+                        if (llmRetryCount >= MAX_LLM_ERROR_RETRIES) {
+                            throw new RuntimeException("LLM 调用失败，已达最大重试次数", e);
+                        }
+                        try {
+                            Thread.sleep(RETRY_DELAY_MS * llmRetryCount);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("执行被中断", ie);
+                        }
+                    }
+                }
+                subAgentLogger.log("LLM 调用完成" + (llmRetryCount > 0 ? " (重试 " + llmRetryCount + " 次)" : ""));
 
                 Message assistantMessage = response.getFirstMessage();
                 if (assistantMessage == null) {
@@ -194,25 +219,41 @@ public class SubAgentRunner implements Runnable {
                 continue;
             }
 
-            try {
-                ToolExecutor executor = toolRegistry.getExecutor(toolName);
-                JsonNode args = objectMapper.readTree(arguments);
+            String result = null;
+            int toolRetryCount = 0;
+            while (toolRetryCount < MAX_TOOL_ERROR_RETRIES) {
+                try {
+                    ToolExecutor executor = toolRegistry.getExecutor(toolName);
+                    JsonNode args = objectMapper.readTree(arguments);
 
-                task.addLog("执行工具: " + toolName);
-                publishProgress("执行工具: " + toolName);
+                    task.addLog("执行工具: " + toolName + (toolRetryCount > 0 ? " (重试 " + toolRetryCount + " 次)" : ""));
+                    publishProgress("执行工具: " + toolName);
 
-                String result = executor.execute(args);
-                task.addLog("工具结果: " + truncate(result, 200));
-                subAgentLogger.logToolResult(toolName, result);
-
-                addToolResult(toolCall.getId(), toolName, result);
-
-            } catch (Exception e) {
-                String errorMsg = "工具执行失败 " + toolName + ": " + e.getMessage();
-                task.addLog(errorMsg);
-                subAgentLogger.logError(errorMsg, e);
-                addToolResult(toolCall.getId(), toolName, errorMsg);
+                    result = executor.execute(args);
+                    break;
+                } catch (Exception e) {
+                    toolRetryCount++;
+                    String msg = String.format("工具执行异常 [%s]，第 %d/%d 次重试: %s", 
+                        toolName, toolRetryCount, MAX_TOOL_ERROR_RETRIES, e.getMessage());
+                    task.addLog(msg);
+                    subAgentLogger.log(msg);
+                    if (toolRetryCount >= MAX_TOOL_ERROR_RETRIES) {
+                        result = "工具执行失败: " + e.getMessage() + " (已达最大重试次数)";
+                        subAgentLogger.logError("工具执行最终失败", e);
+                        break;
+                    }
+                    try {
+                        Thread.sleep(RETRY_DELAY_MS * toolRetryCount);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
             }
+
+            task.addLog("工具结果: " + truncate(result, 200));
+            subAgentLogger.logToolResult(toolName, result);
+            addToolResult(toolCall.getId(), toolName, result);
         }
     }
 

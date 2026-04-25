@@ -55,6 +55,11 @@ public class ForkAgentsTool implements ToolExecutor {
                                 "system_prompt": {
                                     "type": "string",
                                     "description": "该子任务的自定义系统提示词（可选）"
+                                },
+                                "timeout_seconds": {
+                                    "type": "integer",
+                                    "description": "该子任务的超时时间（秒），默认 300 秒（5分钟）",
+                                    "default": 300
                                 }
                             }
                         }
@@ -64,9 +69,9 @@ public class ForkAgentsTool implements ToolExecutor {
                         "description": "是否等待所有子任务完成后再返回结果。true=阻塞等待全部完成，false=后台异步",
                         "default": false
                     },
-                    "timeout_seconds": {
+                    "wait_timeout_seconds": {
                         "type": "integer",
-                        "description": "等待超时时间（秒），默认 180 秒",
+                        "description": "等待所有任务完成的超时时间（秒），默认 180 秒",
                         "default": 180
                     }
                 },
@@ -103,7 +108,9 @@ public class ForkAgentsTool implements ToolExecutor {
 
         JsonNode tasksNode = arguments.get("tasks");
         boolean waitForAll = arguments.has("wait_for_all") && arguments.get("wait_for_all").asBoolean();
-        int timeoutSeconds = arguments.has("timeout_seconds") ? arguments.get("timeout_seconds").asInt() : 180;
+        int waitTimeoutSeconds = arguments.has("wait_timeout_seconds") 
+            ? arguments.get("wait_timeout_seconds").asInt() 
+            : 180;
 
         List<SubAgentTask> launchedTasks = new ArrayList<>();
 
@@ -116,7 +123,13 @@ public class ForkAgentsTool implements ToolExecutor {
                 ? taskNode.get("system_prompt").asText()
                 : null;
             
-            SubAgentTask subTask = manager.forkAgent(task, systemPrompt);
+            int taskTimeoutSeconds = 300;
+            if (taskNode.has("timeout_seconds") && !taskNode.get("timeout_seconds").isNull()) {
+                taskTimeoutSeconds = taskNode.get("timeout_seconds").asInt();
+                taskTimeoutSeconds = Math.max(30, Math.min(3600, taskTimeoutSeconds));
+            }
+            
+            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds);
             launchedTasks.add(subTask);
         }
 
@@ -128,7 +141,7 @@ public class ForkAgentsTool implements ToolExecutor {
             return buildAsyncResult(launchedTasks);
         }
 
-        return waitForAllResults(launchedTasks, timeoutSeconds);
+        return waitForAllResults(launchedTasks, waitTimeoutSeconds);
     }
 
     private String buildAsyncResult(List<SubAgentTask> tasks) {

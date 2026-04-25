@@ -1,7 +1,6 @@
 package com.example.agent.subagent;
 
 import com.example.agent.core.AgentContext;
-import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.application.ConversationService;
@@ -16,9 +15,16 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SubAgentManager {
     private static final Logger logger = LoggerFactory.getLogger(SubAgentManager.class);
+    private static final int MAX_PARALLEL_TASKS = Math.max(2, Runtime.getRuntime().availableProcessors() / 2);
+    private static final int MAX_QUEUED_TASKS = 100;
 
     private final Map<String, SubAgentTask> activeTasks;
     private final Map<String, SubAgentLogger> loggers;
@@ -26,6 +32,8 @@ public class SubAgentManager {
     private final LlmClient llmClient;
     private ToolRegistry toolRegistry;
     private final SubAgentPermissionFilter permissionFilter;
+    private final ExecutorService executor;
+    private final AtomicInteger queuedTaskCount = new AtomicInteger(0);
 
     public SubAgentManager() {
         this.activeTasks = new ConcurrentHashMap<>();
@@ -33,6 +41,21 @@ public class SubAgentManager {
         this.conversationService = ServiceLocator.get(ConversationService.class);
         this.llmClient = ServiceLocator.get(LlmClient.class);
         this.permissionFilter = new SubAgentPermissionFilter();
+        
+        this.executor = new ThreadPoolExecutor(
+            MAX_PARALLEL_TASKS,
+            MAX_PARALLEL_TASKS,
+            60L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(MAX_QUEUED_TASKS),
+            r -> {
+                Thread t = new Thread(r, "subagent-" + queuedTaskCount.incrementAndGet());
+                t.setDaemon(true);
+                return t;
+            }
+        );
+        
+        logger.info("SubAgentManager 初始化: 最大并行任务数 = {}, 最大排队任务数 = {}", 
+            MAX_PARALLEL_TASKS, MAX_QUEUED_TASKS);
     }
 
     private ToolRegistry getToolRegistry() {
@@ -44,17 +67,21 @@ public class SubAgentManager {
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt) {
+        return forkAgent(taskDescription, systemPrompt, 300);
+    }
+
+    public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds) {
         String parentSessionId = getParentSessionId();
         String finalPrompt = buildSubAgentSystemPrompt(taskDescription, systemPrompt);
-        logger.info("forkAgent: taskDescription={}, systemPrompt={}, finalPrompt长度={}", 
-            taskDescription, systemPrompt, finalPrompt.length());
+        logger.info("forkAgent: taskDescription={}, timeout={}秒, systemPrompt长度={}", 
+            taskDescription, timeoutSeconds, finalPrompt.length());
         
         Conversation subConversation = conversationService.createSubAgentConversation(
             finalPrompt,
             parentSessionId
         );
 
-        SubAgentTask task = new SubAgentTask(taskDescription, subConversation);
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds);
         activeTasks.put(task.getTaskId(), task);
 
         SubAgentLogger subAgentLogger = new SubAgentLogger(task, parentSessionId);
@@ -83,7 +110,17 @@ public class SubAgentManager {
             permissionFilter
         );
 
-        ThreadPools.asyncGeneral().submit(() -> {
+        int queueSize = ((ThreadPoolExecutor) executor).getQueue().size();
+        int activeCount = ((ThreadPoolExecutor) executor).getActiveCount();
+        
+        if (queueSize > 0) {
+            subAgentLogger.log("任务排队中，当前队列: " + queueSize + " 个任务");
+            task.addLog("任务排队中，位置: " + queueSize);
+        }
+        
+        subAgentLogger.log("线程池状态: 活跃=" + activeCount + ", 排队=" + queueSize);
+
+        executor.submit(() -> {
             try {
                 task.setStatus(SubAgentStatus.RUNNING);
                 subAgentLogger.logStatusChange(SubAgentStatus.RUNNING);
@@ -236,6 +273,16 @@ public class SubAgentManager {
 
         for (SubAgentLogger taskLogger : loggers.values()) {
             taskLogger.log("系统退出，任务已被取消");
+        }
+
+        try {
+            executor.shutdownNow();
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                logger.warn("SubAgentManager 线程池未能在 3 秒内完全终止");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("SubAgentManager shutdown 被中断");
         }
 
         activeTasks.clear();

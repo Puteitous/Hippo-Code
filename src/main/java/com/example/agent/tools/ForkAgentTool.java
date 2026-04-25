@@ -52,6 +52,13 @@ public class ForkAgentTool implements ToolExecutor {
                         "type": "boolean",
                         "description": "是否等待执行完成并返回结果。true=阻塞等待并返回完整结果，false=后台异步执行",
                         "default": false
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "任务超时时间（秒），默认 300 秒（5分钟）。超过时间将强制终止任务",
+                        "default": 300,
+                        "minimum": 30,
+                        "maximum": 3600
                     }
                 },
                 "required": ["task"]
@@ -91,8 +98,14 @@ public class ForkAgentTool implements ToolExecutor {
             : null;
         boolean waitForResult = arguments.has("wait_for_result") 
             && arguments.get("wait_for_result").asBoolean();
+        
+        int timeoutSeconds = 300;
+        if (arguments.has("timeout_seconds") && !arguments.get("timeout_seconds").isNull()) {
+            timeoutSeconds = arguments.get("timeout_seconds").asInt();
+            timeoutSeconds = Math.max(30, Math.min(3600, timeoutSeconds));
+        }
 
-        SubAgentTask subTask = manager.forkAgent(task, systemPrompt);
+        SubAgentTask subTask = manager.forkAgent(task, systemPrompt, timeoutSeconds);
 
         if (!waitForResult) {
             return "✅ Sub-Agent 已启动\n" +
