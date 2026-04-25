@@ -106,6 +106,7 @@ public class ListSubAgentsTool implements ToolExecutor {
     }
 
     private String formatTaskList(List<SubAgentTask> tasks, String statusFilter) {
+        long waiting = tasks.stream().filter(t -> t.getStatus().name().equals("WAITING")).count();
         long running = tasks.stream().filter(t -> t.getStatus().name().equals("RUNNING")).count();
         long completed = tasks.stream().filter(t -> t.getStatus().name().equals("COMPLETED")).count();
         long failed = tasks.stream().filter(t -> t.getStatus().name().equals("FAILED")).count();
@@ -113,17 +114,21 @@ public class ListSubAgentsTool implements ToolExecutor {
         StringBuilder sb = new StringBuilder();
         sb.append("📋 Sub-Agent 任务汇总 (").append(statusFilter).append(")\n");
         sb.append("   总计: ").append(tasks.size()).append(" 个任务\n");
-        sb.append("   执行中: ").append(running).append(" | ");
+        if (waiting > 0) sb.append("   等待依赖: ").append(waiting).append(" | ");
+        sb.append("执行中: ").append(running).append(" | ");
         sb.append("已完成: ").append(completed).append(" | ");
         sb.append("失败: ").append(failed).append("\n\n");
 
         for (SubAgentTask task : tasks) {
             String marker = task.getStatus().name().equals("COMPLETED") ? "✅" :
-                           task.getStatus().name().equals("FAILED") ? "❌" : "🔄";
+                           task.getStatus().name().equals("FAILED") ? "❌" :
+                           task.getStatus().name().equals("WAITING") ? "⏳" : "🔄";
             sb.append(marker).append(" [").append(task.getTaskId()).append("] ");
             sb.append("[").append(task.getStatus()).append("]\n");
             sb.append("   任务: ").append(truncate(task.getDescription(), 60)).append("\n");
-            
+            if (task.hasDependencies()) {
+                sb.append("   依赖: ").append(task.getDependsOn()).append("\n");
+            }
             if (task.getResultSummary() != null && task.getStatus().name().equals("COMPLETED")) {
                 sb.append("   结果: ").append(truncate(task.getResultSummary(), 100)).append("\n");
             }

@@ -16,6 +16,7 @@ public class SubAgentTask {
     private final String taskId;
     private final String parentTaskId;
     private final String description;
+    private final List<String> dependsOn;
     private final AtomicReference<SubAgentStatus> status;
     private final Conversation conversation;
     private final List<String> outputLog;
@@ -28,13 +29,18 @@ public class SubAgentTask {
     private final CompletableFuture<SubAgentTask> completionFuture;
 
     public SubAgentTask(String description, Conversation conversation) {
-        this(description, conversation, 300);
+        this(description, conversation, 300, null);
     }
 
     public SubAgentTask(String description, Conversation conversation, int timeoutSeconds) {
+        this(description, conversation, timeoutSeconds, null);
+    }
+
+    public SubAgentTask(String description, Conversation conversation, int timeoutSeconds, List<String> dependsOn) {
         this.taskId = UUID.randomUUID().toString().substring(0, 8);
         this.parentTaskId = null;
         this.description = description;
+        this.dependsOn = dependsOn != null ? new ArrayList<>(dependsOn) : Collections.emptyList();
         this.status = new AtomicReference<>(SubAgentStatus.PENDING);
         this.conversation = conversation;
         this.outputLog = Collections.synchronizedList(new ArrayList<>());
@@ -133,6 +139,14 @@ public class SubAgentTask {
 
     public int getTimeoutSeconds() {
         return timeoutSeconds;
+    }
+
+    public List<String> getDependsOn() {
+        return Collections.unmodifiableList(dependsOn);
+    }
+
+    public boolean hasDependencies() {
+        return !dependsOn.isEmpty();
     }
 
     public Instant getCreatedAt() {

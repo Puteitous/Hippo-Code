@@ -71,17 +71,21 @@ public class SubAgentManager {
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds) {
+        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, null);
+    }
+
+    public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, List<String> dependsOn) {
         String parentSessionId = getParentSessionId();
         String finalPrompt = buildSubAgentSystemPrompt(taskDescription, systemPrompt);
-        logger.info("forkAgent: taskDescription={}, timeout={}秒, systemPrompt长度={}", 
-            taskDescription, timeoutSeconds, finalPrompt.length());
+        logger.info("forkAgent: taskDescription={}, timeout={}秒, dependsOn={}", 
+            taskDescription, timeoutSeconds, dependsOn);
         
         Conversation subConversation = conversationService.createSubAgentConversation(
             finalPrompt,
             parentSessionId
         );
 
-        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds);
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn);
         activeTasks.put(task.getTaskId(), task);
 
         SubAgentLogger subAgentLogger = new SubAgentLogger(task, parentSessionId);
@@ -90,17 +94,45 @@ public class SubAgentManager {
         subAgentLogger.log("Sub-Agent 会话 ID: " + subConversation.getSessionId());
         subAgentLogger.log("父会话 ID: " + parentSessionId);
         subAgentLogger.log("启动 Sub-Agent: " + taskDescription);
+        if (task.hasDependencies()) {
+            subAgentLogger.log("依赖任务: " + dependsOn);
+        }
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
 
         startExecution(task, subAgentLogger);
 
-        logger.info("SubAgent 已启动: taskId={}, 会话={}, 日志={}, description={}",
-            task.getTaskId(), subConversation.getSessionId(), 
-            subAgentLogger.getLogDir(), taskDescription);
+        logger.info("SubAgent 已启动: taskId={}, dependsOn={}, description={}",
+            task.getTaskId(), task.getDependsOn(), taskDescription);
         return task;
     }
 
     private void startExecution(SubAgentTask task, SubAgentLogger subAgentLogger) {
+        if (task.hasDependencies() && !areDependenciesSatisfied(task)) {
+            task.setStatus(SubAgentStatus.WAITING);
+            subAgentLogger.log("任务等待依赖完成: " + task.getDependsOn());
+            task.addLog("等待依赖任务完成: " + task.getDependsOn());
+            return;
+        }
+
+        submitTask(task, subAgentLogger);
+    }
+
+    private boolean areDependenciesSatisfied(SubAgentTask task) {
+        for (String depId : task.getDependsOn()) {
+            SubAgentTask depTask = activeTasks.get(depId);
+            if (depTask == null) {
+                task.addLog("警告: 依赖任务不存在: " + depId);
+                continue;
+            }
+            SubAgentStatus status = depTask.getStatus();
+            if (status != SubAgentStatus.COMPLETED && status != SubAgentStatus.FAILED) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger) {
         SubAgentRunner runner = new SubAgentRunner(
             task,
             subAgentLogger,
@@ -157,9 +189,24 @@ public class SubAgentManager {
                     new SubAgentFailedEvent(task.getTaskId(), task.getDescription(), e.getMessage())
                 );
             } finally {
+                triggerDependentTasks(task);
                 cleanupExpiredTasks();
             }
         });
+    }
+
+    private void triggerDependentTasks(SubAgentTask completedTask) {
+        for (SubAgentTask task : activeTasks.values()) {
+            if (task.getStatus() == SubAgentStatus.WAITING 
+                && task.getDependsOn().contains(completedTask.getTaskId())) {
+                
+                if (areDependenciesSatisfied(task)) {
+                    task.addLog("依赖已满足，开始执行");
+                    SubAgentLogger logger = loggers.get(task.getTaskId());
+                    submitTask(task, logger);
+                }
+            }
+        }
     }
 
     private String extractResultSummary(SubAgentTask task) {

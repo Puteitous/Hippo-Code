@@ -107,109 +107,53 @@
   }
 }
 ```
-- 最多阻塞 120 秒，超时自动降级为异步
-- 子任务结果直接返回，可无缝继续推理
-- 体验连贯，交互自然
+=== 🚀 Sub-Agent 使用指南
 
-=== 🔍 任务管理：list_subagents
+## 核心原则
+- ✅ **适合并行/独立任务** → 用 Sub-Agent
+- ❌ **写文件/执行命令/用户交互** → 绝对禁止
 
-创建多个异步任务后，随时查询状态和结果：
+## 何时使用
+| 场景 | 工具 | 推荐模式 |
+|------|------|---------|
+| 单任务，需要结果继续推理 | `fork_agent` | `wait_for_result=true` |
+| 单任务，后台执行 | `fork_agent` | `wait_for_result=false` |
+| N 个模块并行扫描 | `fork_agents` | `wait_for_all=false` |
+| 查询所有任务状态 | `list_subagents` | - |
+| 取消超时/不需要的任务 | `cancel_subagent` | - |
 
+## 快速示例
+
+批量扫描多个模块（最常用）：
 ```json
-{
-  "name": "list_subagents",
-  "parameters": {
-    "status": "COMPLETED"
-  }
-}
+{"name": "fork_agents", "parameters": {"tasks": [
+  {"task": "分析 controller 模块"},
+  {"task": "分析 service 模块"},
+  {"task": "分析 repository 模块"}
+]}}
 ```
 
-查询参数：
-- `status`: ALL / RUNNING / COMPLETED / FAILED
-- `task_id`: 查询单个任务的详细日志和完整结果
-
-典型工作流：
-1. 创建 3 个异步 Sub-Agent 并行搜索
-2. 继续其他工作或调用 list_subagents 轮询
-3. 任务完成后汇总所有结果
-
-=== 🚀 超级并行：fork_agents 批量创建
-
-需要同时处理 N 个独立模块/文件时，直接批量创建：
-
-**模式 1：后台异步模式（推荐）**
+单任务同步等待结果：
 ```json
-{
-  "name": "fork_agents",
-  "parameters": {
-    "tasks": [
-      { "task": "分析 controller 模块的所有类，找出所有 API 端点" },
-      { "task": "分析 service 模块的所有类，找出业务逻辑" },
-      { "task": "分析 repository 模块的所有类，找出数据访问层" }
-    ],
-    "wait_for_all": false
-  }
-}
+{"name": "fork_agent", "parameters": {"task": "读取 config.yml", "wait_for_result": true}}
 ```
 
-**模式 2：等待全部完成模式**
-```json
-{
-  "name": "fork_agents",
-  "parameters": {
-    "tasks": [
-      { "task": "读取所有 .java 文件的行数统计" },
-      { "task": "读取所有 .md 文件的内容摘要" },
-      { "task": "读取所有 .xml 文件的配置内容" }
-    ],
-    "wait_for_all": true,
-    "timeout_seconds": 180
-  }
-}
-```
+## 硬约束（无例外）
+❌ 绝对禁止使用 Sub-Agent 的场景：
+1. 需要修改文件（write_file / edit_file）
+2. 需要执行 bash 命令
+3. 需要 ask_user 用户交互
+4. 简单的一两步就能完成的小任务
 
-批量创建优势：
-- 真正的并行执行，效率提升 N 倍
-- 每个任务独立上下文，互不干扰
-- 一次创建，统一管理
+## 任务管理
+- 需要结果时主动调用 `list_subagents`
+- 任务超时时调用 `cancel_subagent`
+- 默认超时 5 分钟，支持自定义 timeout_seconds
 
-=== 🛑 任务取消：cancel_subagent
-
-需要取消耗时过长或不再需要的子任务时：
-
-```json
-{
-  "name": "cancel_subagent",
-  "parameters": {
-    "task_id": "abc12345"
-  }
-}
-```
-
-批量取消所有运行中的任务：
-```json
-{
-  "name": "cancel_subagent",
-  "parameters": {
-    "cancel_all": true
-  }
-}
-```
-
-超时机制说明：
-- 每个 Sub-Agent 默认 5 分钟自动超时终止
-- 超过最大执行时间将被强制终止，防止无限执行
-- 可通过 list_subagents 查看任务执行时间和剩余时间
-
-=== ⛔ 什么时候绝对不能用 fork_agent（硬约束）
-
-**以下情况禁止使用子 Agent，没有例外：**
-1. ❌ 需要修改文件的任务（子 Agent 只有只读权限）
-2. ❌ 需要执行 bash 命令的任务
-3. ❌ 需要用户交互确认的任务
-4. ❌ 简单、快速、一两步就能完成的小任务
-
-违反约束的后果：子 Agent 会直接拒绝执行，浪费 token，降低效率。
+## 协作最佳实践
+1. 同步模式：工具返回的结果直接用于推理
+2. 异步模式：需要时主动查询，不要假设结果
+3. 永远不要在不查询的情况下假装知道子任务的结果
 
 === 其他要求 ===
 

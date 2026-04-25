@@ -60,6 +60,11 @@ public class ForkAgentsTool implements ToolExecutor {
                                     "type": "integer",
                                     "description": "该子任务的超时时间（秒），默认 300 秒（5分钟）",
                                     "default": 300
+                                },
+                                "depends_on": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "依赖的任务 ID 列表，这些任务完成后本任务才会开始执行（用于构建 DAG 工作流）"
                                 }
                             }
                         }
@@ -129,7 +134,17 @@ public class ForkAgentsTool implements ToolExecutor {
                 taskTimeoutSeconds = Math.max(30, Math.min(3600, taskTimeoutSeconds));
             }
             
-            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds);
+            List<String> dependsOn = null;
+            if (taskNode.has("depends_on") && taskNode.get("depends_on").isArray()) {
+                dependsOn = new ArrayList<>();
+                for (JsonNode dep : taskNode.get("depends_on")) {
+                    if (!dep.isNull()) {
+                        dependsOn.add(dep.asText());
+                    }
+                }
+            }
+            
+            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds, dependsOn);
             launchedTasks.add(subTask);
         }
 
@@ -153,6 +168,9 @@ public class ForkAgentsTool implements ToolExecutor {
             SubAgentTask task = tasks.get(i);
             sb.append("  [").append(i + 1).append("] Task ID: ").append(task.getTaskId()).append("\n");
             sb.append("      任务: ").append(truncate(task.getDescription(), 50)).append("\n");
+            if (task.hasDependencies()) {
+                sb.append("      依赖: ").append(task.getDependsOn()).append("\n");
+            }
         }
         
         sb.append("\n📋 使用建议:\n");
