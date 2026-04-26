@@ -19,6 +19,7 @@ public class SubAgentTask {
     private final List<String> dependsOn;
     private final AtomicReference<SubAgentStatus> status;
     private final Conversation conversation;
+    private final boolean forkChild;
     private final List<String> outputLog;
     private final Instant createdAt;
     private Instant evictAfter;
@@ -37,12 +38,17 @@ public class SubAgentTask {
     }
 
     public SubAgentTask(String description, Conversation conversation, int timeoutSeconds, List<String> dependsOn) {
+        this(description, conversation, timeoutSeconds, dependsOn, false);
+    }
+
+    public SubAgentTask(String description, Conversation conversation, int timeoutSeconds, List<String> dependsOn, boolean forkChild) {
         this.taskId = UUID.randomUUID().toString().substring(0, 8);
         this.parentTaskId = null;
         this.description = description;
         this.dependsOn = dependsOn != null ? new ArrayList<>(dependsOn) : Collections.emptyList();
         this.status = new AtomicReference<>(SubAgentStatus.PENDING);
         this.conversation = conversation;
+        this.forkChild = forkChild;
         this.outputLog = Collections.synchronizedList(new ArrayList<>());
         this.createdAt = Instant.now();
         this.timeoutSeconds = timeoutSeconds;
@@ -158,5 +164,9 @@ public class SubAgentTask {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isForkChild() {
+        return forkChild;
     }
 }

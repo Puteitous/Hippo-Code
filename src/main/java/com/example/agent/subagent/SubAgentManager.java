@@ -95,11 +95,13 @@ public class SubAgentManager {
             taskDescription, timeoutSeconds, permission.getName(), useForkOptimization, dependsOn);
 
         Conversation subConversation;
+        boolean isForkChild = false;
         if (useForkOptimization && parentSessionId != null) {
             subConversation = conversationService.forkConversation(
                 parentSessionId,
                 finalPrompt
             );
+            isForkChild = true;
         } else {
             subConversation = conversationService.createSubAgentConversation(
                 finalPrompt,
@@ -107,7 +109,7 @@ public class SubAgentManager {
             );
         }
 
-        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn);
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, isForkChild);
         activeTasks.put(task.getTaskId(), task);
 
         if (completionCallback != null) {

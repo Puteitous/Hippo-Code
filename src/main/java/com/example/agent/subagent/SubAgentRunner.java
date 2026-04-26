@@ -80,30 +80,43 @@ public class SubAgentRunner implements Runnable {
                 subAgentLogger.log("--- 第 " + turnCount + " 轮 ---");
 
                 List<Message> context = conversationService.prepareForInference(task.getConversation());
-                
-                String forcedSystemPrompt = buildForcedSystemPrompt(task.getDescription());
                 List<Message> finalContext = new ArrayList<>();
-                finalContext.add(Message.system(forcedSystemPrompt));
+                String systemPromptInfo;
                 
-                finalContext.addAll(context.stream()
-                    .filter(m -> !m.isSystem())
-                    .collect(Collectors.toList()));
-                
-                boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
-                if (!hasUserMessage) {
-                    finalContext.add(Message.user("请执行任务。"));
+                if (task.isForkChild()) {
+                    finalContext.addAll(context);
+                    
+                    boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
+                    if (!hasUserMessage) {
+                        finalContext.add(Message.user("请执行子代理任务：" + task.getDescription()));
+                    }
+                    
+                    systemPromptInfo = "Fork 模式: 复用父 Agent System Prompt (缓存优化)";
+                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (Fork 模式 - 完整复用上下文，缓存优化)");
+                } else {
+                    String forcedSystemPrompt = buildForcedSystemPrompt(task.getDescription());
+                    finalContext.add(Message.system(forcedSystemPrompt));
+                    
+                    finalContext.addAll(context.stream()
+                        .filter(m -> !m.isSystem())
+                        .collect(Collectors.toList()));
+                    
+                    boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
+                    if (!hasUserMessage) {
+                        finalContext.add(Message.user("请执行任务。"));
+                    }
+                    
+                    systemPromptInfo = "独立模式: 强制构建 Sub-Agent System Prompt, 长度: " + forcedSystemPrompt.length() + " 字符";
+                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (独立模式)");
                 }
                 
                 boolean isFinalRound = (turnCount == MAX_TURNS - 1);
-                
                 if (isFinalRound) {
                     finalContext.add(Message.user("这是最后一轮执行机会，请基于所有工具调用结果，输出最终总结，不能再调用任何工具！"));
-                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (最后一轮 - 强制总结)");
-                } else {
-                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (强制构建 Sub-Agent System Prompt)");
+                    subAgentLogger.log("最后一轮 - 禁用工具，强制总结");
                 }
                 
-                subAgentLogger.log("System Prompt 长度: " + forcedSystemPrompt.length() + " 字符");
+                subAgentLogger.log(systemPromptInfo);
                 subAgentLogger.log("任务描述: " + task.getDescription());
                 List<Tool> allowedTools = isFinalRound ? Collections.emptyList() : getFilteredTools();
                 subAgentLogger.log("可用工具数: " + allowedTools.size() + (isFinalRound ? " (最后一轮禁用工具，强制总结)" : ""));
@@ -237,6 +250,20 @@ public class SubAgentRunner implements Runnable {
                 return allowed;
             })
             .collect(Collectors.toList());
+        
+        if (task.isForkChild()) {
+            int originalCount = filtered.size();
+            filtered = filtered.stream()
+                .filter(tool -> {
+                    String name = tool.getFunction().getName();
+                    return !"fork_agent".equals(name) && !"fork_agents".equals(name);
+                })
+                .collect(Collectors.toList());
+            
+            if (originalCount > filtered.size()) {
+                subAgentLogger.log("Fork 递归防护: 已禁用 fork_agent/fork_agents 工具");
+            }
+        }
         
         subAgentLogger.log("过滤后可用工具: " + filtered.stream()
             .map(t -> t.getFunction().getName())
