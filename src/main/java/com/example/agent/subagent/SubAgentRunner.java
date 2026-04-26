@@ -33,7 +33,7 @@ public class SubAgentRunner implements Runnable {
     private final LlmClient llmClient;
     private final ToolRegistry toolRegistry;
     private final ConversationService conversationService;
-    private final SubAgentPermissionFilter permissionFilter;
+    private final SubAgentPermission permission;
     private final ObjectMapper objectMapper;
 
     public SubAgentRunner(SubAgentTask task,
@@ -41,13 +41,13 @@ public class SubAgentRunner implements Runnable {
                           LlmClient llmClient,
                           ToolRegistry toolRegistry,
                           ConversationService conversationService,
-                          SubAgentPermissionFilter permissionFilter) {
+                          SubAgentPermission permission) {
         this.task = task;
         this.subAgentLogger = subAgentLogger;
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry;
         this.conversationService = conversationService;
-        this.permissionFilter = permissionFilter;
+        this.permission = permission;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -182,37 +182,58 @@ public class SubAgentRunner implements Runnable {
     }
 
     private String buildForcedSystemPrompt(String task) {
-        return "你是一个严谨的子任务执行助手。必须严格遵守以下规则:\n\n" +
-            "## 🎯 你的任务\n" +
-            task + "\n\n" +
-            "## ⚠️ 绝对强制规则（违反将导致任务失败）\n" +
-            "1. ✅ **必须调用工具获取真实数据** - 所有信息必须通过工具调用获得\n" +
-            "2. ❌ **严禁编造任何结果** - 不知道就调用工具，绝对不能想象、假设、编造\n" +
-            "3. ❌ **严禁直接回答** - 你没有本地知识，不调用工具给出的任何答案都是错误的\n" +
-            "4. ❌ **严禁询问用户** - 绝对不能问用户任何问题、不能要求补充信息\n" +
-            "7. ❌ **禁止无意义循环** - 同样参数的工具最多调用 2 次，重复无济于事\n" +
-            "5. ✅ **信息不足就如实说** - 找不到就说「未找到」，信息不足就说「信息不足」，不要追问\n" +
-            "6. ✅ **结果明确立即结束** - 一旦获得确定结果（文件不存在/信息已足够），立刻输出最终总结，不再调用工具\n" +
-            "6. ✅ **必须使用工具** - 你只能通过以下工具完成任务: read_file, glob, grep, search_code, list_directory, list_subagents\n" +
-            "7. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n" +
-            "## 📋 执行流程\n" +
-            "1. 分析任务需要哪些数据\n" +
-            "2. 调用对应的工具获取真实数据\n" +
-            "3. 根据工具的实际返回结果进行总结\n" +
-            "4. 明确标注哪些文件已检查，哪些结果已验证\n\n" +
-            "记住: 你是「工具执行者」，不是「答案生成者」。\n" +
-            "信息不足 → 调用更多工具；找不到 → 如实报告；绝对不要问用户！\n" +
-            "不调用工具 + 询问用户 = 任务失败！";
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是一个严谨的子任务执行助手。必须严格遵守以下规则:\n\n");
+        sb.append("## 🎯 你的任务\n");
+        sb.append(task).append("\n\n");
+        sb.append("## ⚠️ 绝对强制规则（违反将导致任务失败）\n");
+        
+        if (permission.isRequireToolCalls()) {
+            sb.append("1. ✅ **必须调用工具获取真实数据** - 所有信息必须通过工具调用获得\n");
+            sb.append("2. ❌ **严禁编造任何结果** - 不知道就调用工具，绝对不能想象、假设、编造\n");
+            sb.append("3. ❌ **严禁直接回答** - 你没有本地知识，不调用工具给出的任何答案都是错误的\n");
+            sb.append("4. ❌ **严禁询问用户** - 绝对不能问用户任何问题、不能要求补充信息\n");
+            sb.append("5. ❌ **禁止无意义循环** - 同样参数的工具最多调用 2 次，重复无济于事\n");
+            sb.append("6. ✅ **信息不足就如实说** - 找不到就说「未找到」，信息不足就说「信息不足」，不要追问\n");
+            sb.append("7. ✅ **结果明确立即结束** - 一旦获得确定结果，立刻输出最终总结，不再调用工具\n");
+            sb.append("8. ✅ **必须使用工具** - 可用工具: ").append(permission.getAllowedTools()).append("\n");
+            sb.append("9. ✅ **如实汇报结果** - 工具返回什么就总结什么，不要添加任何工具未返回的信息\n\n");
+            sb.append("## 📋 执行流程\n");
+            sb.append("1. 分析任务需要哪些数据\n");
+            sb.append("2. 调用对应的工具获取真实数据\n");
+            sb.append("3. 根据工具的实际返回结果进行总结\n");
+            sb.append("4. 明确标注哪些文件已检查，哪些结果已验证\n\n");
+            sb.append("记住: 你是「工具执行者」，不是「答案生成者」。\n");
+            sb.append("信息不足 → 调用更多工具；找不到 → 如实报告；绝对不要问用户！\n");
+            sb.append("不调用工具 + 询问用户 = 任务失败！");
+        } else {
+            sb.append("1. ✅ **优先使用工具** - 能通过工具获取的信息请调用工具\n");
+            sb.append("2. ❌ **严禁编造任何结果** - 不知道就说不知道，绝对不能想象、假设、编造\n");
+            sb.append("3. ❌ **严禁询问用户** - 绝对不能问用户任何问题、不能要求补充信息\n");
+            sb.append("4. ✅ **可直接输出总结** - 基于已有对话上下文进行分析，不需要强制调用工具\n");
+            sb.append("5. ✅ **可用工具**: ").append(permission.getAllowedTools()).append("\n");
+            sb.append("6. ✅ **如实汇报结果** - 按要求格式输出，简洁准确\n\n");
+            sb.append("## 📋 执行流程\n");
+            sb.append("1. 阅读已有上下文，理解任务目标\n");
+            sb.append("2. 如需读取/写入文件，使用对应工具\n");
+            sb.append("3. 直接输出最终结果，不需要额外确认\n\n");
+            sb.append("记住: 你是「分析者」，不是「工具执行者」。\n");
+            sb.append("已有信息足够时 → 直接输出高质量结果；\n");
+            sb.append("需要文件操作时 → 使用工具后再输出！");
+        }
+        
+        return sb.toString();
     }
 
     private List<Tool> getFilteredTools() {
         List<Tool> allTools = toolRegistry.toTools();
+        subAgentLogger.log("权限模式: " + permission.getName());
         subAgentLogger.log("注册的总工具数: " + allTools.size());
         
         List<Tool> filtered = allTools.stream()
             .filter(tool -> {
                 String name = tool.getFunction().getName();
-                boolean allowed = permissionFilter.isToolAllowed(name);
+                boolean allowed = permission.isToolAllowed(name);
                 return allowed;
             })
             .collect(Collectors.toList());
@@ -231,7 +252,7 @@ public class SubAgentRunner implements Runnable {
 
             subAgentLogger.logToolCall(toolName, arguments);
 
-            if (!permissionFilter.isToolAllowed(toolName)) {
+            if (!permission.isToolAllowed(toolName)) {
                 String errorMsg = "SubAgent 不允许执行工具: " + toolName;
                 task.addLog(errorMsg);
                 subAgentLogger.log("权限拒绝: " + errorMsg);

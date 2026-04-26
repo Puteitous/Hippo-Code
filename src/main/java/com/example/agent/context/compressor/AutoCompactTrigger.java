@@ -8,11 +8,13 @@ import com.example.agent.context.budget.BudgetThreshold;
 import com.example.agent.logging.CompactionMetricsCollector;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionTranscript;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public class AutoCompactTrigger implements BudgetListener {
 
@@ -27,6 +29,7 @@ public class AutoCompactTrigger implements BudgetListener {
     private final SessionTranscript transcript;
     private boolean compactionPerformed;
     private boolean resumeWindowBuilt = false;
+    private Consumer<List<Message>> compactionCompleteHook;
 
     public AutoCompactTrigger(ContextWindow contextWindow, TokenEstimator tokenEstimator, LlmClient llmClient) {
         this(contextWindow, tokenEstimator, llmClient, "default-session", new SessionTranscript("default-session"));
@@ -118,6 +121,10 @@ public class AutoCompactTrigger implements BudgetListener {
             ContextSummarizer.CompactionResult llmResult = summarizer.getLastResult();
             injectSummarySuccess(llmResult, currentTokens, maxTokens);
             printSummarySuccessToConsole(llmResult, currentTokens, maxTokens);
+
+            if (compactionCompleteHook != null) {
+                compactionCompleteHook.accept(contextWindow.getRawMessages());
+            }
         } catch (Exception e) {
             state.recordFailure();
             metrics.recordEvent(
@@ -208,6 +215,10 @@ public class AutoCompactTrigger implements BudgetListener {
         return result;
     }
 
+    public void setCompactionCompleteHook(Consumer<List<Message>> hook) {
+        this.compactionCompleteHook = hook;
+    }
+
     private void applyResult(ContextClipper.CompactionResult result, boolean incremental) {
         contextWindow.clearInjectedWarnings();
         contextWindow.replaceMessages(result.getMessages());
@@ -217,6 +228,10 @@ public class AutoCompactTrigger implements BudgetListener {
         writeBoundaryMarker(result.getMessages());
 
         injectClippingSuccess(result, incremental);
+
+        if (compactionCompleteHook != null) {
+            compactionCompleteHook.accept(contextWindow.getRawMessages());
+        }
         printClippingSuccessToConsole(result, incremental);
     }
 

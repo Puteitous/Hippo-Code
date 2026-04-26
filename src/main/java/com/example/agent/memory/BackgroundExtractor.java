@@ -1,9 +1,13 @@
 package com.example.agent.memory;
 
 import com.example.agent.context.SessionCompactionState;
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
+import com.example.agent.subagent.SubAgentManager;
+import com.example.agent.subagent.SubAgentPermission;
+import com.example.agent.subagent.SubAgentTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,50 +21,114 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackgroundExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(BackgroundExtractor.class);
-
-    private static final int INITIAL_TOKEN_THRESHOLD = 10000;
-    private static final int TOKEN_GROWTH_THRESHOLD = 5000;
-    private static final int TOOL_CALL_THRESHOLD = 3;
+    private static final int INITIAL_TOKEN_THRESHOLD = 16000;
+    private static final int TOKEN_GROWTH_THRESHOLD = 8000;
+    private static final int TOOL_CALL_THRESHOLD = 15;
 
     private final SessionMemoryManager memoryManager;
     private final SessionCompactionState compactionState;
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
+    private final SubAgentManager subAgentManager;
 
     private final AtomicInteger toolCallCountSinceLastExtraction = new AtomicInteger(0);
     private final AtomicBoolean extractionInProgress = new AtomicBoolean(false);
     private int lastExtractedTokenCount = 0;
     private String lastExtractedMessageId;
+    private final List<Message> pendingConversation = new ArrayList<>();
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
 
-    private static final String SYSTEM_PROMPT = """
-        ## 会话记忆提取任务
+    private static final String MEMORY_EXTRACTOR_PROMPT = """
+        ## 🧠 Session Memory 增量更新任务
 
-        请仔细阅读以下对话历史，按以下 3 个维度提取结构化记忆：
+        你是一个专业的会话记忆维护专家，请按以下流程执行任务：
 
-        ### 1. 关键决策
-        - 架构选择和设计决策
-        - 用户明确的偏好和要求
-        - 约定的实现方案
-
-        ### 2. 错误与修复
-        - 遇到的坑和踩过的雷
-        - 验证过的解决方案
-        - 需要避免的反模式
-
-        ### 3. 当前进度
-        - 已完成的里程碑
-        - 当前正在做什么
-        - 下一步明确的计划
+        ### 第一步：读取现有记忆
+        1. 使用 read_file 工具读取当前的 session-memory.md 文件。
+        2. 如果文件不存在，先使用默认模板初始化
+        3. 确认文件的 10 章结构完整
 
         ---
 
-        要求：
+        ## 🎯 10 个标准记忆章节
+
+        请严格按照以下 10 个固定章节分类信息：
+
+        | 章节 | 分类说明 |
+        |------|----------|
+        | **Session Title** | 用 5-10 个词概括会话主题 |
+        | **Current State** | 当前正在做什么、待完成任务、明确的下一步 |
+        | **Task Specification** | 用户核心需求、设计决策、约定的实现方案 |
+        | **Files and Functions** | 关键文件路径、核心函数、相关性说明 |
+        | **Workflow** | Bash 命令、执行顺序、关键输出解读 |
+        | **Errors & Corrections** | 遇到的问题、修复方案、用户纠正、失败尝试 |
+        | **Codebase Documentation** | 系统架构、组件关系、工作原理 |
+        | **Learnings** | 有效/无效的方法、避坑指南、经验教训 |
+        | **Key Results** | 用户要求的具体产出：答案、表格、数据 |
+        | **Worklog** | 按时间顺序的简洁工作记录，每步一行 |
+
+        ---
+
+        ## 🛡️ 绝对写保护规则（违反将导致任务失败！）
+
+        以下内容**绝对不允许修改或删除**：
+        1. 所有 10 个章节的标题行（# 开头的行）
+        2. 每个标题下方的斜体说明行
+        3. 章节之间的分隔线 `---`
+        4. 文件末尾的自动维护说明
+
+        你只可以：
+        ✅ 在标题和说明行**下面**添加或更新内容
+        ✅ 压缩已有内容，去重和精简
+        ✅ 淘汰过时的信息
+        ❌ 绝对不能改动任何标题、说明行、分隔线
+
+        ---
+
+        ### 第三步：增量更新记忆
         - 只保留真正重要的，不要记录临时调试信息
-        - 使用 Markdown 列表，每条简洁
         - 相同/相似的内容合并去重
-        - 输出只包含 3 个章节，不要其他解释
+        - 每条信息归类到对应章节
+        - 超过 100 行的章节主动压缩淘汰旧信息
+
+        ---
+
+        ## ✏️ 精准编辑指南
+
+        ### 第四步：使用 edit_file 工具进行增量更新
+
+        ⚠️ **绝对禁止使用 write_file 全量覆写！必须使用 edit_file 进行行级编辑！**
+
+        #### 编辑原则：
+        1. **只编辑需要变化的章节** - 不需要修改的章节绝对不要碰
+        2. **精确匹配上下文** - 找到该章节说明行下面的内容区
+        3. **保留结构不动** - 标题、说明行、分隔线必须原封不动
+
+        #### 标准编辑模式：
+        ```markdown
+        # Current State
+        _当前正在做什么、待完成任务、明确的下一步_
+        
+        <<< 在这里编辑：只替换这部分内容区域 >>>
+        
+        ---
+        ```
+
+        #### 每个章节独立调用一次 edit_file
+        - 需要更新 3 个章节就调用 3 次 edit_file
+        - 每次只修改一个章节的内容区
+        - 没有变化的章节跳过不处理
+
+        #### 如果没有实质性更新：
+        ✅ 可以跳过所有编辑，直接输出"本次对话无重要记忆需要更新"即可
+
+        ---
+
+        ⚠️ 重要提示：
+        - 你可以直接基于对话上下文进行分析，不需要强制调用工具
+        - 最后输出简洁的执行总结即可
         """;
+
 
     public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient) {
         this(sessionId, tokenEstimator, llmClient, new SessionCompactionState());
@@ -71,6 +139,7 @@ public class BackgroundExtractor {
         this.compactionState = compactionState;
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
+        this.subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
     }
 
     public void onMessageAdded(Message message, List<Message> fullConversation) {
@@ -94,6 +163,35 @@ public class BackgroundExtractor {
                     extractionInProgress.set(false);
                 }
             });
+        }
+    }
+
+    public void requestExtractionAfterCompaction(List<Message> fullConversation) {
+        int currentTokens = tokenEstimator.estimate(fullConversation);
+        int tailTokens = currentTokens - lastExtractedTokenCount;
+        
+        boolean hasEnoughNewContent = tailTokens >= 2000;
+        boolean atNaturalPause = !hasToolCallsInLastAssistantTurn(fullConversation);
+        boolean notAlreadyExtracting = extractionInProgress.compareAndSet(false, true);
+        boolean hasBeenExtractedBefore = lastExtractedTokenCount > 0;
+
+        if (!hasBeenExtractedBefore) {
+            logger.debug("压缩后钩子跳过：尚未进行过首次提取");
+            return;
+        }
+
+        if (hasEnoughNewContent && atNaturalPause && notAlreadyExtracting) {
+            logger.info("✅ 压缩后触发低优先级记忆提取：尾巴 {} tokens", tailTokens);
+            EXECUTOR.submit(() -> {
+                try {
+                    performExtraction(fullConversation);
+                } finally {
+                    extractionInProgress.set(false);
+                }
+            });
+        } else {
+            logger.debug("压缩后钩子跳过：内容={}, 暂停={}, 空闲={}",
+                hasEnoughNewContent, atNaturalPause, !notAlreadyExtracting);
         }
     }
 
@@ -122,9 +220,56 @@ public class BackgroundExtractor {
     }
 
     private void performExtraction(List<Message> fullConversation) {
+        if (subAgentManager == null) {
+            performExtractionLegacy(fullConversation);
+            return;
+        }
+
         int currentTokens = tokenEstimator.estimate(fullConversation);
-        logger.info("开始提取会话记忆，当前会话 Token: {}, 工具调用: {}, 上次提取 MessageId: {}", 
+        logger.info("开始提取会话记忆（SubAgent模式），当前会话 Token: {}, 工具调用: {}, 上次提取 MessageId: {}", 
             currentTokens, toolCallCountSinceLastExtraction.get(), lastExtractedMessageId);
+
+        pendingConversation.clear();
+        pendingConversation.addAll(fullConversation);
+
+        try {
+            String memoryFilePath = memoryManager.getMemoryFilePath().toString();
+            String taskDescription = String.format(
+                "会话记忆增量更新: 当前 %d 条消息, %d tokens, 记忆文件: %s",
+                fullConversation.size(), currentTokens, memoryFilePath
+            );
+
+            SubAgentTask task = subAgentManager.forkAgent(
+                taskDescription,
+                buildMemoryExtractorPrompt(fullConversation, memoryFilePath),
+                120,
+                null,
+                SubAgentPermission.MEMORY_EXTRACTOR,
+                () -> onMemoryExtractionCompleted(fullConversation),
+                true  // ✅ 启用 Prompt Cache 优化
+            );
+
+            subAgentManager.scheduleTask(task, SubAgentPermission.MEMORY_EXTRACTOR);
+            
+            logger.info("✅ 会话记忆提取任务已提交给 SubAgent: taskId={}", task.getTaskId());
+
+        } catch (Exception e) {
+            logger.error("❌ 提交记忆提取任务到 SubAgent 失败，回退到传统模式", e);
+            performExtractionLegacy(fullConversation);
+        }
+    }
+
+    private void onMemoryExtractionCompleted(List<Message> fullConversation) {
+        toolCallCountSinceLastExtraction.set(0);
+        lastExtractedTokenCount = tokenEstimator.estimate(fullConversation);
+        updateLastSummarizedMessageIdIfSafe(fullConversation);
+        pendingConversation.clear();
+        logger.info("✅ Session Memory 提取完成，状态已更新");
+    }
+
+    private void performExtractionLegacy(List<Message> fullConversation) {
+        int currentTokens = tokenEstimator.estimate(fullConversation);
+        logger.info("开始提取会话记忆（传统兼容模式），当前会话 Token: {}", currentTokens);
 
         List<Message> extractionMessages = buildExtractionContext(fullConversation);
 
@@ -148,10 +293,34 @@ public class BackgroundExtractor {
         }
     }
 
+    private String buildMemoryExtractorPrompt(List<Message> fullConversation, String memoryFilePath) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(MEMORY_EXTRACTOR_PROMPT).append("\n\n");
+        
+        sb.append("### 📂 目标记忆文件路径\n").append(memoryFilePath).append("\n\n");
+        
+        sb.append("### 📊 边界信息\n");
+        int startIndex = findBoundaryIndex(fullConversation);
+        sb.append("- 从第 ").append(startIndex).append(" 条消息开始分析\n");
+        sb.append("- 共 ").append(fullConversation.size() - startIndex).append(" 条新消息\n\n");
+        
+        String existing = memoryManager.read();
+        if (existing != null && !existing.isBlank()) {
+            sb.append("### 📝 现有记忆内容\n```markdown\n");
+            sb.append(existing.length() > 2000 ? existing.substring(0, 2000) + "\n... [内容过长已截断]" : existing);
+            sb.append("\n```\n\n");
+        }
+        
+        sb.append("---\n\n");
+        sb.append("现在请开始执行任务！注意：基于已有对话内容进行增量更新。");
+        
+        return sb.toString();
+    }
+
     private List<Message> buildExtractionContext(List<Message> fullConversation) {
         List<Message> result = new ArrayList<>();
 
-        result.add(Message.system(SYSTEM_PROMPT));
+        result.add(Message.user(MEMORY_EXTRACTOR_PROMPT));
 
         String existing = memoryManager.read();
         if (existing != null && !existing.isBlank()) {

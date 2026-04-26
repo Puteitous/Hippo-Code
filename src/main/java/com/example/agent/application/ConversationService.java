@@ -37,6 +37,7 @@ public class ConversationService {
     private final Compressor toolResultCompressor;
     private final MemoryStore globalMemoryStore;
 
+    private final Map<String, Conversation> conversationRegistry = new ConcurrentHashMap<>();
     private final Map<String, ConversationComponents> componentRegistry = new ConcurrentHashMap<>();
     private final Map<String, Long> sessionLastAccessTime = new ConcurrentHashMap<>();
 
@@ -102,9 +103,15 @@ public class ConversationService {
             conversation.addMessage(Message.system(systemPrompt));
         }
 
+        conversationRegistry.put(sessionId, conversation);
+        
         logger.debug("创建新会话: sessionId={}, systemPrompt长度={}", 
             sessionId, systemPrompt != null ? systemPrompt.length() : 0);
         return conversation;
+    }
+
+    public Conversation getConversation(String sessionId) {
+        return conversationRegistry.get(sessionId);
     }
 
     public Conversation createSubAgentConversation(String systemPrompt, String parentSessionId) {
@@ -131,6 +138,38 @@ public class ConversationService {
     @Deprecated
     public Conversation createSubAgentConversation(String systemPrompt) {
         return createSubAgentConversation(systemPrompt, null);
+    }
+
+    public Conversation forkConversation(String parentSessionId, String finalInstruction) {
+        Conversation parent = getConversation(parentSessionId);
+        if (parent == null) {
+            logger.warn("forkConversation: 父会话不存在，回退到普通 sub-agent 模式");
+            return createSubAgentConversation(finalInstruction, parentSessionId);
+        }
+
+        String forkSessionId = parentSessionId + "_fork_" + System.nanoTime() % 1000000;
+        
+        logger.debug("Fork 会话: parent={}, fork={}", parentSessionId, forkSessionId);
+        logger.debug("Cache 优化: 复制 {} 条前缀消息，仅在末尾追加特殊指令", parent.getMessages().size());
+
+        Conversation forked = new Conversation(
+            defaultConfig.getMaxTokens(),
+            tokenEstimator,
+            forkSessionId
+        );
+
+        for (Message msg : parent.getMessages()) {
+            Message copy = msg.shallowCopy();
+            forked.addMessage(copy);
+        }
+
+        forked.addMessage(Message.user(finalInstruction));
+
+        logger.debug("✅ Fork 会话准备完成: 总消息 {} 条, Cache 命中比例约 {}%",
+            forked.getMessages().size(),
+            Math.round(100.0 * (forked.getMessages().size() - 1) / forked.getMessages().size()));
+
+        return forked;
     }
 
     public void ensureSessionComponents(Conversation conversation) {
@@ -164,6 +203,11 @@ public class ConversationService {
             llmClient,
             compactionState
         );
+
+        autoCompactTrigger.setCompactionCompleteHook(messages -> {
+            logger.debug("✅ 压缩完成钩子触发，调度低优先级记忆提取");
+            backgroundExtractor.requestExtractionAfterCompaction(messages);
+        });
 
         componentRegistry.put(sessionId, new ConversationComponents(
             warningInjector,

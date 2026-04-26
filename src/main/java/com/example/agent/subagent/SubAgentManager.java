@@ -28,19 +28,19 @@ public class SubAgentManager {
 
     private final Map<String, SubAgentTask> activeTasks;
     private final Map<String, SubAgentLogger> loggers;
+    private final Map<String, Runnable> completionCallbacks;
     private final ConversationService conversationService;
     private final LlmClient llmClient;
     private ToolRegistry toolRegistry;
-    private final SubAgentPermissionFilter permissionFilter;
     private final ExecutorService executor;
     private final AtomicInteger queuedTaskCount = new AtomicInteger(0);
 
     public SubAgentManager() {
         this.activeTasks = new ConcurrentHashMap<>();
         this.loggers = new ConcurrentHashMap<>();
+        this.completionCallbacks = new ConcurrentHashMap<>();
         this.conversationService = ServiceLocator.get(ConversationService.class);
         this.llmClient = ServiceLocator.get(LlmClient.class);
-        this.permissionFilter = new SubAgentPermissionFilter();
         
         this.executor = new ThreadPoolExecutor(
             MAX_PARALLEL_TASKS,
@@ -75,32 +75,59 @@ public class SubAgentManager {
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, List<String> dependsOn) {
+        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, dependsOn, SubAgentPermission.DEFAULT, null);
+    }
+
+    public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, 
+                                   List<String> dependsOn, SubAgentPermission permission, Runnable completionCallback) {
+        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, dependsOn, permission, completionCallback, false);
+    }
+
+    public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, 
+                                   List<String> dependsOn, SubAgentPermission permission, 
+                                   Runnable completionCallback, boolean useForkOptimization) {
         String parentSessionId = getParentSessionId();
-        String finalPrompt = buildSubAgentSystemPrompt(taskDescription, systemPrompt);
-        logger.info("forkAgent: taskDescription={}, timeout={}秒, dependsOn={}", 
-            taskDescription, timeoutSeconds, dependsOn);
+        String finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
+            ? systemPrompt 
+            : buildSubAgentSystemPrompt(taskDescription, null);
         
-        Conversation subConversation = conversationService.createSubAgentConversation(
-            finalPrompt,
-            parentSessionId
-        );
+        logger.info("forkAgent: taskDescription={}, timeout={}秒, permission={}, fork={}, dependsOn={}", 
+            taskDescription, timeoutSeconds, permission.getName(), useForkOptimization, dependsOn);
+
+        Conversation subConversation;
+        if (useForkOptimization && parentSessionId != null) {
+            subConversation = conversationService.forkConversation(
+                parentSessionId,
+                finalPrompt
+            );
+        } else {
+            subConversation = conversationService.createSubAgentConversation(
+                finalPrompt,
+                parentSessionId
+            );
+        }
 
         SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn);
         activeTasks.put(task.getTaskId(), task);
+
+        if (completionCallback != null) {
+            completionCallbacks.put(task.getTaskId(), completionCallback);
+        }
 
         SubAgentLogger subAgentLogger = new SubAgentLogger(task, parentSessionId);
         loggers.put(task.getTaskId(), subAgentLogger);
         subAgentLogger.logStatusChange(SubAgentStatus.PENDING);
         subAgentLogger.log("Sub-Agent 会话 ID: " + subConversation.getSessionId());
         subAgentLogger.log("父会话 ID: " + parentSessionId);
+        subAgentLogger.log("权限模式: " + permission.getName());
         subAgentLogger.log("启动 Sub-Agent: " + taskDescription);
         if (task.hasDependencies()) {
             subAgentLogger.log("依赖任务: " + dependsOn);
         }
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
 
-        logger.info("SubAgent 已创建: taskId={}, dependsOn={}, description={}",
-            task.getTaskId(), task.getDependsOn(), taskDescription);
+        logger.info("SubAgent 已创建: taskId={}, permission={}, dependsOn={}, description={}",
+            task.getTaskId(), permission.getName(), task.getDependsOn(), taskDescription);
         return task;
     }
 
@@ -143,13 +170,17 @@ public class SubAgentManager {
     }
 
     private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger) {
+        submitTask(task, subAgentLogger, SubAgentPermission.DEFAULT);
+    }
+
+    private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger, SubAgentPermission permission) {
         SubAgentRunner runner = new SubAgentRunner(
             task,
             subAgentLogger,
             llmClient,
             getToolRegistry(),
             conversationService,
-            permissionFilter
+            permission
         );
 
         int queueSize = ((ThreadPoolExecutor) executor).getQueue().size();
@@ -199,10 +230,41 @@ public class SubAgentManager {
                     new SubAgentFailedEvent(task.getTaskId(), task.getDescription(), e.getMessage())
                 );
             } finally {
+                Runnable callback = completionCallbacks.remove(task.getTaskId());
+                if (callback != null) {
+                    try {
+                        callback.run();
+                    } catch (Exception e) {
+                        logger.warn("执行任务回调异常: taskId={}", task.getTaskId(), e);
+                    }
+                }
                 triggerDependentTasks(task);
                 cleanupExpiredTasks();
             }
         });
+    }
+
+    public void scheduleTask(SubAgentTask task, SubAgentPermission permission) {
+        SubAgentLogger subAgentLogger = loggers.get(task.getTaskId());
+        if (subAgentLogger != null) {
+            startExecution(task, subAgentLogger, permission);
+        }
+    }
+
+    private void startExecution(SubAgentTask task, SubAgentLogger subAgentLogger, SubAgentPermission permission) {
+        if (task.hasDependencies() && !areDependenciesSatisfied(task)) {
+            task.setStatus(SubAgentStatus.WAITING);
+            subAgentLogger.log("任务等待依赖完成: " + task.getDependsOn());
+            task.addLog("等待依赖任务完成: " + task.getDependsOn());
+            com.example.agent.core.event.EventBus.publish(
+                new com.example.agent.subagent.event.SubAgentWaitingEvent(
+                    task.getTaskId(), task.getDescription(), task.getDependsOn()
+                )
+            );
+            return;
+        }
+
+        submitTask(task, subAgentLogger, permission);
     }
 
     private void triggerDependentTasks(SubAgentTask completedTask) {

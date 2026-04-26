@@ -5,6 +5,8 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +17,8 @@ public class ContextClipper {
     public static final int MIN_TOKENS_TARGET = 10000;
     public static final int MAX_TOKENS_TARGET = 40000;
     public static final int MIN_TEXT_BLOCK_MESSAGES = 5;
+
+    private static final Logger logger = LoggerFactory.getLogger(ContextClipper.class);
 
     private final TokenEstimator tokenEstimator;
     private final SessionMemoryManager memoryManager;
@@ -77,9 +81,17 @@ public class ContextClipper {
         if (deletedTurnCount > 0) {
             Message summaryHeader = createSummaryHeader(turns.subList(0, deletedTurnCount));
             if (summaryHeader != null) {
+                Message boundaryMarker = Message.system(String.format(
+                    "--- SESSION COMPACTION BOUNDARY ---\n" +
+                    "之前的 %d 轮对话已压缩为摘要",
+                    deletedTurnCount
+                ));
                 truncatedMessages.add(0, summaryHeader);
+                truncatedMessages.add(0, boundaryMarker);
                 usedSessionMemory = memoryManager != null && memoryManager.exists();
                 usedLlmSummary = !usedSessionMemory && llmClient != null;
+                
+                logger.debug("压缩结构: [BoundaryMarker] + [SessionMemory(User)] + [TailMessages]");
             }
         }
 
@@ -142,7 +154,7 @@ public class ContextClipper {
             summaryContent
         );
 
-        return Message.system(content);
+        return Message.user(content);
     }
 
     private String generateLlmSummary(List<ConversationTurn> deletedTurns) {

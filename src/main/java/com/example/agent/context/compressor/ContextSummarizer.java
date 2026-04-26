@@ -61,7 +61,8 @@ public class ContextSummarizer {
             result.add(systemMessage);
         }
 
-        result.add(Message.system(createSummaryHeader(summary, toSummarize.size(), initialTokens)));
+        result.add(0, Message.system("--- SESSION COMPACTION BOUNDARY ---"));
+        result.add(Message.user(createSummaryHeader(summary, toSummarize.size(), initialTokens)));
         result.addAll(toKeep);
 
         int finalTokens = tokenEstimator.estimate(result);

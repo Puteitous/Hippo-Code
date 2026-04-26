@@ -115,6 +115,16 @@ public class Message {
         this.cacheControl = CacheControl.ephemeral();
     }
 
+    public Message shallowCopy() {
+        Message copy = new Message(this.role, this.content);
+        copy.id = this.id;
+        copy.toolCalls = this.toolCalls != null ? new ArrayList<>(this.toolCalls) : null;
+        copy.cacheControl = this.cacheControl;
+        copy.toolCallId = this.toolCallId;
+        copy.name = this.name;
+        return copy;
+    }
+
     public List<ToolCall> getToolCalls() {
         return toolCalls;
     }
