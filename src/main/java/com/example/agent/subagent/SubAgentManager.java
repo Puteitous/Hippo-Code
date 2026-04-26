@@ -1,6 +1,7 @@
 package com.example.agent.subagent;
 
 import com.example.agent.core.AgentContext;
+import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.application.ConversationService;
@@ -34,6 +35,7 @@ public class SubAgentManager {
     private ToolRegistry toolRegistry;
     private final ExecutorService executor;
     private final AtomicInteger queuedTaskCount = new AtomicInteger(0);
+    private final ProjectAgentLoader projectAgentLoader;
 
     public SubAgentManager() {
         this.activeTasks = new ConcurrentHashMap<>();
@@ -41,6 +43,9 @@ public class SubAgentManager {
         this.completionCallbacks = new ConcurrentHashMap<>();
         this.conversationService = ServiceLocator.get(ConversationService.class);
         this.llmClient = ServiceLocator.get(LlmClient.class);
+        
+        String workspacePath = WorkspaceManager.getCurrentProjectDir().toString();
+        this.projectAgentLoader = new ProjectAgentLoader(workspacePath);
         
         this.executor = new ThreadPoolExecutor(
             MAX_PARALLEL_TASKS,
@@ -58,6 +63,13 @@ public class SubAgentManager {
             MAX_PARALLEL_TASKS, MAX_QUEUED_TASKS);
     }
 
+    public String getFullAgentMenu() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(BuiltInAgent.getAgentMenu());
+        sb.append(projectAgentLoader.getCustomAgentMenu());
+        return sb.toString();
+    }
+
     private ToolRegistry getToolRegistry() {
         if (toolRegistry == null) {
             toolRegistry = ServiceLocator.get(ToolRegistry.class);
@@ -71,11 +83,11 @@ public class SubAgentManager {
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds) {
-        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, null);
+        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, null, SubAgentPermission.DEFAULT, null, false);
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, List<String> dependsOn) {
-        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, dependsOn, SubAgentPermission.DEFAULT, null);
+        return forkAgent(taskDescription, systemPrompt, timeoutSeconds, dependsOn, SubAgentPermission.DEFAULT, null, false);
     }
 
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, 
@@ -128,8 +140,104 @@ public class SubAgentManager {
         }
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
 
-        logger.info("SubAgent 已创建: taskId={}, permission={}, dependsOn={}, description={}",
-            task.getTaskId(), permission.getName(), task.getDependsOn(), taskDescription);
+        submitTask(task, subAgentLogger, permission);
+
+        logger.info("SubAgent 已创建: taskId={}, permission={}, fork={}",
+            task.getTaskId(), permission.getName(), isForkChild);
+        return task;
+    }
+
+    public SubAgentTask createSubAgent(String taskDescription, String subagentType) {
+        return createSubAgent(taskDescription, subagentType, 300, null, null);
+    }
+
+    public SubAgentTask createSubAgent(String taskDescription, String subagentType, int timeoutSeconds, 
+                                         List<String> dependsOn, Runnable completionCallback) {
+        if (taskDescription == null || taskDescription.isBlank()) {
+            throw new IllegalArgumentException("任务描述不能为空");
+        }
+        timeoutSeconds = Math.max(30, Math.min(3600, timeoutSeconds));
+        
+        String parentSessionId = getParentSessionId();
+        
+        BuiltInAgent selectedAgent = BuiltInAgent.fromType(subagentType);
+        ProjectAgentLoader.ProjectAgentDefinition customAgent = projectAgentLoader.getAgent(subagentType);
+        
+        boolean useFork;
+        SubAgentPermission permission;
+        String systemPrompt;
+        String agentInfo;
+
+        if (selectedAgent != null) {
+            useFork = selectedAgent.useForkOptimization();
+            permission = selectedAgent.getPermission();
+            systemPrompt = selectedAgent.getSystemPrompt();
+            agentInfo = selectedAgent.getIcon() + " " + selectedAgent.getDisplayName() + " (内置专家)";
+        } else if (customAgent != null) {
+            useFork = customAgent.useForkOptimization();
+            permission = customAgent.getPermission();
+            systemPrompt = customAgent.getSystemPrompt();
+            agentInfo = customAgent.getIcon() + " " + customAgent.getDisplayName() + " (项目自定义)";
+        } else {
+            useFork = true;
+            permission = SubAgentPermission.DEFAULT;
+            systemPrompt = null;
+            agentInfo = "🚀 Fork 模式 - 完整复用上下文 (推荐)";
+        }
+
+        logger.info("forkAgent: task={}, agent={}, timeout={}s, fork={}, dependsOn={}", 
+            taskDescription, agentInfo, timeoutSeconds, useFork, dependsOn);
+
+        Conversation subConversation;
+        boolean isForkChild = false;
+        String finalPrompt;
+
+        if (useFork && parentSessionId != null) {
+            finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
+                ? systemPrompt + "\n\n## 当前任务\n" + taskDescription
+                : "## Fork 子代理任务\n\n" + taskDescription;
+            
+            subConversation = conversationService.forkConversation(
+                parentSessionId,
+                finalPrompt
+            );
+            isForkChild = true;
+        } else {
+            finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
+                ? systemPrompt + "\n\n## 当前任务\n" + taskDescription
+                : buildSubAgentSystemPrompt(taskDescription, null);
+            
+            subConversation = conversationService.createSubAgentConversation(
+                finalPrompt,
+                parentSessionId
+            );
+        }
+
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, isForkChild);
+        activeTasks.put(task.getTaskId(), task);
+
+        if (completionCallback != null) {
+            completionCallbacks.put(task.getTaskId(), completionCallback);
+        }
+
+        SubAgentLogger subAgentLogger = new SubAgentLogger(task, parentSessionId);
+        loggers.put(task.getTaskId(), subAgentLogger);
+        subAgentLogger.logStatusChange(SubAgentStatus.PENDING);
+        subAgentLogger.log("专家代理: " + agentInfo);
+        subAgentLogger.log("Sub-Agent 会话 ID: " + subConversation.getSessionId());
+        subAgentLogger.log("父会话 ID: " + parentSessionId);
+        subAgentLogger.log("权限模式: " + permission.getName());
+        subAgentLogger.log("启动 Sub-Agent: " + taskDescription);
+        if (task.hasDependencies()) {
+            subAgentLogger.log("依赖任务: " + dependsOn);
+        }
+        subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
+
+        final SubAgentPermission finalPermission = permission;
+        submitTask(task, subAgentLogger, finalPermission);
+
+        logger.info("SubAgent 已创建: taskId={}, agent={}, permission={}, fork={}",
+            task.getTaskId(), agentInfo, permission.getName(), isForkChild);
         return task;
     }
 
@@ -205,14 +313,15 @@ public class SubAgentManager {
 
                 runner.run();
 
-                task.setStatus(SubAgentStatus.COMPLETED);
+                if (!task.isDone()) {
+                    task.setStatus(SubAgentStatus.COMPLETED);
+                    task.markCompleted();
+                }
                 String resultSummary = extractResultSummary(task);
                 task.setResultSummary(resultSummary);
-                subAgentLogger.logStatusChange(SubAgentStatus.COMPLETED);
+                subAgentLogger.logStatusChange(task.getStatus());
                 subAgentLogger.log("执行结果: " + resultSummary);
                 subAgentLogger.saveDetails();
-
-                task.markCompleted();
 
                 com.example.agent.core.event.EventBus.publish(
                     new SubAgentCompletedEvent(task.getTaskId(), task.getDescription(), resultSummary)
@@ -220,13 +329,14 @@ public class SubAgentManager {
 
             } catch (Exception e) {
                 logger.error("SubAgent 执行异常: taskId={}", task.getTaskId(), e);
-                task.setStatus(SubAgentStatus.FAILED);
-                task.setError(e);
-                subAgentLogger.logStatusChange(SubAgentStatus.FAILED);
-                subAgentLogger.logError("执行失败", e);
+                if (!task.isDone()) {
+                    task.setStatus(SubAgentStatus.FAILED);
+                    task.setError(e);
+                    task.markFailed(e);
+                    subAgentLogger.logStatusChange(SubAgentStatus.FAILED);
+                    subAgentLogger.logError("执行失败", e);
+                }
                 subAgentLogger.saveDetails();
-
-                task.markFailed(e);
 
                 com.example.agent.core.event.EventBus.publish(
                     new SubAgentFailedEvent(task.getTaskId(), task.getDescription(), e.getMessage())

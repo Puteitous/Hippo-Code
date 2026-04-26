@@ -84,12 +84,15 @@ public class SubAgentRunner implements Runnable {
                 String systemPromptInfo;
                 
                 if (task.isForkChild()) {
-                    finalContext.addAll(context);
+                    List<Message> forkContext = new ArrayList<>();
+                    forkContext.addAll(context);
                     
-                    boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
-                    if (!hasUserMessage) {
-                        finalContext.add(Message.user("请执行子代理任务：" + task.getDescription()));
-                    }
+                    String forkTaskInstruction = String.format(
+                        "## 🎯 子代理任务（Fork 模式）\n\n**任务描述:** %s\n\n---\n\n## ⚠️ 绝对强制规则（必须遵守！）\n\n1. ✅ **结果明确立即结束** - 一旦获得确定结果，立刻输出最终总结，不再调用工具\n2. ✅ **不要过度优化格式** - 不需要做漂亮的表格，简洁给出结果即可\n3. ❌ **严禁无意义重试** - 同样参数的工具最多调用 1 次，重复毫无意义\n4. ❌ **严禁询问用户** - 绝对不能问用户任何问题，信息不足就如实报告\n5. ✅ **最少轮次原则** - 能用 1 轮完成就不要用 2 轮，节省时间和 Token\n\n---\n\n请直接开始执行。",
+                        task.getDescription()
+                    );
+                    forkContext.add(Message.user(forkTaskInstruction));
+                    finalContext = forkContext;
                     
                     systemPromptInfo = "Fork 模式: 复用父 Agent System Prompt (缓存优化)";
                     subAgentLogger.log("上下文消息数: " + finalContext.size() + " (Fork 模式 - 完整复用上下文，缓存优化)");
@@ -146,15 +149,17 @@ public class SubAgentRunner implements Runnable {
                 }
                 subAgentLogger.log("LLM 调用完成" + (llmRetryCount > 0 ? " (重试 " + llmRetryCount + " 次)" : ""));
 
-                Message assistantMessage = response.getFirstMessage();
-                if (assistantMessage == null) {
-                    task.addLog("未收到 LLM 响应");
-                    subAgentLogger.log("警告: 未收到 LLM 响应");
+                if (response == null || response.getFirstMessage() == null) {
+                    task.addLog("LLM 返回空响应");
+                    subAgentLogger.log("警告: LLM 返回空响应");
                     if (emptyResponseRetries++ < MAX_EMPTY_RESPONSE_RETRIES) {
                         continue;
                     }
+                    task.markFailed(new RuntimeException("LLM 多次返回空响应"));
                     break;
                 }
+
+                Message assistantMessage = response.getFirstMessage();
 
                 conversationService.addAssistantMessage(task.getConversation(), assistantMessage, response.getUsage());
 
@@ -174,6 +179,7 @@ public class SubAgentRunner implements Runnable {
                 } else {
                     task.addLog("任务完成，无更多工具调用");
                     subAgentLogger.log("无工具调用，任务完成");
+                    task.markCompleted();
                     break;
                 }
             }
@@ -181,6 +187,9 @@ public class SubAgentRunner implements Runnable {
             if (turnCount >= MAX_TURNS) {
                 task.addLog("达到最大轮次限制: " + MAX_TURNS);
                 subAgentLogger.log("达到最大轮次限制: " + MAX_TURNS);
+                if (!task.isDone()) {
+                    task.markCompleted();
+                }
             }
 
             task.addLog("=== SubAgent 执行结束 ===");
@@ -190,7 +199,9 @@ public class SubAgentRunner implements Runnable {
             task.addLog("执行异常: " + e.getMessage());
             subAgentLogger.logError("执行异常", e);
             logger.error("SubAgentRunner 执行异常: taskId={}", task.getTaskId(), e);
-            throw new RuntimeException("SubAgent 执行失败", e);
+            if (!task.isDone()) {
+                task.markFailed(e);
+            }
         }
     }
 

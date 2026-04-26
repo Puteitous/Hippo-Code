@@ -1,7 +1,10 @@
 package com.example.agent.tools;
 
 import com.example.agent.core.di.ServiceLocator;
+import com.example.agent.subagent.BuiltInAgent;
 import com.example.agent.subagent.SubAgentManager;
+import com.example.agent.subagent.SubAgentResultFormatter;
+import com.example.agent.subagent.SubAgentStatus;
 import com.example.agent.subagent.SubAgentTask;
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -32,10 +35,14 @@ public class ForkAgentsTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        return "批量创建多个子 Agent 并行执行独立任务。一次可以同时启动 2-10 个 Sub-Agent，" +
-               "各自执行不同的子任务（如扫描不同的模块、读取多个文件、并行搜索）。" +
-               "所有子 Agent 拥有独立的上下文和工具沙箱，互不干扰，大幅提升效率。" +
-               "适用于大规模并行代码分析、多文件读取、分模块扫描等场景。";
+        SubAgentManager manager = getManager();
+        String agentMenu = manager != null ? manager.getFullAgentMenu() : BuiltInAgent.getAgentMenu();
+        
+        return "🚀 批量创建多个专家子 Agent 并行执行独立任务。这是极致的成本优化！\n\n" +
+               agentMenu + "\n" +
+               "一次可以同时启动 2-10 个 Sub-Agent，各自执行不同的子任务。" +
+               "所有子 Agent 共享同一个 180K tokens 缓存前缀，边际成本近乎为零！\n" +
+               "适用于大规模并行代码分析、多文件读取、分模块扫描等场景。**推荐省略 subagent_type 以获得最大缓存收益！**";
     }
 
     @Override
@@ -46,7 +53,7 @@ public class ForkAgentsTool implements ToolExecutor {
                 "properties": {
                     "tasks": {
                         "type": "array",
-                        "description": "子任务列表，每个对象包含独立的 task 和可选的 system_prompt",
+                        "description": "子任务列表，每个对象包含独立的 task 描述和可选的专家类型",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -54,9 +61,9 @@ public class ForkAgentsTool implements ToolExecutor {
                                     "type": "string",
                                     "description": "该子任务的详细描述"
                                 },
-                                "system_prompt": {
+                                "subagent_type": {
                                     "type": "string",
-                                    "description": "该子任务的自定义系统提示词（可选）"
+                                    "description": "专家类型。**省略此参数 = 完整复用当前上下文（98% 缓存命中，强烈推荐）**。可选值: explore（代码搜索）, plan（方案设计）, verification（独立验证）, general（通用）"
                                 },
                                 "timeout_seconds": {
                                     "type": "integer",
@@ -123,14 +130,33 @@ public class ForkAgentsTool implements ToolExecutor {
         Map<Integer, Integer> indexToTaskPosition = new HashMap<>();
 
         int taskIndex = 0;
+        Map<Integer, List<String>> taskDependencies = new HashMap<>();
+
         for (JsonNode taskNode : tasksNode) {
             if (!taskNode.has("task") || taskNode.get("task").isNull()) {
                 taskIndex++;
                 continue;
             }
+
+            List<String> dependsOnTaskIds = new ArrayList<>();
+            if (taskNode.has("depends_on_index") && taskNode.get("depends_on_index").isArray()) {
+                for (JsonNode depIndexNode : taskNode.get("depends_on_index")) {
+                    if (depIndexNode.isInt()) {
+                        int depIndex = depIndexNode.asInt();
+                        if (indexToTaskPosition.containsKey(depIndex)) {
+                            Integer depPos = indexToTaskPosition.get(depIndex);
+                            if (depPos < launchedTasks.size()) {
+                                dependsOnTaskIds.add(launchedTasks.get(depPos).getTaskId());
+                            }
+                        }
+                    }
+                }
+            }
+            taskDependencies.put(taskIndex, dependsOnTaskIds);
+
             String task = taskNode.get("task").asText();
-            String systemPrompt = taskNode.has("system_prompt") && !taskNode.get("system_prompt").isNull()
-                ? taskNode.get("system_prompt").asText()
+            String subagentType = taskNode.has("subagent_type") && !taskNode.get("subagent_type").isNull()
+                ? taskNode.get("subagent_type").asText()
                 : null;
             
             int taskTimeoutSeconds = 300;
@@ -139,136 +165,29 @@ public class ForkAgentsTool implements ToolExecutor {
                 taskTimeoutSeconds = Math.max(30, Math.min(3600, taskTimeoutSeconds));
             }
             
-            SubAgentTask subTask = manager.forkAgent(task, systemPrompt, taskTimeoutSeconds, null);
+            SubAgentTask subTask = manager.createSubAgent(task, subagentType, taskTimeoutSeconds, dependsOnTaskIds, null);
             launchedTasks.add(subTask);
             indexToTaskPosition.put(taskIndex, launchedTasks.size() - 1);
             taskIndex++;
         }
 
-        taskIndex = 0;
-        for (JsonNode taskNode : tasksNode) {
-            if (!taskNode.has("task") || taskNode.get("task").isNull()) {
-                taskIndex++;
-                continue;
-            }
-            
-            if (taskNode.has("depends_on_index") && taskNode.get("depends_on_index").isArray()) {
-                Integer pos = indexToTaskPosition.get(taskIndex);
-                if (pos != null) {
-                    SubAgentTask currentTask = launchedTasks.get(pos);
-                    List<String> dependsOn = currentTask.getDependsOn() != null 
-                        ? new ArrayList<>(currentTask.getDependsOn()) 
-                        : new ArrayList<>();
-                    
-                    for (JsonNode depIndexNode : taskNode.get("depends_on_index")) {
-                        if (depIndexNode.isInt()) {
-                            int depIndex = depIndexNode.asInt();
-                            Integer depPos = indexToTaskPosition.get(depIndex);
-                            if (depPos != null && depPos < launchedTasks.size()) {
-                                String depTaskId = launchedTasks.get(depPos).getTaskId();
-                                dependsOn.add(depTaskId);
-                            }
-                        }
-                    }
-                    
-                    if (!dependsOn.isEmpty()) {
-                        currentTask.setDependsOn(dependsOn);
-                    }
-                }
-            }
-            taskIndex++;
-        }
 
-        for (SubAgentTask task : launchedTasks) {
-            manager.scheduleTask(task);
-        }
 
         if (launchedTasks.isEmpty()) {
             return "❌ 没有有效的任务可以启动";
         }
 
         if (!waitForAll) {
-            return buildAsyncResult(launchedTasks);
+            return SubAgentResultFormatter.formatBatchResults(launchedTasks);
         }
 
-        return waitForAllResults(launchedTasks, waitTimeoutSeconds);
-    }
-
-    private String buildAsyncResult(List<SubAgentTask> tasks) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("✅ 批量启动 ").append(tasks.size()).append(" 个 Sub-Agent\n");
-        sb.append("执行模式: 后台并行执行\n\n");
-        
-        for (int i = 0; i < tasks.size(); i++) {
-            SubAgentTask task = tasks.get(i);
-            sb.append("  [").append(i + 1).append("] Task ID: ").append(task.getTaskId()).append("\n");
-            sb.append("      任务: ").append(truncate(task.getDescription(), 50)).append("\n");
-            if (task.hasDependencies()) {
-                sb.append("      依赖: ").append(task.getDependsOn()).append("\n");
-            }
-        }
-        
-        sb.append("\n📋 使用建议:\n");
-        sb.append("   - 调用 list_subagents 查看实时进度\n");
-        sb.append("   - 调用 list_subagents task_id=xxx 查看单个任务详情\n");
-        
-        return sb.toString();
-    }
-
-    private String waitForAllResults(List<SubAgentTask> tasks, int timeoutSeconds) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("🔄 等待 ").append(tasks.size()).append(" 个 Sub-Agent 并行执行...\n");
-        sb.append("执行模式: 同步等待全部完成\n");
-        sb.append("超时时间: ").append(timeoutSeconds).append(" 秒\n\n");
-
-        int completed = 0;
-        int failed = 0;
-        int timeout = 0;
-
-        for (SubAgentTask task : tasks) {
+        for (SubAgentTask task : launchedTasks) {
             try {
-                SubAgentTask finished = task.awaitCompletion(timeoutSeconds, TimeUnit.SECONDS);
-                if (finished.getError() != null) {
-                    failed++;
-                } else {
-                    completed++;
-                }
+                task.awaitCompletion(waitTimeoutSeconds, TimeUnit.SECONDS);
             } catch (Exception e) {
-                timeout++;
             }
         }
 
-        sb.append("=== 执行汇总 ===\n");
-        sb.append("   总计: ").append(tasks.size()).append(" 个任务\n");
-        sb.append("   ✅ 成功: ").append(completed).append("\n");
-        sb.append("   ❌ 失败: ").append(failed).append("\n");
-        sb.append("   ⏱️ 超时: ").append(timeout).append("\n\n");
-
-        for (SubAgentTask task : tasks) {
-            String marker = task.getStatus().name().equals("COMPLETED") ? "✅" :
-                           task.getStatus().name().equals("FAILED") ? "❌" : "⏱️";
-            
-            sb.append(marker).append(" [").append(task.getTaskId()).append("]\n");
-            sb.append("   任务: ").append(truncate(task.getDescription(), 50)).append("\n");
-            
-            if (task.getResultSummary() != null) {
-                sb.append("   结果: ").append(truncate(task.getResultSummary(), 150)).append("\n");
-            }
-            if (task.getError() != null) {
-                sb.append("   错误: ").append(task.getError().getMessage()).append("\n");
-            }
-            sb.append("\n");
-        }
-
-        sb.append("\n💡 提示:\n");
-        sb.append("   调用 list_subagents 获取所有任务的完整执行结果和日志");
-
-        return sb.toString();
-    }
-
-    private String truncate(String s, int maxLength) {
-        if (s == null) return "";
-        s = s.replace("\n", " ");
-        return s.length() > maxLength ? s.substring(0, maxLength) + "..." : s;
+        return SubAgentResultFormatter.formatBatchResults(launchedTasks);
     }
 }

@@ -57,11 +57,21 @@ public class SubAgentTask {
         this.completionFuture = new CompletableFuture<>();
     }
 
+    public boolean isDone() {
+        return completionFuture.isDone();
+    }
+
     public void markCompleted() {
+        if (completionFuture.isDone()) {
+            return;
+        }
         completionFuture.complete(this);
     }
 
     public void markFailed(Throwable e) {
+        if (completionFuture.isDone()) {
+            return;
+        }
         completionFuture.completeExceptionally(e);
     }
 
