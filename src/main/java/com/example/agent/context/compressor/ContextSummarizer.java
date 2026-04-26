@@ -4,35 +4,43 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.memory.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class ContextSummarizer {
+    private static final Logger logger = LoggerFactory.getLogger(ContextSummarizer.class);
 
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
     private final SessionMemoryManager memoryManager;
+    private final CompactForkExecutor forkExecutor;
+    private final String sessionId;
     private CompactionResult lastResult;
     private String customInstruction;
 
     public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient) {
-        this.tokenEstimator = tokenEstimator;
-        this.llmClient = llmClient;
-        this.memoryManager = null;
+        this(tokenEstimator, llmClient, null, null);
     }
 
     public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, String sessionId) {
-        this.tokenEstimator = tokenEstimator;
-        this.llmClient = llmClient;
-        this.memoryManager = new SessionMemoryManager(sessionId);
+        this(tokenEstimator, llmClient, new SessionMemoryManager(sessionId), sessionId);
     }
 
     public ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, SessionMemoryManager memoryManager) {
+        this(tokenEstimator, llmClient, memoryManager, null);
+    }
+
+    private ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, 
+                             SessionMemoryManager memoryManager, String sessionId) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.memoryManager = memoryManager;
+        this.sessionId = sessionId;
+        this.forkExecutor = new CompactForkExecutor();
     }
 
     public List<Message> compact(List<Message> messages, int targetTokens) {
@@ -89,7 +97,7 @@ public class ContextSummarizer {
 
     private String generateSummary(List<Message> messages) {
         String conversationText = messages.stream()
-            .map(msg -> String.format("%s: %s", msg.getRole(), msg.getContent()))
+            .map(msg -> String.format("%s: %s", msg.getRole(), truncate(msg.getContent(), 500)))
             .collect(Collectors.joining("\n"));
 
         String baseInstruction = (customInstruction != null && !customInstruction.trim().isEmpty())
@@ -101,21 +109,39 @@ public class ContextSummarizer {
               "4. 需要记住的技术上下文\n\n" +
               "**不要**保留：工具调用的详细输出、中间调试信息、重复内容。";
 
-        String prompt = String.format(
+        String compactionPrompt = String.format(
             "## 结构化对话摘要任务\n\n" +
             "%s\n" +
             "输出格式：使用 Markdown 列表，简洁专业。\n\n" +
-            "对话历史：\n```\n%s\n```\n\n" +
-            "摘要：",
-            baseInstruction,
-            truncateContent(conversationText, 12000)
+            "基于完整对话上下文进行准确摘要。",
+            baseInstruction
         );
 
         try {
-            return llmClient.generateSync(prompt);
+            if (sessionId != null) {
+                logger.info("🚀 使用 Fork Agent 执行 LLM 压缩 (Prompt Cache 优化模式");
+                CompactForkExecutor.CompactResult result = forkExecutor.executeForkedCompaction(sessionId, compactionPrompt);
+                
+                if (result.isSuccess()) {
+                    logger.info("✅ Fork Agent 压缩成功 (Cache 模式: {})", 
+                        result.isUsedFork() ? "Fork+缓存共享" : "直接执行");
+                    return result.getSummary();
+                } else {
+                    logger.warn("⚠️ Fork 压缩失败，回退到直接执行: {}", result.getError());
+                }
+            }
         } catch (Exception e) {
-            return fallbackSummary(messages);
+            logger.warn("⚠️ Fork 压缩异常，回退到直接执行: {}", e.getMessage());
         }
+
+        return fallbackSummary(messages);
+    }
+    
+    private String truncate(String content, int maxLength) {
+        if (content == null || content.length() <= maxLength) {
+            return content;
+        }
+        return content.substring(0, maxLength) + "...";
     }
 
     private String fallbackSummary(List<Message> messages) {

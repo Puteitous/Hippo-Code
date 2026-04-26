@@ -23,26 +23,31 @@ public class ContextClipper {
     private final TokenEstimator tokenEstimator;
     private final SessionMemoryManager memoryManager;
     private final LlmClient llmClient;
+    private final CompactForkExecutor forkExecutor;
+    private final String sessionId;
     private final int minTokens;
     private final int maxTokens;
     private final int minTextBlockMessages;
 
     public ContextClipper(TokenEstimator tokenEstimator) {
-        this(tokenEstimator, null, null, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
+        this(tokenEstimator, null, null, null, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
     public ContextClipper(TokenEstimator tokenEstimator, String sessionId, LlmClient llmClient) {
-        this(tokenEstimator, new SessionMemoryManager(sessionId), llmClient, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
+        this(tokenEstimator, new SessionMemoryManager(sessionId), llmClient, sessionId, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
     public ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient) {
-        this(tokenEstimator, memoryManager, llmClient, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
+        this(tokenEstimator, memoryManager, llmClient, null, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
-    public ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient, int minTokens, int maxTokens, int minTextBlockMessages) {
+    private ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient, 
+                          String sessionId, int minTokens, int maxTokens, int minTextBlockMessages) {
         this.tokenEstimator = tokenEstimator;
         this.memoryManager = memoryManager;
         this.llmClient = llmClient;
+        this.sessionId = sessionId;
+        this.forkExecutor = new CompactForkExecutor();
         this.minTokens = minTokens;
         this.maxTokens = maxTokens;
         this.minTextBlockMessages = minTextBlockMessages;
@@ -158,27 +163,30 @@ public class ContextClipper {
     }
 
     private String generateLlmSummary(List<ConversationTurn> deletedTurns) {
-        String conversationText = deletedTurns.stream()
-            .flatMap(turn -> turn.getMessages().stream())
-            .map(msg -> String.format("%s: %s", msg.getRole(), truncate(msg.getContent(), 500)))
-            .collect(Collectors.joining("\n"));
-
-        String prompt = String.format(
+        String compactionPrompt = 
             "## 结构化摘要任务\n\n" +
-            "将以下删除的早期对话压缩成精准摘要，按 3 个维度组织：\n\n" +
+            "将删除的早期对话压缩成精准摘要，按 3 个维度组织：\n\n" +
             "### 1. 关键决策\n" +
             "### 2. 错误与修复\n" +
             "### 3. 已完成进度\n\n" +
-            "对话内容：\n```\n%s\n```\n\n" +
-            "摘要：",
-            truncate(conversationText, 12000)
-        );
+            "基于完整上下文进行摘要，不要编造信息。";
 
         try {
-            return llmClient.generateSync(prompt);
+            if (sessionId != null && llmClient != null) {
+                logger.info("🚀 ContextClipper 使用 Fork Agent 执行边界摘要压缩");
+                CompactForkExecutor.CompactResult result = forkExecutor.executeForkedCompaction(sessionId, compactionPrompt);
+                
+                if (result.isSuccess()) {
+                    logger.info("✅ Fork Agent 边界摘要成功 (Cache 模式: {})", 
+                        result.isUsedFork() ? "Fork+缓存共享" : "直接执行");
+                    return result.getSummary();
+                }
+            }
         } catch (Exception e) {
-            return createFallbackSummary(deletedTurns);
+            logger.warn("⚠️ Fork 摘要失败，回退到默认摘要: {}", e.getMessage());
         }
+
+        return createFallbackSummary(deletedTurns);
     }
 
     private String createFallbackSummary(List<ConversationTurn> deletedTurns) {

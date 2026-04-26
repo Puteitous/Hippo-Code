@@ -69,10 +69,38 @@ public class AutoCompactTrigger implements BudgetListener {
 
     @Override
     public void onThresholdReached(BudgetThreshold threshold, int currentTokens, int maxTokens) {
+        if (isCompactionForkContext()) {
+            metrics.recordEvent(
+                CompactionMetricsCollector.CompactionEvent.TENGU_SM_COMPACT_RECURSION_PROTECTED,
+                "检测到压缩 Fork 上下文，递归保护已触发"
+            );
+            return;
+        }
+        
         if (threshold == BudgetThreshold.AUTO_COMPACT && !compactionPerformed && state.shouldTryCompaction()) {
             performSmartCompaction(currentTokens, maxTokens);
             compactionPerformed = true;
         }
+    }
+    
+    private boolean isCompactionForkContext() {
+        List<Message> messages = contextWindow.getRawMessages();
+        if (messages.isEmpty()) {
+            return false;
+        }
+        
+        for (Message msg : messages) {
+            if (msg.isUser() && msg.getContent() != null) {
+                String content = msg.getContent();
+                if (content.contains("query_source=compact") 
+                    || content.contains("压缩模式特殊指令")
+                    || content.contains("context=compaction")) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     private void performSmartCompaction(int currentTokens, int maxTokens) {

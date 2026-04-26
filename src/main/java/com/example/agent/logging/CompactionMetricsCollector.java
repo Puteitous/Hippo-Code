@@ -24,7 +24,8 @@ public class CompactionMetricsCollector {
         TENGU_SM_COMPACT_BOUNDARY_PERSISTED("tengu_sm_compact_boundary_persisted", "压缩边界已持久化"),
         TENGU_SM_COMPACT_TOOL_CALL_IN_PROGRESS("tengu_sm_compact_tool_call_in_progress", "存在未完成工具调用"),
         TENGU_SM_COMPACT_CIRCUIT_BREAKER("tengu_sm_compact_circuit_breaker", "断路器熔断"),
-        TENGU_SM_COMPACT_ERROR("tengu_sm_compact_error", "压缩异常");
+        TENGU_SM_COMPACT_ERROR("tengu_sm_compact_error", "压缩异常"),
+        TENGU_SM_COMPACT_RECURSION_PROTECTED("tengu_sm_compact_recursion_protected", "递归保护已触发");
 
         private final String eventName;
         private final String description;
