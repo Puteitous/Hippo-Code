@@ -33,6 +33,9 @@ public class SessionMemoryManager {
     }
 
     public void write(String content) {
+        if (content == null) {
+            return;
+        }
         ensureDirectory();
         try {
             Files.writeString(
@@ -47,6 +50,9 @@ public class SessionMemoryManager {
     }
 
     public void append(String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
         ensureDirectory();
         try {
             String existing = read();
@@ -93,6 +99,12 @@ public class SessionMemoryManager {
         }
         String template = getDefaultMemoryTemplate();
         return !content.trim().equals(template.trim());
+    }
+
+    public void initializeIfNotExists() {
+        if (!exists()) {
+            write(getDefaultMemoryTemplate());
+        }
     }
 
     public static String getDefaultMemoryTemplate() {

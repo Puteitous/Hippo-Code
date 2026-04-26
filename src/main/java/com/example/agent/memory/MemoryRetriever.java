@@ -20,6 +20,10 @@ public class MemoryRetriever {
     public List<Message> prepareContextHeader(List<Message> rawMessages) {
         List<Message> enhancedContext = new ArrayList<>();
 
+        if (rawMessages == null) {
+            return enhancedContext;
+        }
+
         if (injectionEnabled) {
             String currentContext = extractContextForSearch(rawMessages);
 
@@ -42,12 +46,16 @@ public class MemoryRetriever {
     }
 
     private String extractContextForSearch(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return "";
+        }
+
         StringBuilder context = new StringBuilder();
 
         int count = 0;
         for (int i = messages.size() - 1; i >= 0 && count < 5; i--) {
             Message msg = messages.get(i);
-            if (msg.isUser() || msg.isAssistant()) {
+            if (msg != null && msg.getContent() != null && (msg.isUser() || msg.isAssistant())) {
                 context.insert(0, msg.getContent() + " ");
                 count++;
             }
@@ -57,7 +65,9 @@ public class MemoryRetriever {
     }
 
     public void markForMemory(String candidate) {
-        memoryStore.addPendingMemory(candidate);
+        if (candidate != null && !candidate.isBlank()) {
+            memoryStore.addPendingMemory(candidate);
+        }
     }
 
     public void setInjectionEnabled(boolean enabled) {

@@ -44,6 +44,10 @@ public class MemoryEntry {
     public int getAccessCount() { return accessCount; }
 
     public double calculateRelevance(String query) {
+        if (query == null || query.isBlank()) {
+            return 0.0;
+        }
+
         double relevance = 0;
         String queryLower = query.toLowerCase();
         String contentLower = content.toLowerCase();

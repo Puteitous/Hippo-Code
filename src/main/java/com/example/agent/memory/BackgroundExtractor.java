@@ -41,12 +41,18 @@ public class BackgroundExtractor {
     private static final String MEMORY_EXTRACTOR_PROMPT = """
         ## 🧠 Session Memory 增量更新任务
 
+        ⚠️ 【强约束】边界情况预处理：
+        - ✅ session-memory.md 文件**不存在是完全正常的**（首次启动）
+        - ✅ 不需要反复重试读取文件！读一次失败即可跳过
+        - ✅ 文件不存在时，可以直接分析当前对话内容写总结
+        - ✅ 不需要强制创建初始模板，可以直接输出"本次无记忆需要更新"
+
         你是一个专业的会话记忆维护专家，请按以下流程执行任务：
 
         ### 第一步：读取现有记忆
-        1. 使用 read_file 工具读取当前的 session-memory.md 文件。
-        2. 如果文件不存在，先使用默认模板初始化
-        3. 确认文件的 10 章结构完整
+        1. 使用 read_file 工具读取当前的 session-memory.md 文件
+        2. ✅ **文件不存在直接进入第二步分析**，不需要创建模板
+        3. ✅ **重试最多一次**，失败就放弃
 
         ---
 
@@ -151,55 +157,62 @@ public class BackgroundExtractor {
     }
 
     public void checkAndExtract(List<Message> fullConversation) {
-        if (!shouldExtract(fullConversation)) {
+        if (fullConversation == null || fullConversation.isEmpty()) {
             return;
         }
 
-        if (extractionInProgress.compareAndSet(false, true)) {
-            EXECUTOR.submit(() -> {
-                try {
-                    performExtraction(fullConversation);
-                } finally {
-                    extractionInProgress.set(false);
-                }
-            });
+        if (!extractionInProgress.compareAndSet(false, true)) {
+            return;
         }
+
+        if (!shouldExtract(fullConversation)) {
+            extractionInProgress.set(false);
+            return;
+        }
+
+        EXECUTOR.submit(() -> {
+            try {
+                performExtraction(fullConversation);
+            } finally {
+                extractionInProgress.set(false);
+            }
+        });
     }
 
     public void requestExtractionAfterCompaction(List<Message> fullConversation) {
+        if (fullConversation == null || fullConversation.isEmpty()) {
+            return;
+        }
+
+        if (!extractionInProgress.compareAndSet(false, true)) {
+            return;
+        }
+
         int currentTokens = tokenEstimator.estimate(fullConversation);
         int tailTokens = currentTokens - lastExtractedTokenCount;
         
         boolean hasEnoughNewContent = tailTokens >= 2000;
         boolean atNaturalPause = !hasToolCallsInLastAssistantTurn(fullConversation);
-        boolean notAlreadyExtracting = extractionInProgress.compareAndSet(false, true);
         boolean hasBeenExtractedBefore = lastExtractedTokenCount > 0;
 
-        if (!hasBeenExtractedBefore) {
-            logger.debug("压缩后钩子跳过：尚未进行过首次提取");
+        if (!hasBeenExtractedBefore || !hasEnoughNewContent || !atNaturalPause) {
+            extractionInProgress.set(false);
+            logger.debug("压缩后钩子跳过：首次={}, 内容={}, 暂停={}",
+                !hasBeenExtractedBefore, hasEnoughNewContent, atNaturalPause);
             return;
         }
 
-        if (hasEnoughNewContent && atNaturalPause && notAlreadyExtracting) {
-            logger.info("✅ 压缩后触发低优先级记忆提取：尾巴 {} tokens", tailTokens);
-            EXECUTOR.submit(() -> {
-                try {
-                    performExtraction(fullConversation);
-                } finally {
-                    extractionInProgress.set(false);
-                }
-            });
-        } else {
-            logger.debug("压缩后钩子跳过：内容={}, 暂停={}, 空闲={}",
-                hasEnoughNewContent, atNaturalPause, !notAlreadyExtracting);
-        }
+        logger.info("✅ 压缩后触发低优先级记忆提取：尾巴 {} tokens", tailTokens);
+        EXECUTOR.submit(() -> {
+            try {
+                performExtraction(fullConversation);
+            } finally {
+                extractionInProgress.set(false);
+            }
+        });
     }
 
     private boolean shouldExtract(List<Message> fullConversation) {
-        if (extractionInProgress.get()) {
-            return false;
-        }
-
         int currentTokens = tokenEstimator.estimate(fullConversation);
 
         boolean hasReachedInitialThreshold = currentTokens >= INITIAL_TOKEN_THRESHOLD;
@@ -233,7 +246,9 @@ public class BackgroundExtractor {
         pendingConversation.addAll(fullConversation);
 
         try {
+            memoryManager.initializeIfNotExists();
             String memoryFilePath = memoryManager.getMemoryFilePath().toString();
+            
             String taskDescription = String.format(
                 "会话记忆增量更新: 当前 %d 条消息, %d tokens, 记忆文件: %s",
                 fullConversation.size(), currentTokens, memoryFilePath
@@ -249,22 +264,40 @@ public class BackgroundExtractor {
                 true  // ✅ 启用 Prompt Cache 优化
             );
 
-            subAgentManager.scheduleTask(task, SubAgentPermission.MEMORY_EXTRACTOR);
-            
             logger.info("✅ 会话记忆提取任务已提交给 SubAgent: taskId={}", task.getTaskId());
 
+            EXECUTOR.submit(() -> {
+                try {
+                    task.awaitCompletion(150, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    logger.warn("⏱️ 记忆提取任务看门狗超时，强制释放锁: taskId={}", task.getTaskId());
+                } finally {
+                    if (extractionInProgress.get()) {
+                        extractionInProgress.set(false);
+                        logger.warn("🔓 看门狗强制释放记忆提取锁");
+                    }
+                }
+            });
+
         } catch (Exception e) {
+            extractionInProgress.set(false);
             logger.error("❌ 提交记忆提取任务到 SubAgent 失败，回退到传统模式", e);
             performExtractionLegacy(fullConversation);
         }
     }
 
     private void onMemoryExtractionCompleted(List<Message> fullConversation) {
-        toolCallCountSinceLastExtraction.set(0);
-        lastExtractedTokenCount = tokenEstimator.estimate(fullConversation);
-        updateLastSummarizedMessageIdIfSafe(fullConversation);
-        pendingConversation.clear();
-        logger.info("✅ Session Memory 提取完成，状态已更新");
+        try {
+            toolCallCountSinceLastExtraction.set(0);
+            lastExtractedTokenCount = tokenEstimator.estimate(fullConversation);
+            updateLastSummarizedMessageIdIfSafe(fullConversation);
+            pendingConversation.clear();
+            logger.info("✅ Session Memory 提取完成，状态已更新");
+        } catch (Exception e) {
+            logger.error("❌ 记忆提取完成回调异常", e);
+        } finally {
+            extractionInProgress.set(false);
+        }
     }
 
     private void performExtractionLegacy(List<Message> fullConversation) {
@@ -290,6 +323,8 @@ public class BackgroundExtractor {
 
         } catch (Exception e) {
             logger.error("❌ 会话记忆提取失败", e);
+        } finally {
+            extractionInProgress.set(false);
         }
     }
 

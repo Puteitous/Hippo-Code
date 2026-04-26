@@ -91,7 +91,9 @@ public class MemoryStore {
     }
 
     public void addPendingMemory(String memoryCandidate) {
-        pendingMemories.add(memoryCandidate);
+        if (memoryCandidate != null && !memoryCandidate.isBlank()) {
+            pendingMemories.add(memoryCandidate);
+        }
     }
 
     public void triggerAutoDream() {
@@ -106,6 +108,10 @@ public class MemoryStore {
     }
 
     private void processAutoDream(List<String> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return;
+        }
+
         String prompt = String.format(
             "## Auto Dream - 记忆整理任务\n\n" +
             "请从以下候选记忆中筛选出真正值得长期记住的内容。\n" +
@@ -128,6 +134,10 @@ public class MemoryStore {
     }
 
     private void processDreamResult(String result) {
+        if (result == null || result.isBlank()) {
+            return;
+        }
+
         String[] lines = result.split("\n");
         for (String line : lines) {
             line = line.trim();
@@ -192,17 +202,25 @@ public class MemoryStore {
     }
 
     public List<MemoryEntry> searchRelevant(String query, int limit) {
+        if (query == null || query.isBlank() || memories.isEmpty()) {
+            return new ArrayList<>();
+        }
+
         return memories.stream()
             .sorted((a, b) -> Double.compare(
                 b.calculateRelevance(query),
                 a.calculateRelevance(query)
             ))
             .filter(m -> m.calculateRelevance(query) > 0.1)
-            .limit(limit)
+            .limit(Math.max(1, limit))
             .collect(Collectors.toList());
     }
 
     public String getRelevantMemoriesAsPrompt(String query) {
+        if (query == null || query.isBlank()) {
+            return "";
+        }
+
         List<MemoryEntry> relevant = searchRelevant(query, 8);
         if (relevant.isEmpty()) {
             return "";
