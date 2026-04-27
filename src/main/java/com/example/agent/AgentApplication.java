@@ -112,10 +112,9 @@ public class AgentApplication {
                 checkAndPromptResume(ui, sessionStorage, conversationLoop, inputHandler);
             }
 
-            LineReader reader = context.getReader();
             while (true) {
                 try {
-                    String line = reader.readLine(ConsoleStyle.prompt());
+                    String line = inputHandler.readLineWithPasteDetection(ConsoleStyle.prompt());
 
                     CommandDispatcher.CommandResult result = dispatcher.dispatch(line);
 

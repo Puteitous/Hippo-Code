@@ -142,6 +142,16 @@ public class BashTool implements ToolExecutor {
     private void validateCommand(String command) throws ToolExecutionException {
         String lowerCommand = command.toLowerCase();
         
+        if (command.contains(">") || command.contains("|") || 
+            command.contains(";") || command.contains("&&") || 
+            command.contains("||") || command.contains("`") || 
+            command.contains("$(")) {
+            throw new ToolExecutionException(
+                "安全限制: 检测到危险的 shell 操作符。\n" +
+                "为了系统安全，重定向、管道、多命令等操作被禁止。"
+            );
+        }
+        
         for (String pattern : DANGEROUS_PATTERNS) {
             if (lowerCommand.contains(pattern.toLowerCase())) {
                 throw new ToolExecutionException(

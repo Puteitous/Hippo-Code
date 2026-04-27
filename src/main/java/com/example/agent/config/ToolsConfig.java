@@ -67,7 +67,8 @@ public class ToolsConfig {
             }
             if (trimmedCommand.contains(";") || trimmedCommand.contains("&&") || 
                 trimmedCommand.contains("||") || trimmedCommand.contains("|") ||
-                trimmedCommand.contains("`") || trimmedCommand.contains("$(")) {
+                trimmedCommand.contains(">") || trimmedCommand.contains("`") || 
+                trimmedCommand.contains("$(")) {
                 return false;
             }
             String baseCommand = trimmedCommand.split("\\s+")[0];

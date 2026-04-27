@@ -147,6 +147,7 @@ public class CommandDispatcher {
 
         if ("reset".equalsIgnoreCase(line)) {
             conversationService.reset(conversation);
+            com.example.agent.progress.SpinnerManager.getInstance().clear();
             ui.println(ConsoleStyle.success("会话已重置"));
             ui.println();
             return CommandResult.continueExecution();

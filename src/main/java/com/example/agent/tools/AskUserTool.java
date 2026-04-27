@@ -112,7 +112,10 @@ public class AskUserTool implements ToolExecutor {
     private String promptUser(String question, List<String> options, boolean allowCustomInput) {
         LineReader reader = ServiceLocator.get(LineReader.class);
         AgentUi ui = ServiceLocator.get(AgentUi.class);
+        com.example.agent.progress.SpinnerManager spinnerManager = com.example.agent.progress.SpinnerManager.getInstance();
 
+        spinnerManager.pauseAll();
+        try {
         ui.println();
         ui.println(ConsoleStyle.gray("┌─────────────────────────────────────────────────────────────┐"));
         ui.println(ConsoleStyle.gray("│   ") + ConsoleStyle.boldYellow("Agent 需要您的确认") + ConsoleStyle.gray("                                      │"));
@@ -160,6 +163,9 @@ public class AskUserTool implements ToolExecutor {
         } else {
             String input = reader.readLine(ConsoleStyle.yellow("您的回答: "));
             return input != null ? input.trim() : "";
+        }
+        } finally {
+            spinnerManager.resumeAll();
         }
     }
 

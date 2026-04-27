@@ -9,6 +9,7 @@ public class EditConfirmationHandler {
     private final AgentUi ui;
     private final LineReader reader;
     private final DiffPreviewer diffPreviewer;
+    private final SpinnerManager spinnerManager = SpinnerManager.getInstance();
     private boolean autoConfirmEnabled = false;
 
     public EditConfirmationHandler(AgentUi ui, LineReader reader) {
@@ -26,51 +27,57 @@ public class EditConfirmationHandler {
             return true;
         }
 
+        spinnerManager.pauseAll();
+
         String diffPreview = diffPreviewer.generateUnifiedDiff(filePath, oldText, newText);
         ui.println(diffPreview);
 
-        while (true) {
-            String response = promptUser();
+        try {
+            while (true) {
+                String response = promptUser();
 
-            if (response == null) {
-                return false;
-            }
-
-            response = response.trim().toLowerCase();
-
-            switch (response) {
-                case "y":
-                case "yes":
-                case "":
-                    ui.println(ConsoleStyle.green("\n✅ 已确认修改，正在执行..."));
-                    ui.println();
-                    return true;
-
-                case "n":
-                case "no":
-                    ui.println(ConsoleStyle.yellow("\n❌ 已取消修改"));
-                    ui.println();
+                if (response == null) {
                     return false;
+                }
 
-                case "e":
-                case "detail":
-                case "details":
-                    showFullDetails(filePath, oldText, newText);
-                    break;
+                response = response.trim().toLowerCase();
 
-                case "a":
-                case "always":
-                case "auto":
-                    autoConfirmEnabled = true;
-                    ui.println(ConsoleStyle.cyan("\n🔓 本次会话自动确认已开启"));
-                    ui.println(ConsoleStyle.gray("提示: 使用 /reset 命令可重置自动确认状态"));
-                    ui.println();
-                    return true;
+                switch (response) {
+                    case "y":
+                    case "yes":
+                    case "":
+                        ui.println(ConsoleStyle.green("\n✅ 已确认修改，正在执行..."));
+                        ui.println();
+                        return true;
 
-                default:
-                    ui.println(ConsoleStyle.yellow("\n无效输入，请重新选择"));
-                    break;
+                    case "n":
+                    case "no":
+                        ui.println(ConsoleStyle.yellow("\n❌ 已取消修改"));
+                        ui.println();
+                        return false;
+
+                    case "e":
+                    case "detail":
+                    case "details":
+                        showFullDetails(filePath, oldText, newText);
+                        break;
+
+                    case "a":
+                    case "always":
+                    case "auto":
+                        autoConfirmEnabled = true;
+                        ui.println(ConsoleStyle.cyan("\n🔓 本次会话自动确认已开启"));
+                        ui.println(ConsoleStyle.gray("提示: 使用 /reset 命令可重置自动确认状态"));
+                        ui.println();
+                        return true;
+
+                    default:
+                        ui.println(ConsoleStyle.yellow("\n无效输入，请重新选择"));
+                        break;
+                }
             }
+        } finally {
+            spinnerManager.resumeAll();
         }
     }
 

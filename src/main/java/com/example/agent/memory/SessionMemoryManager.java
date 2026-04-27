@@ -1,6 +1,8 @@
 package com.example.agent.memory;
 
+import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.logging.WorkspaceManager;
+import com.example.agent.service.TokenEstimator;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -76,6 +78,10 @@ public class SessionMemoryManager {
         }
     }
 
+    public Path getMemoryFilePath() {
+        return memoryFilePath;
+    }
+
     private void ensureDirectory() {
         try {
             Files.createDirectories(memoryFilePath.getParent());
@@ -88,8 +94,13 @@ public class SessionMemoryManager {
         return sessionId;
     }
 
-    public Path getMemoryFilePath() {
-        return memoryFilePath;
+    public int estimateMemoryTokens() {
+        String content = read();
+        if (content == null || content.isBlank()) {
+            return 0;
+        }
+        TokenEstimator estimator = ServiceLocator.get(TokenEstimator.class);
+        return estimator.estimateTextTokens(content);
     }
 
     public boolean hasActualContent() {

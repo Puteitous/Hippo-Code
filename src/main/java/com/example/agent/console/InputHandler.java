@@ -13,6 +13,7 @@ public class InputHandler {
     private static final int MAX_SINGLE_INPUT_TOKENS = 10000;
     private static final int MAX_MULTILINE_LINES = 1000;
     private static final int MAX_MULTILINE_CHARS = 100000;
+    private static final int MIN_PASTE_LINES = 2;
 
     private final LineReader reader;
     private final TokenEstimator tokenEstimator;
@@ -169,5 +170,55 @@ public class InputHandler {
 
     public String readLine(String prompt) throws UserInterruptException, EndOfFileException {
         return reader.readLine(prompt);
+    }
+
+    public String readLineWithPasteDetection(String prompt) throws UserInterruptException, EndOfFileException {
+        String firstLine = reader.readLine(prompt);
+        
+        if (firstLine == null) {
+            return null;
+        }
+        
+        if (firstLine.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder result = new StringBuilder(firstLine);
+        int lineCount = 1;
+        
+        while (true) {
+            try {
+                if (!reader.getTerminal().reader().ready()) {
+                    break;
+                }
+                
+                String nextLine = reader.readLine("");
+                if (nextLine == null) {
+                    break;
+                }
+                
+                result.append("\n").append(nextLine);
+                lineCount++;
+                
+            } catch (UserInterruptException | EndOfFileException e) {
+                throw e;
+            } catch (Exception e) {
+                break;
+            }
+        }
+        
+        if (lineCount >= MIN_PASTE_LINES) {
+            System.out.println();
+            System.out.println(ConsoleStyle.cyan("📋 检测到粘贴了 " + lineCount + " 行内容"));
+            System.out.println(ConsoleStyle.gray("   按 Enter 直接提交，或继续补充输入..."));
+            System.out.println();
+            
+            String additional = reader.readLine(ConsoleStyle.yellow("补充输入 (可选): "));
+            if (additional != null && !additional.isBlank()) {
+                result.append("\n").append(additional);
+            }
+        }
+        
+        return result.toString();
     }
 }
