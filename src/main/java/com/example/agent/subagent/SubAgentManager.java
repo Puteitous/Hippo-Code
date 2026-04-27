@@ -6,6 +6,7 @@ import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.application.ConversationService;
 import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.model.Message;
 import com.example.agent.subagent.event.SubAgentCompletedEvent;
 import com.example.agent.subagent.event.SubAgentFailedEvent;
 import com.example.agent.subagent.event.SubAgentStartedEvent;
@@ -98,30 +99,75 @@ public class SubAgentManager {
     public SubAgentTask forkAgent(String taskDescription, String systemPrompt, int timeoutSeconds, 
                                    List<String> dependsOn, SubAgentPermission permission, 
                                    Runnable completionCallback, boolean useForkOptimization) {
-        String parentSessionId = getParentSessionId();
-        String finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
-            ? systemPrompt 
-            : buildSubAgentSystemPrompt(taskDescription, null);
-        
-        logger.info("forkAgent: taskDescription={}, timeout={}秒, permission={}, fork={}, dependsOn={}", 
-            taskDescription, timeoutSeconds, permission.getName(), useForkOptimization, dependsOn);
+        return forkAgent(getParentSessionId(), taskDescription, systemPrompt, timeoutSeconds, 
+            dependsOn, permission, completionCallback, useForkOptimization);
+    }
 
-        Conversation subConversation;
-        boolean isForkChild = false;
-        if (useForkOptimization && parentSessionId != null) {
-            subConversation = conversationService.forkConversation(
-                parentSessionId,
-                finalPrompt
-            );
-            isForkChild = true;
-        } else {
-            subConversation = conversationService.createSubAgentConversation(
-                finalPrompt,
-                parentSessionId
-            );
+    public SubAgentTask forkAgent(Conversation parentConversation, String taskDescription, String additionalInstruction, 
+                                  int timeoutSeconds, List<String> dependsOn, SubAgentPermission permission, 
+                                  Runnable completionCallback) {
+        String parentSessionId = parentConversation != null ? parentConversation.getSessionId() : null;
+        
+        logger.info("forkAgent: 父会话消息={} 条, task={}, timeout={}s, permission={}", 
+            parentConversation != null ? parentConversation.getMessageCount() : 0,
+            taskDescription, timeoutSeconds, permission.getName());
+
+        Conversation subConversation = conversationService.createSubAgentConversation(null, parentSessionId);
+        
+        if (parentConversation != null) {
+            for (Message msg : parentConversation.getMessages()) {
+                subConversation.addMessage(msg.shallowCopy());
+            }
+        }
+        
+        if (additionalInstruction != null && !additionalInstruction.isEmpty()) {
+            subConversation.addMessage(Message.user(additionalInstruction));
         }
 
-        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, isForkChild);
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, false);
+        activeTasks.put(task.getTaskId(), task);
+
+        if (completionCallback != null) {
+            completionCallbacks.put(task.getTaskId(), completionCallback);
+        }
+
+        SubAgentLogger subAgentLogger = new SubAgentLogger(task, parentSessionId);
+        loggers.put(task.getTaskId(), subAgentLogger);
+        subAgentLogger.logStatusChange(SubAgentStatus.PENDING);
+        subAgentLogger.log("Sub-Agent 会话 ID: " + subConversation.getSessionId());
+        subAgentLogger.log("父会话 ID: " + parentSessionId);
+        subAgentLogger.log("权限模式: " + permission.getName());
+        subAgentLogger.log("启动 Sub-Agent (Claude 风格零拷贝): " + taskDescription);
+        if (task.hasDependencies()) {
+            subAgentLogger.log("依赖任务: " + dependsOn);
+        }
+        subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
+        subAgentLogger.log("上下文继承: 父会话 " + (parentConversation != null ? parentConversation.getMessageCount() : 0) + 
+            " 条 + 1 条指令 = 子会话共 " + subConversation.getMessageCount() + " 条");
+
+        submitTask(task, subAgentLogger, permission);
+
+        logger.info("SubAgent 已创建: taskId={}, permission={}, 上下文消息={} 条",
+            task.getTaskId(), permission.getName(), subConversation.getMessageCount());
+        return task;
+    }
+
+    public SubAgentTask forkAgent(String parentSessionId, String taskDescription, String userInstruction, int timeoutSeconds, 
+                                   List<String> dependsOn, SubAgentPermission permission, 
+                                   Runnable completionCallback, boolean unused) {
+        String finalInstruction = userInstruction != null && !userInstruction.isBlank() 
+            ? userInstruction 
+            : buildSubAgentSystemPrompt(taskDescription, null);
+        
+        logger.info("forkAgent: taskDescription={}, timeout={}秒, permission={}, dependsOn={}", 
+            taskDescription, timeoutSeconds, permission.getName(), dependsOn);
+
+        Conversation subConversation = conversationService.createSubAgentConversation(
+            finalInstruction,
+            parentSessionId
+        );
+
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, false);
         activeTasks.put(task.getTaskId(), task);
 
         if (completionCallback != null) {
@@ -142,8 +188,8 @@ public class SubAgentManager {
 
         submitTask(task, subAgentLogger, permission);
 
-        logger.info("SubAgent 已创建: taskId={}, permission={}, fork={}",
-            task.getTaskId(), permission.getName(), isForkChild);
+        logger.info("SubAgent 已创建: taskId={}, permission={}",
+            task.getTaskId(), permission.getName());
         return task;
     }
 
@@ -185,35 +231,19 @@ public class SubAgentManager {
             agentInfo = "🚀 Fork 模式 - 完整复用上下文 (推荐)";
         }
 
-        logger.info("forkAgent: task={}, agent={}, timeout={}s, fork={}, dependsOn={}", 
-            taskDescription, agentInfo, timeoutSeconds, useFork, dependsOn);
+        logger.info("forkAgent: task={}, agent={}, timeout={}s, dependsOn={}", 
+            taskDescription, agentInfo, timeoutSeconds, dependsOn);
 
-        Conversation subConversation;
-        boolean isForkChild = false;
-        String finalPrompt;
+        String finalInstruction = systemPrompt != null && !systemPrompt.isBlank() 
+            ? systemPrompt + "\n\n## 当前任务\n" + taskDescription
+            : buildSubAgentSystemPrompt(taskDescription, null);
+        
+        Conversation subConversation = conversationService.createSubAgentConversation(
+            finalInstruction,
+            parentSessionId
+        );
 
-        if (useFork && parentSessionId != null) {
-            finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
-                ? systemPrompt + "\n\n## 当前任务\n" + taskDescription
-                : "## Fork 子代理任务\n\n" + taskDescription;
-            
-            subConversation = conversationService.forkConversation(
-                parentSessionId,
-                finalPrompt
-            );
-            isForkChild = true;
-        } else {
-            finalPrompt = systemPrompt != null && !systemPrompt.isBlank() 
-                ? systemPrompt + "\n\n## 当前任务\n" + taskDescription
-                : buildSubAgentSystemPrompt(taskDescription, null);
-            
-            subConversation = conversationService.createSubAgentConversation(
-                finalPrompt,
-                parentSessionId
-            );
-        }
-
-        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, isForkChild);
+        SubAgentTask task = new SubAgentTask(taskDescription, subConversation, timeoutSeconds, dependsOn, false);
         activeTasks.put(task.getTaskId(), task);
 
         if (completionCallback != null) {
@@ -236,8 +266,8 @@ public class SubAgentManager {
         final SubAgentPermission finalPermission = permission;
         submitTask(task, subAgentLogger, finalPermission);
 
-        logger.info("SubAgent 已创建: taskId={}, agent={}, permission={}, fork={}",
-            task.getTaskId(), agentInfo, permission.getName(), isForkChild);
+        logger.info("SubAgent 已创建: taskId={}, agent={}, permission={}",
+            task.getTaskId(), agentInfo, permission.getName());
         return task;
     }
 

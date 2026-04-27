@@ -114,7 +114,12 @@ public class ConversationService {
         return conversationRegistry.get(sessionId);
     }
 
-    public Conversation createSubAgentConversation(String systemPrompt, String parentSessionId) {
+    public void registerConversation(String sessionId, Conversation conversation) {
+        conversationRegistry.put(sessionId, conversation);
+        logger.info("✅ 会话已注册到全局注册表: {}", sessionId);
+    }
+
+    public Conversation createSubAgentConversation(String userInstruction, String parentSessionId) {
         String subSessionId = parentSessionId != null 
             ? parentSessionId + "_sub_" + System.nanoTime() % 1000000
             : "sub_" + System.currentTimeMillis();
@@ -124,10 +129,9 @@ public class ConversationService {
             tokenEstimator, 
             subSessionId
         );
-        conversation.setSystemPrompt(systemPrompt != null ? systemPrompt : "");
 
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            conversation.addMessage(Message.system(systemPrompt));
+        if (userInstruction != null && !userInstruction.isEmpty()) {
+            conversation.addMessage(Message.user(userInstruction));
         }
 
         logger.debug("创建 Sub-Agent 轻量级会话: sessionId={}, parent={}", 
@@ -140,37 +144,7 @@ public class ConversationService {
         return createSubAgentConversation(systemPrompt, null);
     }
 
-    public Conversation forkConversation(String parentSessionId, String finalInstruction) {
-        Conversation parent = getConversation(parentSessionId);
-        if (parent == null) {
-            logger.warn("forkConversation: 父会话不存在，回退到普通 sub-agent 模式");
-            return createSubAgentConversation(finalInstruction, parentSessionId);
-        }
 
-        String forkSessionId = parentSessionId + "_fork_" + System.nanoTime() % 1000000;
-        
-        logger.debug("Fork 会话: parent={}, fork={}", parentSessionId, forkSessionId);
-        logger.debug("Cache 优化: 复制 {} 条前缀消息，仅在末尾追加特殊指令", parent.getMessages().size());
-
-        Conversation forked = new Conversation(
-            defaultConfig.getMaxTokens(),
-            tokenEstimator,
-            forkSessionId
-        );
-
-        for (Message msg : parent.getMessages()) {
-            Message copy = msg.shallowCopy();
-            forked.addMessage(copy);
-        }
-
-        forked.addMessage(Message.user(finalInstruction));
-
-        logger.debug("✅ Fork 会话准备完成: 总消息 {} 条, Cache 命中比例约 {}%",
-            forked.getMessages().size(),
-            Math.round(100.0 * (forked.getMessages().size() - 1) / forked.getMessages().size()));
-
-        return forked;
-    }
 
     public void ensureSessionComponents(Conversation conversation) {
         if (!componentRegistry.containsKey(conversation.getSessionId())) {

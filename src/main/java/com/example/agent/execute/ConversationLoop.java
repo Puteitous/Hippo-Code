@@ -79,6 +79,7 @@ public class ConversationLoop {
         String sessionId = conversation.getSessionId();
         currentSessionId = sessionId;
         context.setSessionId(sessionId);
+        conversationService.registerConversation(sessionId, conversation);
 
         MDC.put("sessionId", sessionId.substring(0, Math.min(12, sessionId.length())));
         Path logFile = WorkspaceManager.getSessionLogFile(

@@ -50,71 +50,8 @@ public class CompactForkExecutor {
     }
     
     public CompactResult executeForkedCompaction(String parentSessionId, String compactionPrompt, int timeoutSeconds) {
-        if (parentSessionId == null || parentSessionId.isEmpty()) {
-            logger.warn("父会话ID为空，回退到直接执行模式");
-            return executeDirect(compactionPrompt);
-        }
-        
-        Conversation parent = conversationService.getConversation(parentSessionId);
-        if (parent == null) {
-            logger.warn("父会话不存在，回退到直接执行模式: {}", parentSessionId);
-            return executeDirect(compactionPrompt);
-        }
-        
-        int parentTokenCount = tokenEstimator.estimate(parent.getMessages());
-        
-        Conversation forked = conversationService.forkConversation(parentSessionId, 
-            buildCompactionFinalInstruction(compactionPrompt));
-        
-        logger.info("✅ Fork 压缩启动: 父会话消息={}条, {} tokens, Cache 命中比例 ~{}%",
-            parent.getMessages().size(),
-            parentTokenCount,
-            Math.round(100.0 * parent.getMessages().size() / (parent.getMessages().size() + 1)));
-        
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        Future<CompactResult> future = executor.submit(() -> {
-            try {
-                List<Message> context = conversationService.prepareForInference(forked);
-                
-                ChatResponse response = llmClient.chat(
-                    context,
-                    Collections.emptyList()
-                );
-                
-                String summary = extractSummaryContent(response);
-                int outputTokens = tokenEstimator.estimateTextTokens(summary);
-                
-                logger.info("✅ Fork 压缩完成: 输出 {} tokens, 输入缓存命中 ~{}%",
-                    outputTokens,
-                    Math.round(100.0 * (parentTokenCount - 100) / parentTokenCount));
-                
-                return CompactResult.success(summary, true, outputTokens);
-                
-            } catch (Exception e) {
-                logger.error("❌ Fork 压缩失败，回退到直接执行: {}", e.getMessage());
-                throw new CancellationException("Fork 压缩失败");
-            }
-        });
-        
-        try {
-            CompactResult result = future.get(timeoutSeconds, TimeUnit.SECONDS);
-            executor.shutdown();
-            return result;
-        } catch (TimeoutException e) {
-            logger.warn("⏱️ Fork 压缩超时 ({}秒)，回退到直接执行", timeoutSeconds);
-            future.cancel(true);
-            executor.shutdownNow();
-            return executeDirect(compactionPrompt);
-        } catch (ExecutionException | InterruptedException e) {
-            logger.warn("⚠️ Fork 压缩执行异常，回退到直接执行: {}", e.getMessage());
-            future.cancel(true);
-            executor.shutdownNow();
-            return executeDirect(compactionPrompt);
-        } finally {
-            if (!executor.isShutdown()) {
-                executor.shutdownNow();
-            }
-        }
+        logger.info("直接执行压缩: parentSessionId={}", parentSessionId);
+        return executeDirect(compactionPrompt);
     }
     
     private CompactResult executeDirect(String compactionPrompt) {

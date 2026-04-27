@@ -72,12 +72,17 @@ public class AgentContext {
         this.sessionId = String.valueOf(System.currentTimeMillis());
         this.terminal = TerminalBuilder.builder()
                 .system(true)
+                .encoding(java.nio.charset.StandardCharsets.UTF_8.name())
+                .type("ansi")
                 .build();
+        logger.info("终端类型: {} (强制 ANSI 模式 + UTF-8)", terminal.getType());
+        
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
                 .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/coding", "/mode", "/mode chat", "/mode coding"))
                 .variable(LineReader.HISTORY_FILE, 
                     WorkspaceManager.getCurrentProjectDir().resolve("cli-history"))
+                .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
                 .build();
 
         // ✅ 注册快捷键: Shift+Tab 一键切换 Coding/Chat 模式
@@ -164,11 +169,12 @@ public class AgentContext {
 
         // 初始化会话服务（无状态，全局共享）
         this.conversationService = new ConversationService(tokenEstimator, llmClient, config.getContext());
+        ServiceLocator.registerSingleton(ConversationService.class, conversationService);
         
         // 增强系统提示词（使用 PromptLibrary）
         String basePrompt = promptService.getBasePrompt(null);
         String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-        this.conversation = conversationService.create(enhancedSystemPrompt);
+        this.conversation = conversationService.create(enhancedSystemPrompt, config.getContext().getMaxTokens(), sessionId);
 
         logger.info("✅ 四层架构落地: ConversationService(应用层) + Conversation(领域层)");
         logger.info("   - Service: 无状态，全局共享，编排业务流程");
@@ -210,9 +216,9 @@ public class AgentContext {
         if (this.ruleManager != null) {
             this.ruleManager.reload();
             String enhancedSystemPrompt = this.ruleManager.enhanceSystemPrompt(basePrompt);
-            this.conversation = conversationService.create(enhancedSystemPrompt);
+            this.conversation = conversationService.create(enhancedSystemPrompt, config.getContext().getMaxTokens(), sessionId);
         } else {
-            this.conversation = conversationService.create(basePrompt);
+            this.conversation = conversationService.create(basePrompt, config.getContext().getMaxTokens(), sessionId);
         }
     }
 

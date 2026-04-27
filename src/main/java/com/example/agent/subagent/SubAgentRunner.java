@@ -36,6 +36,8 @@ public class SubAgentRunner implements Runnable {
     private final SubAgentPermission permission;
     private final ObjectMapper objectMapper;
 
+    private final int maxTurns;
+
     public SubAgentRunner(SubAgentTask task,
                           SubAgentLogger subAgentLogger,
                           LlmClient llmClient,
@@ -49,6 +51,12 @@ public class SubAgentRunner implements Runnable {
         this.conversationService = conversationService;
         this.permission = permission;
         this.objectMapper = new ObjectMapper();
+        
+        if (permission == SubAgentPermission.MEMORY_EXTRACTOR) {
+            this.maxTurns = Integer.MAX_VALUE;
+        } else {
+            this.maxTurns = MAX_TURNS;
+        }
     }
 
     @Override
@@ -62,7 +70,7 @@ public class SubAgentRunner implements Runnable {
         subAgentLogger.log("任务描述: " + task.getDescription());
 
         try {
-            while (turnCount < MAX_TURNS) {
+            while (turnCount < maxTurns) {
                 if (task.shouldStopExecution()) {
                     String reason = task.isCancelled() ? "任务已被取消" : "执行超时 (" + task.getTimeoutSeconds() + " 秒)";
                     task.addLog("执行终止: " + reason);
@@ -81,39 +89,17 @@ public class SubAgentRunner implements Runnable {
 
                 List<Message> context = conversationService.prepareForInference(task.getConversation());
                 List<Message> finalContext = new ArrayList<>();
-                String systemPromptInfo;
                 
-                if (task.isForkChild()) {
-                    List<Message> forkContext = new ArrayList<>();
-                    forkContext.addAll(context);
-                    
-                    String forkTaskInstruction = String.format(
-                        "## 🎯 子代理任务（Fork 模式）\n\n**任务描述:** %s\n\n---\n\n## ⚠️ 绝对强制规则（必须遵守！）\n\n1. ✅ **结果明确立即结束** - 一旦获得确定结果，立刻输出最终总结，不再调用工具\n2. ✅ **不要过度优化格式** - 不需要做漂亮的表格，简洁给出结果即可\n3. ❌ **严禁无意义重试** - 同样参数的工具最多调用 1 次，重复毫无意义\n4. ❌ **严禁询问用户** - 绝对不能问用户任何问题，信息不足就如实报告\n5. ✅ **最少轮次原则** - 能用 1 轮完成就不要用 2 轮，节省时间和 Token\n\n---\n\n请直接开始执行。",
-                        task.getDescription()
-                    );
-                    forkContext.add(Message.user(forkTaskInstruction));
-                    finalContext = forkContext;
-                    
-                    systemPromptInfo = "Fork 模式: 复用父 Agent System Prompt (缓存优化)";
-                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (Fork 模式 - 完整复用上下文，缓存优化)");
-                } else {
-                    String forcedSystemPrompt = buildForcedSystemPrompt(task.getDescription());
-                    finalContext.add(Message.system(forcedSystemPrompt));
-                    
-                    finalContext.addAll(context.stream()
-                        .filter(m -> !m.isSystem())
-                        .collect(Collectors.toList()));
-                    
-                    boolean hasUserMessage = finalContext.stream().anyMatch(Message::isUser);
-                    if (!hasUserMessage) {
-                        finalContext.add(Message.user("请执行任务。"));
-                    }
-                    
-                    systemPromptInfo = "独立模式: 强制构建 Sub-Agent System Prompt, 长度: " + forcedSystemPrompt.length() + " 字符";
-                    subAgentLogger.log("上下文消息数: " + finalContext.size() + " (独立模式)");
-                }
+                finalContext.addAll(context);
                 
-                boolean isFinalRound = (turnCount == MAX_TURNS - 1);
+                String subAgentRules = buildSubAgentExecutionRules(task.getDescription());
+                finalContext.add(Message.user(subAgentRules));
+                
+                String systemPromptInfo = "复用主 Agent System Prompt, Cache 命中 ~99%";
+                subAgentLogger.log("上下文消息数: " + finalContext.size() + " (原生上下文 + 执行规则)");
+                
+                boolean isFinalRound = permission != SubAgentPermission.MEMORY_EXTRACTOR 
+                    && (turnCount == maxTurns - 1);
                 if (isFinalRound) {
                     finalContext.add(Message.user("这是最后一轮执行机会，请基于所有工具调用结果，输出最终总结，不能再调用任何工具！"));
                     subAgentLogger.log("最后一轮 - 禁用工具，强制总结");
@@ -184,9 +170,9 @@ public class SubAgentRunner implements Runnable {
                 }
             }
 
-            if (turnCount >= MAX_TURNS) {
-                task.addLog("达到最大轮次限制: " + MAX_TURNS);
-                subAgentLogger.log("达到最大轮次限制: " + MAX_TURNS);
+            if (permission != SubAgentPermission.MEMORY_EXTRACTOR && turnCount >= maxTurns) {
+                task.addLog("达到最大轮次限制: " + maxTurns);
+                subAgentLogger.log("达到最大轮次限制: " + maxTurns);
                 if (!task.isDone()) {
                     task.markCompleted();
                 }
@@ -205,7 +191,7 @@ public class SubAgentRunner implements Runnable {
         }
     }
 
-    private String buildForcedSystemPrompt(String task) {
+    private String buildSubAgentExecutionRules(String task) {
         StringBuilder sb = new StringBuilder();
         sb.append("你是一个严谨的子任务执行助手。必须严格遵守以下规则:\n\n");
         sb.append("## 🎯 你的任务\n");

@@ -1,8 +1,11 @@
 package com.example.agent.memory;
 
+import com.example.agent.application.ConversationService;
 import com.example.agent.context.SessionCompactionState;
 import com.example.agent.core.di.ServiceLocator;
+import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
+import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.subagent.SubAgentManager;
@@ -21,15 +24,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackgroundExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(BackgroundExtractor.class);
-    private static final int INITIAL_TOKEN_THRESHOLD = 16000;
-    private static final int TOKEN_GROWTH_THRESHOLD = 8000;
-    private static final int TOOL_CALL_THRESHOLD = 15;
+    private static final int INITIAL_TOKEN_THRESHOLD = 10000;
+    private static final int TOKEN_GROWTH_THRESHOLD = 5000;
+    private static final int TOOL_CALL_THRESHOLD = 3;
 
+    private final String sessionId;
     private final SessionMemoryManager memoryManager;
     private final SessionCompactionState compactionState;
     private final TokenEstimator tokenEstimator;
     private final LlmClient llmClient;
     private final SubAgentManager subAgentManager;
+    private final ConversationService conversationService;
 
     private final AtomicInteger toolCallCountSinceLastExtraction = new AtomicInteger(0);
     private final AtomicBoolean extractionInProgress = new AtomicBoolean(false);
@@ -39,6 +44,14 @@ public class BackgroundExtractor {
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
 
     private static final String MEMORY_EXTRACTOR_PROMPT = """
+        ⚠️ 重要提示：以下内容不是用户对话。
+        这是给你的内部系统指令，请立即执行。
+
+        请基于本条消息**以上**的完整对话历史，
+        执行 Session Memory 增量更新任务。
+
+        ---
+
         ## 🧠 Session Memory 增量更新任务
 
         ⚠️ 【强约束】边界情况预处理：
@@ -130,9 +143,7 @@ public class BackgroundExtractor {
 
         ---
 
-        ⚠️ 重要提示：
-        - 你可以直接基于对话上下文进行分析，不需要强制调用工具
-        - 最后输出简洁的执行总结即可
+        ⚡ 基于以上对话，立即执行。
         """;
 
 
@@ -141,11 +152,13 @@ public class BackgroundExtractor {
     }
 
     public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient, SessionCompactionState compactionState) {
+        this.sessionId = sessionId;
         this.memoryManager = new SessionMemoryManager(sessionId);
         this.compactionState = compactionState;
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
+        this.conversationService = ServiceLocator.getOrNull(ConversationService.class);
     }
 
     public void onMessageAdded(Message message, List<Message> fullConversation) {
@@ -248,6 +261,36 @@ public class BackgroundExtractor {
         try {
             memoryManager.initializeIfNotExists();
             String memoryFilePath = memoryManager.getMemoryFilePath().toString();
+            int currentMemoryTokens = memoryManager.estimateMemoryTokens();
+            
+            Conversation parentConversation = conversationService.getConversation(sessionId);
+            
+            StringBuilder tokenBudgetWarning = new StringBuilder();
+            if (currentMemoryTokens > 12000) {
+                tokenBudgetWarning.append(String.format(
+                    "\n\n🚨 CRITICAL: 记忆文件当前约 %d tokens，已超过最大限制 12000 tokens！\n",
+                    currentMemoryTokens));
+                tokenBudgetWarning.append("必须大幅压缩各章节内容！每个 section 严格控制在 2000 tokens 以内！\n");
+                tokenBudgetWarning.append("优先压缩 Worklog 等流水账章节，只保留真正有价值的决策记录！\n");
+            } else if (currentMemoryTokens > 8000) {
+                tokenBudgetWarning.append(String.format(
+                    "\n\n⚠️ 注意：记忆文件当前约 %d tokens，接近上限 12000 tokens。\n",
+                    currentMemoryTokens));
+                tokenBudgetWarning.append("请适度压缩，避免后续溢出。\n");
+            }
+            
+            String taskInstruction = String.format(
+                "⚠️ 【强制指令】必须调用 edit_file 工具写入结果！禁止纯文本输出总结！\n\n" +
+                "请基于以上对话历史（共 %d 条消息），执行 Session Memory 增量更新任务。\n\n" +
+                "📊 Token 预算限制：\n" +
+                "- 单章节最大: 2000 tokens\n" +
+                "- 记忆文件总上限: 12000 tokens\n" +
+                "- 超过限制必须强制压缩！%s\n\n" +
+                "记忆文件路径: %s",
+                fullConversation.size(),
+                tokenBudgetWarning,
+                memoryFilePath
+            );
             
             String taskDescription = String.format(
                 "会话记忆增量更新: 当前 %d 条消息, %d tokens, 记忆文件: %s",
@@ -255,13 +298,13 @@ public class BackgroundExtractor {
             );
 
             SubAgentTask task = subAgentManager.forkAgent(
+                parentConversation,
                 taskDescription,
-                buildMemoryExtractorPrompt(fullConversation, memoryFilePath),
+                taskInstruction,
                 120,
                 null,
                 SubAgentPermission.MEMORY_EXTRACTOR,
-                () -> onMemoryExtractionCompleted(fullConversation),
-                true  // ✅ 启用 Prompt Cache 优化
+                () -> onMemoryExtractionCompleted(fullConversation)
             );
 
             logger.info("✅ 会话记忆提取任务已提交给 SubAgent: taskId={}", task.getTaskId());
@@ -307,7 +350,16 @@ public class BackgroundExtractor {
         List<Message> extractionMessages = buildExtractionContext(fullConversation);
 
         try {
-            String extractedMemory = llmClient.chat(extractionMessages).getMessage().getContent();
+            ChatResponse response = llmClient.chat(extractionMessages);
+            if (response == null || response.getMessage() == null) {
+                logger.warn("LLM 返回空响应，跳过记忆提取");
+                return;
+            }
+            String extractedMemory = response.getMessage().getContent();
+            if (extractedMemory == null) {
+                logger.warn("LLM 返回空内容，跳过记忆提取");
+                return;
+            }
 
             String existingMemory = memoryManager.read();
             String finalMemory = mergeMemories(existingMemory, extractedMemory);
@@ -329,27 +381,36 @@ public class BackgroundExtractor {
     }
 
     private String buildMemoryExtractorPrompt(List<Message> fullConversation, String memoryFilePath) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(MEMORY_EXTRACTOR_PROMPT).append("\n\n");
-        
-        sb.append("### 📂 目标记忆文件路径\n").append(memoryFilePath).append("\n\n");
-        
-        sb.append("### 📊 边界信息\n");
         int startIndex = findBoundaryIndex(fullConversation);
-        sb.append("- 从第 ").append(startIndex).append(" 条消息开始分析\n");
-        sb.append("- 共 ").append(fullConversation.size() - startIndex).append(" 条新消息\n\n");
+        int newMessageCount = fullConversation.size() - startIndex;
+        int cacheHitRate = (int) Math.round(1000.0 * startIndex / fullConversation.size()) / 10;
         
-        String existing = memoryManager.read();
-        if (existing != null && !existing.isBlank()) {
-            sb.append("### 📝 现有记忆内容\n```markdown\n");
-            sb.append(existing.length() > 2000 ? existing.substring(0, 2000) + "\n... [内容过长已截断]" : existing);
-            sb.append("\n```\n\n");
+        String existingMemory = memoryManager.read();
+        String existingMemorySection = "";
+        if (existingMemory != null && !existingMemory.isBlank()) {
+            existingMemorySection = "\n---\n\n### 📝 现有记忆内容:\n```markdown\n" +
+                (existingMemory.length() > 2000 ? existingMemory.substring(0, 2000) + "\n... [内容过长已截断]" : existingMemory) +
+                "\n```\n";
         }
         
-        sb.append("---\n\n");
-        sb.append("现在请开始执行任务！注意：基于已有对话内容进行增量更新。");
-        
-        return sb.toString();
+        return String.format(
+            MEMORY_EXTRACTOR_PROMPT + "\n\n" +
+            "---\n\n" +
+            "### 📋 任务参数:\n" +
+            "- 记忆文件: `%s`\n" +
+            "- 总消息数: %d 条（前缀 Cache 命中 %d%%）\n" +
+            "- 增量分析范围: 第 %d - %d 条消息（共 %d 条新内容）\n" +
+            "%s" +
+            "\n---\n\n" +
+            "请立即开始执行。",
+            memoryFilePath,
+            fullConversation.size(),
+            cacheHitRate,
+            startIndex,
+            fullConversation.size() - 1,
+            newMessageCount,
+            existingMemorySection
+        );
     }
 
     private List<Message> buildExtractionContext(List<Message> fullConversation) {
@@ -426,22 +487,31 @@ public class BackgroundExtractor {
     }
 
     private void updateLastSummarizedMessageIdIfSafe(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+
         if (hasToolCallsInLastAssistantTurn(messages)) {
             return;
         }
 
-        if (!messages.isEmpty()) {
-            Message lastMsg = messages.get(messages.size() - 1);
-            if (lastMsg.getId() != null) {
-                lastExtractedMessageId = lastMsg.getId();
-                compactionState.recordMemoryExtraction(lastExtractedMessageId);
-            }
+        Message lastMsg = messages.get(messages.size() - 1);
+        if (lastMsg != null && lastMsg.getId() != null) {
+            lastExtractedMessageId = lastMsg.getId();
+            compactionState.recordMemoryExtraction(lastExtractedMessageId);
         }
     }
 
     private boolean hasToolCallsInLastAssistantTurn(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return false;
+        }
+
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message msg = messages.get(i);
+            if (msg == null) {
+                continue;
+            }
             if (msg.isAssistant()) {
                 return msg.getToolCalls() != null && !msg.getToolCalls().isEmpty();
             }
