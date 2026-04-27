@@ -243,7 +243,7 @@ public class GlobTool implements ToolExecutor {
         return dateTime.format(TIME_FORMATTER);
     }
 
-    private static class FileInfo {
+    static class FileInfo {
         final String relativePath;
         final long size;
         final FileTime modifiedTime;

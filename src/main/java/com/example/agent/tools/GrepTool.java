@@ -281,7 +281,7 @@ public class GrepTool implements ToolExecutor {
         return sb.toString();
     }
 
-    private static class SearchResult {
+    static class SearchResult {
         final String filePath;
         final int lineNumber;
         final String lineContent;

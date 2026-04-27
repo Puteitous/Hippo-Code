@@ -106,13 +106,19 @@ public class ConcurrentToolExecutor {
             return;
         }
 
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        ClassLoader classLoader = ToolRegistry.class.getClassLoader();
+        try (var executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+                .inheritInheritableThreadLocals(true)
+                .factory())) {
             Map<Future<ToolExecutionResult>, Integer> futureIndexMap = new HashMap<>();
             
             for (int i = 0; i < toolCalls.size(); i++) {
                 ToolCall call = toolCalls.get(i);
                 final int index = i;
-                Future<ToolExecutionResult> future = executor.submit(() -> executeSingle(call, index, total));
+                Future<ToolExecutionResult> future = executor.submit(() -> {
+                    Thread.currentThread().setContextClassLoader(classLoader);
+                    return executeSingle(call, index, total);
+                });
                 futureIndexMap.put(future, index);
             }
 

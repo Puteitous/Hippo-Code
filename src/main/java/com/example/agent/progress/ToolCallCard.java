@@ -5,12 +5,9 @@ import com.example.agent.console.ConsoleStyle;
 import com.example.agent.core.di.ServiceLocator;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ToolCallCard {
 
-    private static final String[] SPINNER_FRAMES = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
-    private static final int SPINNER_DELAY = 100;
     private static final int TERMINAL_WIDTH = 80;
 
     private final String toolName;
@@ -18,11 +15,10 @@ public class ToolCallCard {
     private final int index;
     private final int total;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicInteger spinnerFrame = new AtomicInteger(0);
-    private volatile Thread spinnerThread;
     private volatile String currentStatus = "";
     private volatile long startTime;
     private final AgentUi ui;
+    private final SpinnerManager spinnerManager = SpinnerManager.getInstance();
 
     public ToolCallCard(String toolName, String toolCallId, int index, int total) {
         this.toolName = toolName;
@@ -37,55 +33,18 @@ public class ToolCallCard {
             running.set(false);
             return;
         }
-        
+
         running.set(true);
         startTime = System.currentTimeMillis();
         currentStatus = "执行中...";
 
-        spinnerThread = new Thread(this::runSpinner, "spinner-" + toolCallId);
-        spinnerThread.setDaemon(true);
-        spinnerThread.start();
+        spinnerManager.registerCard(this);
     }
 
-    private void runSpinner() {
-        while (running.get() && !Thread.currentThread().isInterrupted()) {
-            try {
-                String spinner = SPINNER_FRAMES[spinnerFrame.get() % SPINNER_FRAMES.length];
-                renderRunning(spinner);
-                spinnerFrame.incrementAndGet();
-                Thread.sleep(SPINNER_DELAY);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
+    public void pauseSpinner() {
     }
 
-    private void renderRunning(String spinner) {
-        if (!running.get()) {
-            return;
-        }
-        
-        String prefix = String.format("[%d/%d]", index + 1, total);
-        String content = String.format("  %s %s %s [%s] %s",
-                ConsoleStyle.gray(prefix),
-                ConsoleStyle.cyan(spinner),
-                ConsoleStyle.boldYellow(toolName),
-                ConsoleStyle.dim(currentStatus),
-                ConsoleStyle.gray(getElapsedTime()));
-
-        clearAndPrint(content);
-    }
-
-    private void clearAndPrint(String content) {
-        if (ui == null) {
-            return;
-        }
-        StringBuilder sb = new StringBuilder("\r");
-        sb.append(" ".repeat(TERMINAL_WIDTH));
-        sb.append("\r");
-        sb.append(content);
-        ui.print(sb.toString());
+    public void resumeSpinner() {
     }
 
     public void updateStatus(String status) {
@@ -93,43 +52,21 @@ public class ToolCallCard {
     }
 
     public void completeSuccess(String resultPreview) {
-        stopSpinner();
-        renderFinal("✅", ConsoleStyle::green, "成功", resultPreview);
+        complete("✅", ConsoleStyle::green, "成功", resultPreview);
     }
 
     public void completeFailure(String errorMessage) {
-        stopSpinner();
-        renderFinal("❌", ConsoleStyle::red, "失败", errorMessage);
+        complete("❌", ConsoleStyle::red, "失败", errorMessage);
     }
 
-    private void stopSpinner() {
+    private void complete(String marker, java.util.function.Function<String, String> color, String status, String detail) {
+        spinnerManager.unregisterCard(this);
         running.set(false);
-        if (spinnerThread != null) {
-            spinnerThread.interrupt();
-            try {
-                spinnerThread.join(500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            spinnerThread = null;
-        }
-    }
 
-    private void clearLine() {
         if (ui == null) {
             return;
         }
-        StringBuilder sb = new StringBuilder("\r");
-        sb.append(" ".repeat(TERMINAL_WIDTH));
-        sb.append("\r");
-        ui.print(sb.toString());
-    }
 
-    private void renderFinal(String marker, java.util.function.Function<String, String> color, String status, String detail) {
-        if (ui == null) {
-            return;
-        }
-        
         String prefix = String.format("[%d/%d]", index + 1, total);
         String displayDetail = truncate(detail, 60);
 
@@ -147,7 +84,7 @@ public class ToolCallCard {
         line.append(color.apply(status));
         line.append(" ");
         line.append(ConsoleStyle.gray(getElapsedTime()));
-        
+
         ui.println(line.toString());
 
         if (displayDetail != null && !displayDetail.isEmpty()) {
@@ -155,12 +92,44 @@ public class ToolCallCard {
         }
     }
 
-    private String getElapsedTime() {
+    public String getToolName() {
+        return toolName;
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public int getTotal() {
+        return total;
+    }
+
+    public String getCurrentStatus() {
+        return currentStatus;
+    }
+
+    public String getElapsedTime() {
         long elapsed = System.currentTimeMillis() - startTime;
         if (elapsed < 1000) {
             return elapsed + "ms";
         }
         return String.format("%.1fs", elapsed / 1000.0);
+    }
+
+    public String gray(String text) {
+        return ConsoleStyle.gray(text);
+    }
+
+    public String cyan(String text) {
+        return ConsoleStyle.cyan(text);
+    }
+
+    public String boldYellow(String text) {
+        return ConsoleStyle.boldYellow(text);
+    }
+
+    public String dim(String text) {
+        return ConsoleStyle.dim(text);
     }
 
     private String truncate(String text, int maxLength) {
