@@ -26,8 +26,17 @@ class TranscriptLoaderTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws IOException {
         transcript.close();
+        Path file = transcript.getTranscriptFile();
+        if (Files.exists(file)) {
+            Files.delete(file);
+            Path parent = file.getParent();
+            while (parent != null && !Files.list(parent).findAny().isPresent()) {
+                Files.delete(parent);
+                parent = parent.getParent();
+            }
+        }
     }
 
     @Test

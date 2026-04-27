@@ -4,8 +4,13 @@ import com.example.agent.context.SessionCompactionState;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -40,6 +45,20 @@ class BackgroundExtractorBoundaryTest {
         MockitoAnnotations.openMocks(this);
         testSessionId = "test-session-" + System.currentTimeMillis();
         extractor = new BackgroundExtractor(testSessionId, tokenEstimator, llmClient, compactionState);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        SessionMemoryManager memoryManager = new SessionMemoryManager(testSessionId);
+        Path file = memoryManager.getMemoryFilePath();
+        if (Files.exists(file)) {
+            Files.delete(file);
+            Path parent = file.getParent();
+            while (parent != null && !Files.list(parent).findAny().isPresent()) {
+                Files.delete(parent);
+                parent = parent.getParent();
+            }
+        }
     }
 
     // ==================== 入口边界测试 ====================

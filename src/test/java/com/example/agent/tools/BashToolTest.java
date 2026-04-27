@@ -2,8 +2,12 @@ package com.example.agent.tools;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -16,6 +20,14 @@ class BashToolTest {
     void setUp() {
         tool = new BashTool();
         objectMapper = new ObjectMapper();
+    }
+
+    @AfterEach
+    void tearDown() {
+        try {
+            Files.deleteIfExists(Paths.get("file.txt"));
+        } catch (Exception e) {
+        }
     }
 
     @Test

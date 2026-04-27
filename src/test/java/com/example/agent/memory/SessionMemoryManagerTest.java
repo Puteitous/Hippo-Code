@@ -1,5 +1,6 @@
 package com.example.agent.memory;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -20,6 +21,19 @@ class SessionMemoryManagerTest {
     void setUp() {
         testSessionId = "test-session-" + System.currentTimeMillis();
         memoryManager = new SessionMemoryManager(testSessionId);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        Path file = memoryManager.getMemoryFilePath();
+        if (Files.exists(file)) {
+            Files.delete(file);
+            Path parent = file.getParent();
+            while (parent != null && !Files.list(parent).findAny().isPresent()) {
+                Files.delete(parent);
+                parent = parent.getParent();
+            }
+        }
     }
 
     @Test

@@ -2,12 +2,14 @@ package com.example.agent.memory;
 
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -38,6 +40,19 @@ class MemoryModuleBoundaryConditionsTest {
         sessionMemoryManager = new SessionMemoryManager(testSessionId);
         memoryStore = new MemoryStore(llmClient, tempDir.toString());
         memoryRetriever = new MemoryRetriever(memoryStore);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        Path file = sessionMemoryManager.getMemoryFilePath();
+        if (Files.exists(file)) {
+            Files.delete(file);
+            Path parent = file.getParent();
+            while (parent != null && !Files.list(parent).findAny().isPresent()) {
+                Files.delete(parent);
+                parent = parent.getParent();
+            }
+        }
     }
 
     // ==================== SessionMemoryManager 边界测试 ====================
