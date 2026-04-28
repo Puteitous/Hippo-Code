@@ -14,26 +14,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SessionMemoryManagerTest {
 
+    @TempDir
+    Path tempDir;
+
     private SessionMemoryManager memoryManager;
     private String testSessionId;
 
     @BeforeEach
     void setUp() {
         testSessionId = "test-session-" + System.currentTimeMillis();
-        memoryManager = new SessionMemoryManager(testSessionId);
+        memoryManager = new SessionMemoryManager(testSessionId, tempDir);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        Path file = memoryManager.getMemoryFilePath();
-        if (Files.exists(file)) {
-            Files.delete(file);
-            Path parent = file.getParent();
-            while (parent != null && !Files.list(parent).findAny().isPresent()) {
-                Files.delete(parent);
-                parent = parent.getParent();
-            }
-        }
     }
 
     @Test
@@ -48,7 +42,7 @@ class SessionMemoryManagerTest {
 
     @Test
     void testReadNonExistentMemory() {
-        SessionMemoryManager emptyManager = new SessionMemoryManager("non-existent-" + System.nanoTime());
+        SessionMemoryManager emptyManager = new SessionMemoryManager("non-existent-" + System.nanoTime(), tempDir);
         assertNull(emptyManager.read());
         assertFalse(emptyManager.exists());
     }
@@ -69,7 +63,7 @@ class SessionMemoryManagerTest {
 
     @Test
     void testAppendToNonExistentMemory() {
-        SessionMemoryManager emptyManager = new SessionMemoryManager("new-session-" + System.nanoTime());
+        SessionMemoryManager emptyManager = new SessionMemoryManager("new-session-" + System.nanoTime(), tempDir);
         String content = "New content";
 
         emptyManager.append(content);
@@ -125,9 +119,10 @@ class SessionMemoryManagerTest {
     void testDefaultMemoryTemplateStructure() {
         String template = SessionMemoryManager.getDefaultMemoryTemplate();
 
-        assertTrue(template.contains("# Session Memory"));
-        assertTrue(template.contains("## 关键决策"));
-        assertTrue(template.contains("## 错误与修复"));
-        assertTrue(template.contains("## 当前进度"));
+        assertTrue(template.contains("# Session Title"), "应包含标题");
+        assertTrue(template.contains("# Current State"), "应包含当前状态");
+        assertTrue(template.contains("# Files and Functions"), "应包含文件函数");
+        assertTrue(template.contains("# Errors & Corrections"), "应包含错误修正");
+        assertTrue(template.contains("# Worklog"), "应包含工作日志");
     }
 }
