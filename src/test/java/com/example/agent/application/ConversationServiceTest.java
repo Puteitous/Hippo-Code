@@ -7,11 +7,11 @@ import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.service.TokenEstimatorFactory;
+import com.example.agent.testutil.MockLlmClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
 
 import java.nio.file.Path;
 
@@ -29,7 +29,7 @@ class ConversationServiceTest {
     @BeforeEach
     void setUp() {
         WorkspaceManager.overrideBasePath(tempDir);
-        mockLlmClient = Mockito.mock(LlmClient.class);
+        mockLlmClient = new MockLlmClient();
         TokenEstimator tokenEstimator = TokenEstimatorFactory.getDefault();
         service = new ConversationService(tokenEstimator, mockLlmClient);
     }
@@ -206,7 +206,7 @@ class ConversationServiceTest {
     @Test
     @DisplayName("✅ getHistory 返回正确")
     void getHistory() {
-        Conversation conv = service.create("");
+        Conversation conv = service.create("System");
         service.addUserMessage(conv, "Hello");
 
         var history = service.getHistory(conv);
