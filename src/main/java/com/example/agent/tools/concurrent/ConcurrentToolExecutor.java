@@ -3,6 +3,7 @@ package com.example.agent.tools.concurrent;
 import com.example.agent.core.logging.LoggingContext;
 import com.example.agent.llm.model.ToolCall;
 import com.example.agent.progress.ToolExecutionCallback;
+import com.example.agent.tools.ToolArgumentSanitizer;
 import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolRegistry;
@@ -178,7 +179,7 @@ public class ConcurrentToolExecutor {
             
             logger.debug("开始执行");
             
-            String fixedArguments = fixJsonArguments(toolName, arguments);
+            String fixedArguments = ToolArgumentSanitizer.fixJsonArguments(toolName, arguments);
             JsonNode argumentsNode = objectMapper.readTree(fixedArguments);
             String result = toolRegistry.execute(toolName, fixedArguments);
             
@@ -257,76 +258,7 @@ public class ConcurrentToolExecutor {
         return new ExecutionStats(totalCount, successCount, failureCount, totalTime);
     }
 
-    private String fixJsonArguments(String toolName, String arguments) {
-        if (!"edit_file".equals(toolName) || arguments == null) {
-            return arguments;
-        }
-        String fixed = arguments;
-        fixed = fixFieldValue(fixed, "old_text");
-        fixed = fixFieldValue(fixed, "new_text");
-        return fixed;
-    }
-    
-    private String fixFieldValue(String json, String fieldName) {
-        String pattern1 = "\"" + fieldName + "\":\"";
-        String pattern2 = "\"" + fieldName + "\": \"";
-        
-        int idx1 = json.indexOf(pattern1);
-        int idx2 = json.indexOf(pattern2);
-        
-        int pos;
-        if (idx1 >= 0 && idx2 >= 0) {
-            pos = Math.min(idx1, idx2) + (idx1 < idx2 ? pattern1.length() : pattern2.length());
-        } else if (idx1 >= 0) {
-            pos = idx1 + pattern1.length();
-        } else if (idx2 >= 0) {
-            pos = idx2 + pattern2.length();
-        } else {
-            return json;
-        }
-        
-        StringBuilder result = new StringBuilder(json.substring(0, pos));
-        
-        while (pos < json.length()) {
-            char c = json.charAt(pos);
-            
-            if (c == '\\' && pos + 1 < json.length()) {
-                char nextChar = json.charAt(pos + 1);
-                if (nextChar == '"' || nextChar == '\\' || nextChar == 'n' || 
-                    nextChar == 'r' || nextChar == 't') {
-                    result.append(c).append(nextChar);
-                    pos += 2;
-                    continue;
-                }
-                result.append("\\\\");
-                pos++;
-                continue;
-            }
-            
-            if (c == '\"') {
-                int next = pos + 1;
-                while (next < json.length() && Character.isWhitespace(json.charAt(next))) next++;
-                if (next < json.length() && (json.charAt(next) == ',' || json.charAt(next) == '}')) {
-                    result.append(json.substring(pos));
-                    break;
-                } else {
-                    result.append("\\\"");
-                }
-            } else if (c == '\n') {
-                result.append("\\n");
-            } else if (c == '\r') {
-                result.append("\\r");
-            } else if (c == '\t') {
-                result.append("\\t");
-            } else {
-                result.append(c);
-            }
-            
-            pos++;
-        }
-        
-        return result.toString();
-    }
+
 
     public static class ExecutionStats {
         private final int totalCount;

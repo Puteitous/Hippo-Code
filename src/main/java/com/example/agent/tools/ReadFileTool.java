@@ -93,9 +93,9 @@ public class ReadFileTool implements ToolExecutor {
             StringBuilder result = new StringBuilder();
             result.append("文件内容 (").append(relativePath);
             result.append("):\n");
-            result.append("────────────────────────────────────────\n");
+            result.append("<file_content>\n");
             result.append(content);
-            result.append("\n────────────────────────────────────────\n");
+            result.append("\n</file_content>\n");
             result.append("(").append(content.length()).append(" 字符");
             if (!content.endsWith("\n")) {
                 result.append(", 文件末尾无换行符");

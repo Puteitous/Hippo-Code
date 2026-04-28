@@ -190,12 +190,12 @@ public class EditFileTool implements ToolExecutor {
         StringBuilder result = new StringBuilder();
         
         result.append("文件编辑成功\n");
-        result.append("─────────────────────────────────────────────────────────────\n");
+        result.append("<edit_result>\n");
         result.append("文件: ").append(filePath).append("\n");
         if (adjustmentNote != null && !adjustmentNote.isEmpty()) {
             result.append(adjustmentNote).append("\n");
         }
-        result.append("─────────────────────────────────────────────────────────────\n");
+        result.append("</edit_result>\n");
         
         int oldLines = oldText.split("\n", -1).length;
         int newLines = newText.split("\n", -1).length;
@@ -206,9 +206,7 @@ public class EditFileTool implements ToolExecutor {
         result.append(String.format("  - 文件总大小: %d → %d 字符 (变化: %+d)\n", 
             oldContent.length(), newContent.length(), newContent.length() - oldContent.length()));
         
-        result.append("\n─────────────────────────────────────────────────────────────\n");
-        result.append("替换内容预览:\n");
-        result.append("─────────────────────────────────────────────────────────────\n");
+        result.append("\n<replacement_preview>\n");
         
         result.append("\n❌ 原文本:\n");
         result.append(formatTextBlock(oldText));
@@ -216,7 +214,7 @@ public class EditFileTool implements ToolExecutor {
         result.append("\n✅ 新文本:\n");
         result.append(formatTextBlock(newText));
         
-        result.append("─────────────────────────────────────────────────────────────\n");
+        result.append("</replacement_preview>\n");
         
         return result.toString();
     }

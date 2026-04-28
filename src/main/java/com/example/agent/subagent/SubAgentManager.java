@@ -160,7 +160,7 @@ public class SubAgentManager {
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
         subAgentLogger.log("配置: shareTerminal=" + config.isShareTerminalOutput() + 
             ", depthTracking=" + config.isEnableDepthTracking());
-        subAgentLogger.log("Claude 风格零拷贝: 父会话 " + (parentConversation != null ? parentConversation.getMessageCount() : 0) + 
+        subAgentLogger.log("父会话 " + (parentConversation != null ? parentConversation.getMessageCount() : 0) + 
             " 条 (直接引用) + 1 条指令 = 子会话共 " + subConversation.getMessageCount() + " 条, Cache 命中 ~100%");
 
         submitTask(task, subAgentLogger, permission, config);

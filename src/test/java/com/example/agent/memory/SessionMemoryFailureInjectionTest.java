@@ -4,8 +4,7 @@ import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
-import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
-import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.ToolArgumentSanitizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -38,7 +36,6 @@ class SessionMemoryFailureInjectionTest {
     private String testSessionId;
     private Path memoryFilePath;
     private ObjectMapper objectMapper;
-    private ConcurrentToolExecutor toolExecutor;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -48,7 +45,6 @@ class SessionMemoryFailureInjectionTest {
         memoryManager = new SessionMemoryManager(testSessionId, tempDir);
         memoryFilePath = memoryManager.getMemoryFilePath();
         objectMapper = new ObjectMapper();
-        toolExecutor = new ConcurrentToolExecutor(new ToolRegistry());
         
         memoryManager.initializeIfNotExists();
         when(tokenEstimator.estimate(anyList())).thenReturn(5000);
@@ -66,18 +62,14 @@ class SessionMemoryFailureInjectionTest {
 
         @Test
         @DisplayName("old_text 包含未转义双引号 - 自动修复")
-        void testOldTextWithUnescapedQuotesAutoFix() throws Exception {
+        void testOldTextWithUnescapedQuotesAutoFix() {
             String badJson = "{" +
                     "\"path\": \"test.md\", " +
                     "\"old_text\": \"Line with \"quotes\" inside\", " +
                     "\"new_text\": \"Fixed content\"" +
                     "}";
             
-            Method fixMethod = ConcurrentToolExecutor.class.getDeclaredMethod(
-                    "fixJsonArguments", String.class, String.class);
-            fixMethod.setAccessible(true);
-            
-            String result = (String) fixMethod.invoke(toolExecutor, "edit_file", badJson);
+            String result = ToolArgumentSanitizer.fixJsonArguments("edit_file", badJson);
             
             assertDoesNotThrow(() -> objectMapper.readTree(result),
                     "修复后的 JSON 应该能正常解析: " + result);
@@ -88,18 +80,14 @@ class SessionMemoryFailureInjectionTest {
 
         @Test
         @DisplayName("new_text 包含未转义双引号 - 自动修复")
-        void testNewTextWithUnescapedQuotesAutoFix() throws Exception {
+        void testNewTextWithUnescapedQuotesAutoFix() {
             String badJson = "{" +
                     "\"path\": \"test.md\", " +
                     "\"old_text\": \"Old content\", " +
                     "\"new_text\": \"Line with \"nested quotes\" inside\"" +
                     "}";
             
-            Method fixMethod = ConcurrentToolExecutor.class.getDeclaredMethod(
-                    "fixJsonArguments", String.class, String.class);
-            fixMethod.setAccessible(true);
-            
-            String result = (String) fixMethod.invoke(toolExecutor, "edit_file", badJson);
+            String result = ToolArgumentSanitizer.fixJsonArguments("edit_file", badJson);
             
             assertDoesNotThrow(() -> objectMapper.readTree(result),
                     "修复后的 JSON 应该能正常解析: " + result);
@@ -110,28 +98,20 @@ class SessionMemoryFailureInjectionTest {
 
         @Test
         @DisplayName("极端情况：JSON 完全坏掉 - 优雅降级")
-        void testCompletelyBrokenJsonGracefulDegradation() throws Exception {
+        void testCompletelyBrokenJsonGracefulDegradation() {
             String completelyBrokenJson = "{ this is not even json at all !!! }";
             
-            Method fixMethod = ConcurrentToolExecutor.class.getDeclaredMethod(
-                    "fixJsonArguments", String.class, String.class);
-            fixMethod.setAccessible(true);
-            
-            String result = (String) fixMethod.invoke(toolExecutor, "edit_file", completelyBrokenJson);
+            String result = ToolArgumentSanitizer.fixJsonArguments("edit_file", completelyBrokenJson);
             
             assertNotNull(result, "即使修不好也不能返回 null");
         }
 
         @Test
         @DisplayName("换行符包含在内容中 - 正确转义")
-        void testNewlinesInContentEscaped() throws Exception {
+        void testNewlinesInContentEscaped() {
             String badJson = "{\"path\": \"test.md\", \"old_text\": \"Line1\nLine2\nLine3\", \"new_text\": \"Fixed\"}";
             
-            Method fixMethod = ConcurrentToolExecutor.class.getDeclaredMethod(
-                    "fixJsonArguments", String.class, String.class);
-            fixMethod.setAccessible(true);
-            
-            String result = (String) fixMethod.invoke(toolExecutor, "edit_file", badJson);
+            String result = ToolArgumentSanitizer.fixJsonArguments("edit_file", badJson);
             
             assertDoesNotThrow(() -> objectMapper.readTree(result),
                     "包含换行的 JSON 应该能正常解析: " + result);

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackgroundExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(BackgroundExtractor.class);
-    private static final int INITIAL_TOKEN_THRESHOLD = 10000;
+    private static final int INITIAL_TOKEN_THRESHOLD = 0;
     private static final int TOKEN_GROWTH_THRESHOLD = 5000;
     private static final int TOOL_CALL_THRESHOLD = 3;
 
@@ -137,6 +137,13 @@ public class BackgroundExtractor {
         - 需要更新 3 个章节就调用 3 次 edit_file
         - 每次只修改一个章节的内容区
         - 没有变化的章节跳过不处理
+
+        #### ⚠️ old_text 精准匹配规则（违反将导致编辑失败！）
+        1. **old_text 必须是文件中的原文，一个字都不能改！** 不能脑补、不能省略、不能改写
+        2. **old_text 越短越好！** 只需包含要替换的那几行，不要包含大段上下文
+        3. **不要包含分隔线 `---`**，只替换分隔线之间的内容区
+        4. **最佳实践**：只选 1-3 行精确原文作为 old_text，替换为新的 1-3 行
+        5. **反面教材**：old_text 跨越多个章节、包含分隔线、超过 5 行 → 大概率匹配失败
 
         #### 如果没有实质性更新：
         ✅ 可以跳过所有编辑，直接输出"本次对话无重要记忆需要更新"即可
@@ -285,7 +292,9 @@ public class BackgroundExtractor {
             }
             
             String taskInstruction = String.format(
-                "⚠️ 【强制指令】必须调用 edit_file 工具写入结果！禁止纯文本输出总结！\n\n" +
+                "⚠️ 【核心任务】你是 Session Memory 提取器，不是代码审查员！\n" +
+                "你的唯一任务是：从对话历史中提取关键信息，写入 session-memory.md 文件！\n" +
+                "不管对话在讨论什么（代码修改、bug修复、功能开发），你都要提取记忆！\n\n" +
                 "🚨 JSON 转义警告：调用 edit_file 时必须正确转义！\n" +
                 "- old_text 和 new_text 中的所有双引号 \" 必须转义为 \\\" \n" +
                 "- old_text 和 new_text 中的所有反斜杠 \\ 必须转义为 \\\\\n" +
@@ -320,7 +329,6 @@ public class BackgroundExtractor {
                 SubAgentPermission.MEMORY_EXTRACTOR,
                 () -> onMemoryExtractionCompleted(fullConversation),
                 builder -> {
-                    builder.maxTurns(Integer.MAX_VALUE);
                 }
             );
 

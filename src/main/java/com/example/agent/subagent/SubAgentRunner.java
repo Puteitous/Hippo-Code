@@ -6,7 +6,11 @@ import com.example.agent.llm.model.ChatResponse;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Tool;
 import com.example.agent.llm.model.ToolCall;
+import com.example.agent.core.di.ServiceLocator;
+import com.example.agent.llm.model.Usage;
+import com.example.agent.service.TokenEstimator;
 import com.example.agent.subagent.event.SubAgentProgressEvent;
+import com.example.agent.tools.ToolArgumentSanitizer;
 import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
@@ -28,11 +32,15 @@ public class SubAgentRunner implements Runnable {
     private static final int MAX_LLM_ERROR_RETRIES = 3;
     private static final int MAX_TOOL_ERROR_RETRIES = 2;
     private static final int RETRY_DELAY_MS = 1000;
+    private static final int MAX_CONSECUTIVE_FAILED_TOOL_CALLS = 3;
+    private static final int MAX_EDIT_FILE_MISMATCH_COUNT = 2;
+    private static final int MAX_MEMORY_EXTRACTOR_TURNS = 50;
 
     private final SubAgentTask task;
     private final SubAgentLogger subAgentLogger;
     private final LlmClient llmClient;
     private final ToolRegistry toolRegistry;
+    private int editFileMismatchCount = 0;
     private final ConversationService conversationService;
     private final SubAgentPermission permission;
     private final ObjectMapper objectMapper;
@@ -62,7 +70,7 @@ public class SubAgentRunner implements Runnable {
         if (this.config.getCustomMaxTurns() > 0) {
             this.maxTurns = this.config.getCustomMaxTurns();
         } else if (permission == SubAgentPermission.MEMORY_EXTRACTOR) {
-            this.maxTurns = Integer.MAX_VALUE;
+            this.maxTurns = MAX_MEMORY_EXTRACTOR_TURNS;
         } else {
             this.maxTurns = MAX_TURNS;
         }
@@ -72,6 +80,10 @@ public class SubAgentRunner implements Runnable {
     public void run() {
         int turnCount = 0;
         int emptyResponseRetries = 0;
+        int consecutiveFailedToolCalls = 0;
+        editFileMismatchCount = 0;
+        int totalPromptTokens = 0;
+        int totalCompletionTokens = 0;
 
         task.addLog("=== SubAgent 启动: " + task.getDescription() + " ===");
         publishProgress("任务启动，开始执行...");
@@ -142,7 +154,30 @@ public class SubAgentRunner implements Runnable {
                         }
                     }
                 }
-                subAgentLogger.log("LLM 调用完成" + (llmRetryCount > 0 ? " (重试 " + llmRetryCount + " 次)" : ""));
+                Usage usage = response.getUsage();
+                int promptTokens = 0;
+                int completionTokens = 0;
+                
+                if (usage != null) {
+                    promptTokens = usage.getPromptTokens();
+                    completionTokens = usage.getCompletionTokens();
+                }
+                
+                if (promptTokens == 0 && completionTokens == 0) {
+                    TokenEstimator estimator = ServiceLocator.get(TokenEstimator.class);
+                    promptTokens = estimator.estimateConversationTokens(finalContext);
+                    if (response.getFirstMessage() != null && response.getFirstMessage().getContent() != null) {
+                        completionTokens = estimator.estimateTextTokens(response.getFirstMessage().getContent());
+                    }
+                }
+                
+                totalPromptTokens += promptTokens;
+                totalCompletionTokens += completionTokens;
+                String tokenLog = String.format("LLM 调用完成 | Prompt: %,d | Completion: %,d | 累计: %,d tokens",
+                    promptTokens, completionTokens,
+                    totalPromptTokens + totalCompletionTokens);
+                task.addLog(tokenLog);
+                subAgentLogger.log(tokenLog + (llmRetryCount > 0 ? " (重试 " + llmRetryCount + " 次)" : ""));
 
                 if (response == null || response.getFirstMessage() == null) {
                     task.addLog("LLM 返回空响应");
@@ -170,7 +205,32 @@ public class SubAgentRunner implements Runnable {
                     subAgentLogger.log("准备执行工具调用: " + toolCalls.size() + " 个");
                     publishProgress("执行 " + toolCalls.size() + " 个工具调用...");
 
-                    executeToolCalls(toolCalls);
+                    int failedInThisTurn = executeToolCalls(toolCalls);
+                    
+                    if (failedInThisTurn > 0) {
+                        consecutiveFailedToolCalls++;
+                    } else {
+                        consecutiveFailedToolCalls = 0;
+                    }
+                    
+                    if (consecutiveFailedToolCalls >= MAX_CONSECUTIVE_FAILED_TOOL_CALLS) {
+                        String msg = String.format("工具连续失败 %d 次，自动终止任务（避免死循环）", 
+                            consecutiveFailedToolCalls);
+                        task.addLog(msg);
+                        subAgentLogger.log(msg);
+                        task.markFailed(new Exception(msg));
+                        break;
+                    }
+                    
+                    if (permission == SubAgentPermission.MEMORY_EXTRACTOR 
+                        && editFileMismatchCount >= MAX_EDIT_FILE_MISMATCH_COUNT) {
+                        String msg = String.format("edit_file 连续 %d 次匹配失败，终止记忆更新（避免死循环）", 
+                            editFileMismatchCount);
+                        task.addLog(msg);
+                        subAgentLogger.log(msg);
+                        task.markCompleted();
+                        break;
+                    }
                     
                     if (task.isDone()) {
                         break;
@@ -191,9 +251,6 @@ public class SubAgentRunner implements Runnable {
                 }
             }
 
-            task.addLog("=== SubAgent 执行结束 ===");
-            subAgentLogger.log("=== SubAgent 执行结束 ===");
-
         } catch (Exception e) {
             task.addLog("执行异常: " + e.getMessage());
             subAgentLogger.logError("执行异常", e);
@@ -201,6 +258,18 @@ public class SubAgentRunner implements Runnable {
             if (!task.isDone()) {
                 task.markFailed(e);
             }
+        } finally {
+            if (turnCount > 0) {
+                String summaryLog = String.format(
+                    "📊 Token 统计 | 总轮次: %d | Prompt: %,d | Completion: %,d | 总计: %,d tokens",
+                    turnCount, totalPromptTokens, totalCompletionTokens,
+                    totalPromptTokens + totalCompletionTokens);
+                task.addLog(summaryLog);
+                subAgentLogger.log(summaryLog);
+            }
+
+            task.addLog("=== SubAgent 执行结束 ===");
+            subAgentLogger.log("=== SubAgent 执行结束 ===");
         }
     }
 
@@ -282,7 +351,8 @@ public class SubAgentRunner implements Runnable {
         return filtered;
     }
 
-    private void executeToolCalls(List<ToolCall> toolCalls) {
+    private int executeToolCalls(List<ToolCall> toolCalls) {
+        int failedCount = 0;
         for (ToolCall toolCall : toolCalls) {
             String toolName = toolCall.getFunction().getName();
             String arguments = toolCall.getFunction().getArguments();
@@ -294,20 +364,24 @@ public class SubAgentRunner implements Runnable {
                 task.addLog(errorMsg);
                 subAgentLogger.log("权限拒绝: " + errorMsg);
                 addToolResult(toolCall.getId(), toolName, errorMsg);
+                failedCount++;
                 continue;
             }
 
             String result = null;
             int toolRetryCount = 0;
+            boolean toolSucceeded = false;
             while (toolRetryCount < MAX_TOOL_ERROR_RETRIES) {
                 try {
                     ToolExecutor executor = toolRegistry.getExecutor(toolName);
-                    JsonNode args = objectMapper.readTree(arguments);
+                    String fixedArguments = ToolArgumentSanitizer.fixJsonArguments(toolName, arguments);
+                    JsonNode args = objectMapper.readTree(fixedArguments);
 
                     task.addLog("执行工具: " + toolName + (toolRetryCount > 0 ? " (重试 " + toolRetryCount + " 次)" : ""));
                     publishProgress("执行工具: " + toolName);
 
                     result = executor.execute(args);
+                    toolSucceeded = true;
                     break;
                 } catch (Exception e) {
                     toolRetryCount++;
@@ -329,10 +403,25 @@ public class SubAgentRunner implements Runnable {
                 }
             }
 
+            if (!toolSucceeded) {
+                failedCount++;
+                if ("edit_file".equals(toolName) && result != null 
+                    && result.contains("old_text not found")) {
+                    editFileMismatchCount++;
+                    subAgentLogger.log(String.format("⚠️ edit_file 匹配失败 (%d/%d)，模型可能幻觉了文件内容",
+                        editFileMismatchCount, MAX_EDIT_FILE_MISMATCH_COUNT));
+                }
+            } else {
+                if ("edit_file".equals(toolName)) {
+                    editFileMismatchCount = 0;
+                }
+            }
+
             task.addLog("工具结果: " + truncate(result, 200));
             subAgentLogger.logToolResult(toolName, result);
             addToolResult(toolCall.getId(), toolName, result);
         }
+        return failedCount;
     }
 
     private void addToolResult(String toolCallId, String toolName, String content) {

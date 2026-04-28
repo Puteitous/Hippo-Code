@@ -173,10 +173,17 @@ public abstract class AbstractLlmClient implements LlmClient {
             
             HttpRequest httpRequest = requestBuilder.build();
 
+            logger.debug("📤 发送流式 LLM 请求，模型: {}，大小: {} 字节，超时: {} 秒", 
+                getModel(), requestBody.length(), STREAM_TIMEOUT_SECONDS);
+            long startMs = System.currentTimeMillis();
+            
             HttpResponse<InputStream> response = httpClient.send(
                     httpRequest, 
                     HttpResponse.BodyHandlers.ofInputStream()
             );
+            
+            long latencyMs = System.currentTimeMillis() - startMs;
+            logger.debug("📥 流式 LLM 响应首包，耗时: {} ms，状态: {}", latencyMs, response.statusCode());
             
             return processStreamResponse(response, onChunk);
             
@@ -496,7 +503,14 @@ public abstract class AbstractLlmClient implements LlmClient {
             
             HttpRequest httpRequest = requestBuilder.build();
 
+            logger.debug("📤 发送 LLM 请求，模型: {}，大小: {} 字节，超时: {} 秒", 
+                getModel(), requestBody.length(), API_TIMEOUT_SECONDS);
+            long startMs = System.currentTimeMillis();
+            
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            
+            long latencyMs = System.currentTimeMillis() - startMs;
+            logger.debug("📥 LLM 响应，耗时: {} ms，状态: {}", latencyMs, response.statusCode());
             
             return handleResponse(response);
             
