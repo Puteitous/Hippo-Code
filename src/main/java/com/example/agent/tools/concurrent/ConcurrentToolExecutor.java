@@ -178,8 +178,9 @@ public class ConcurrentToolExecutor {
             
             logger.debug("开始执行");
             
-            JsonNode argumentsNode = objectMapper.readTree(arguments);
-            String result = toolRegistry.execute(toolName, arguments);
+            String fixedArguments = fixJsonArguments(toolName, arguments);
+            JsonNode argumentsNode = objectMapper.readTree(fixedArguments);
+            String result = toolRegistry.execute(toolName, fixedArguments);
             
             long executionTime = System.currentTimeMillis() - startTime;
             logger.debug("执行完成, duration={}ms", executionTime);
@@ -254,6 +255,50 @@ public class ConcurrentToolExecutor {
         }
         
         return new ExecutionStats(totalCount, successCount, failureCount, totalTime);
+    }
+
+    private String fixJsonArguments(String toolName, String arguments) {
+        if (!"edit_file".equals(toolName)) {
+            return arguments;
+        }
+        try {
+            objectMapper.readTree(arguments);
+            return arguments;
+        } catch (Exception e) {
+            logger.warn("JSON 解析失败，尝试自动修复转义问题: {}", e.getMessage());
+            String fixed = arguments;
+            fixed = fixFieldValue(fixed, "old_text");
+            fixed = fixFieldValue(fixed, "new_text");
+            return fixed;
+        }
+    }
+    
+    private String fixFieldValue(String json, String fieldName) {
+        String fieldMarker = "\"" + fieldName + "\":\"";
+        int start = json.indexOf(fieldMarker);
+        if (start < 0) return json;
+        int valueStart = start + fieldMarker.length();
+        int valueEnd = findMatchingQuote(json, valueStart);
+        if (valueEnd < 0) return json;
+        
+        String value = json.substring(valueStart, valueEnd);
+        String fixedValue = value.replace("\\", "\\\\").replace("\"", "\\\"");
+        
+        return json.substring(0, valueStart) + fixedValue + json.substring(valueEnd);
+    }
+    
+    private int findMatchingQuote(String text, int start) {
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\"' && (i == 0 || text.charAt(i - 1) != '\\')) {
+                int next = i + 1;
+                while (next < text.length() && Character.isWhitespace(text.charAt(next))) next++;
+                if (next < text.length() && (text.charAt(next) == ',' || text.charAt(next) == '}')) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     public static class ExecutionStats {

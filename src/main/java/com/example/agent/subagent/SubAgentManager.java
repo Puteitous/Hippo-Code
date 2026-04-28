@@ -103,21 +103,37 @@ public class SubAgentManager {
             dependsOn, permission, completionCallback, useForkOptimization);
     }
 
+    @FunctionalInterface
+    public interface Configurer {
+        void configure(SubAgentConfig.Builder builder);
+    }
+    
     public SubAgentTask forkAgent(Conversation parentConversation, String taskDescription, String additionalInstruction, 
-                                  int timeoutSeconds, List<String> dependsOn, SubAgentPermission permission, 
-                                  Runnable completionCallback) {
+                                 int timeoutSeconds, List<String> dependsOn, SubAgentPermission permission, 
+                                 Runnable completionCallback) {
+        return forkAgent(parentConversation, taskDescription, additionalInstruction, 
+            timeoutSeconds, dependsOn, permission, completionCallback, null);
+    }
+    
+    public SubAgentTask forkAgent(Conversation parentConversation, String taskDescription, String additionalInstruction, 
+                                 int timeoutSeconds, List<String> dependsOn, SubAgentPermission permission, 
+                                 Runnable completionCallback, Configurer configurer) {
         String parentSessionId = parentConversation != null ? parentConversation.getSessionId() : null;
         
         logger.info("forkAgent: 父会话消息={} 条, task={}, timeout={}s, permission={}", 
             parentConversation != null ? parentConversation.getMessageCount() : 0,
             taskDescription, timeoutSeconds, permission.getName());
 
+        SubAgentConfig.Builder configBuilder = SubAgentConfig.builder();
+        if (configurer != null) {
+            configurer.configure(configBuilder);
+        }
+        SubAgentConfig config = configBuilder.build();
+        
         Conversation subConversation = conversationService.createSubAgentConversation(null, parentSessionId);
         
         if (parentConversation != null) {
-            for (Message msg : parentConversation.getMessages()) {
-                subConversation.addMessage(msg.shallowCopy());
-            }
+            subConversation.replaceMessages(parentConversation.getMessages());
         }
         
         if (additionalInstruction != null && !additionalInstruction.isEmpty()) {
@@ -137,17 +153,19 @@ public class SubAgentManager {
         subAgentLogger.log("Sub-Agent 会话 ID: " + subConversation.getSessionId());
         subAgentLogger.log("父会话 ID: " + parentSessionId);
         subAgentLogger.log("权限模式: " + permission.getName());
-        subAgentLogger.log("启动 Sub-Agent (Claude 风格零拷贝): " + taskDescription);
+        subAgentLogger.log("启动 Sub-Agent 零拷贝): " + taskDescription);
         if (task.hasDependencies()) {
             subAgentLogger.log("依赖任务: " + dependsOn);
         }
         subAgentLogger.log("日志目录: " + subAgentLogger.getLogDir());
-        subAgentLogger.log("上下文继承: 父会话 " + (parentConversation != null ? parentConversation.getMessageCount() : 0) + 
-            " 条 + 1 条指令 = 子会话共 " + subConversation.getMessageCount() + " 条");
+        subAgentLogger.log("配置: shareTerminal=" + config.isShareTerminalOutput() + 
+            ", depthTracking=" + config.isEnableDepthTracking());
+        subAgentLogger.log("Claude 风格零拷贝: 父会话 " + (parentConversation != null ? parentConversation.getMessageCount() : 0) + 
+            " 条 (直接引用) + 1 条指令 = 子会话共 " + subConversation.getMessageCount() + " 条, Cache 命中 ~100%");
 
-        submitTask(task, subAgentLogger, permission);
+        submitTask(task, subAgentLogger, permission, config);
 
-        logger.info("SubAgent 已创建: taskId={}, permission={}, 上下文消息={} 条",
+        logger.info("SubAgent 已创建: taskId={}, permission={}, 零拷贝上下文={} 条, Cache 命中 ~100%",
             task.getTaskId(), permission.getName(), subConversation.getMessageCount());
         return task;
     }
@@ -310,17 +328,26 @@ public class SubAgentManager {
     }
 
     private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger) {
-        submitTask(task, subAgentLogger, SubAgentPermission.DEFAULT);
+        submitTask(task, subAgentLogger, SubAgentPermission.DEFAULT, SubAgentConfig.defaults());
     }
 
     private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger, SubAgentPermission permission) {
+        submitTask(task, subAgentLogger, permission, SubAgentConfig.defaults());
+    }
+
+    private void submitTask(SubAgentTask task, SubAgentLogger subAgentLogger, SubAgentPermission permission, SubAgentConfig config) {
+        ToolRegistry registry = getToolRegistry();
+        com.example.agent.tools.concurrent.ConcurrentToolExecutor toolExecutor = 
+            new com.example.agent.tools.concurrent.ConcurrentToolExecutor(registry);
         SubAgentRunner runner = new SubAgentRunner(
             task,
             subAgentLogger,
+            permission,
+            toolExecutor,
             llmClient,
-            getToolRegistry(),
+            registry,
             conversationService,
-            permission
+            config
         );
 
         int queueSize = ((ThreadPoolExecutor) executor).getQueue().size();

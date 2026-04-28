@@ -9,6 +9,7 @@ import com.example.agent.llm.model.ToolCall;
 import com.example.agent.subagent.event.SubAgentProgressEvent;
 import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.concurrent.ConcurrentToolExecutor;
 import com.example.agent.tools.concurrent.ToolExecutionResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,24 +36,32 @@ public class SubAgentRunner implements Runnable {
     private final ConversationService conversationService;
     private final SubAgentPermission permission;
     private final ObjectMapper objectMapper;
+    private final ConcurrentToolExecutor toolExecutor;
+    private final SubAgentConfig config;
 
     private final int maxTurns;
 
     public SubAgentRunner(SubAgentTask task,
                           SubAgentLogger subAgentLogger,
+                          SubAgentPermission permission,
+                          ConcurrentToolExecutor toolExecutor,
                           LlmClient llmClient,
                           ToolRegistry toolRegistry,
                           ConversationService conversationService,
-                          SubAgentPermission permission) {
+                          SubAgentConfig config) {
         this.task = task;
         this.subAgentLogger = subAgentLogger;
+        this.permission = permission;
+        this.toolExecutor = toolExecutor;
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry;
         this.conversationService = conversationService;
-        this.permission = permission;
         this.objectMapper = new ObjectMapper();
+        this.config = config != null ? config : SubAgentConfig.defaults();
         
-        if (permission == SubAgentPermission.MEMORY_EXTRACTOR) {
+        if (this.config.getCustomMaxTurns() > 0) {
+            this.maxTurns = this.config.getCustomMaxTurns();
+        } else if (permission == SubAgentPermission.MEMORY_EXTRACTOR) {
             this.maxTurns = Integer.MAX_VALUE;
         } else {
             this.maxTurns = MAX_TURNS;
@@ -162,6 +171,10 @@ public class SubAgentRunner implements Runnable {
                     publishProgress("执行 " + toolCalls.size() + " 个工具调用...");
 
                     executeToolCalls(toolCalls);
+                    
+                    if (task.isDone()) {
+                        break;
+                    }
                 } else {
                     task.addLog("任务完成，无更多工具调用");
                     subAgentLogger.log("无工具调用，任务完成");
@@ -325,12 +338,26 @@ public class SubAgentRunner implements Runnable {
     private void addToolResult(String toolCallId, String toolName, String content) {
         String compressed = conversationService.getToolResultCompressor().compress(content);
         task.getConversation().addMessage(Message.toolResult(toolCallId, toolName, compressed));
+        
+        if (permission == SubAgentPermission.MEMORY_EXTRACTOR 
+            && "edit_file".equals(toolName) 
+            && content != null 
+            && content.contains("文件编辑成功")) {
+            subAgentLogger.log("✅ edit_file 执行成功，记忆文件写入完成，提前终止任务");
+            task.markCompleted();
+        }
     }
-
+    
     private void publishProgress(String message) {
-        com.example.agent.core.event.EventBus.publish(
-            new SubAgentProgressEvent(task.getTaskId(), task.getDescription(), message)
-        );
+        if (config != null && config.isShareTerminalOutput()) {
+            com.example.agent.core.event.EventBus.publish(
+                new com.example.agent.subagent.event.SubAgentProgressEvent(
+                    task.getTaskId(), task.getDescription(), message
+                )
+            );
+        } else {
+            subAgentLogger.log("[进度] " + message);
+        }
     }
 
     private String truncate(String s, int maxLength) {

@@ -16,7 +16,7 @@ public class SubAgentPermission {
     public static final SubAgentPermission MEMORY_EXTRACTOR = new SubAgentPermission(
         "MEMORY_EXTRACTOR",
         Set.of("read_file", "edit_file"),
-        false
+        true
     );
 
     public static final SubAgentPermission READ_ONLY = new SubAgentPermission(

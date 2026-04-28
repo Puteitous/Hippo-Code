@@ -281,6 +281,15 @@ public class BackgroundExtractor {
             
             String taskInstruction = String.format(
                 "⚠️ 【强制指令】必须调用 edit_file 工具写入结果！禁止纯文本输出总结！\n\n" +
+                "🚨 JSON 转义警告：调用 edit_file 时必须正确转义！\n" +
+                "- old_text 和 new_text 中的所有双引号 \" 必须转义为 \\\" \n" +
+                "- old_text 和 new_text 中的所有反斜杠 \\ 必须转义为 \\\\\n" +
+                "- old_text 必须精确匹配文件内容，包括换行和空格\n" +
+                "- 不允许包含注释、说明文字或任何解释性内容\n\n" +
+                "🎯 【任务终止指令】：\n" +
+                "- 成功执行 edit_file 工具后，立即输出 \"DONE\" 并结束任务！\n" +
+                "- 不需要确认、不需要总结、绝对不允许继续闲聊！\n" +
+                "- edit_file 成功 = 任务完成！\n\n" +
                 "请基于以上对话历史（共 %d 条消息），执行 Session Memory 增量更新任务。\n\n" +
                 "📊 Token 预算限制：\n" +
                 "- 单章节最大: 2000 tokens\n" +
@@ -304,7 +313,10 @@ public class BackgroundExtractor {
                 120,
                 null,
                 SubAgentPermission.MEMORY_EXTRACTOR,
-                () -> onMemoryExtractionCompleted(fullConversation)
+                () -> onMemoryExtractionCompleted(fullConversation),
+                builder -> {
+                    builder.maxTurns(Integer.MAX_VALUE);
+                }
             );
 
             logger.info("✅ 会话记忆提取任务已提交给 SubAgent: taskId={}", task.getTaskId());
