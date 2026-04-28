@@ -41,20 +41,34 @@ public class ContextClipper {
         this(tokenEstimator, memoryManager, llmClient, null, MIN_TOKENS_TARGET, MAX_TOKENS_TARGET, MIN_TEXT_BLOCK_MESSAGES);
     }
 
+    public ContextClipper(TokenEstimator tokenEstimator, CompactForkExecutor forkExecutor) {
+        this.tokenEstimator = tokenEstimator;
+        this.memoryManager = null;
+        this.llmClient = null;
+        this.sessionId = null;
+        this.forkExecutor = forkExecutor;
+        this.minTokens = MIN_TOKENS_TARGET;
+        this.maxTokens = MAX_TOKENS_TARGET;
+        this.minTextBlockMessages = MIN_TEXT_BLOCK_MESSAGES;
+    }
+
     private ContextClipper(TokenEstimator tokenEstimator, SessionMemoryManager memoryManager, LlmClient llmClient, 
                           String sessionId, int minTokens, int maxTokens, int minTextBlockMessages) {
         this.tokenEstimator = tokenEstimator;
         this.memoryManager = memoryManager;
         this.llmClient = llmClient;
         this.sessionId = sessionId;
-        this.forkExecutor = new CompactForkExecutor();
+        this.forkExecutor = new CompactForkExecutor(llmClient, null, tokenEstimator);
         this.minTokens = minTokens;
         this.maxTokens = maxTokens;
         this.minTextBlockMessages = minTextBlockMessages;
     }
 
     public CompactionResult compact(List<Message> messages, int targetTokens, SessionCompactionState state) {
-        if (messages == null || messages.size() <= 2) {
+        if (messages == null) {
+            return new CompactionResult(new ArrayList<>(), 0, 0, 0, false, 0, false, false);
+        }
+        if (messages.size() <= 2) {
             return new CompactionResult(new ArrayList<>(messages), 0, 0, 0, false, 0, false, false);
         }
 

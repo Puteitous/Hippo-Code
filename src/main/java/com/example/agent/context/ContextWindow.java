@@ -14,6 +14,7 @@ public class ContextWindow {
     private final List<Message> messages;
     private final TokenEstimator tokenEstimator;
     private final List<Message> injectedWarnings;
+    private boolean isRecalculating;
 
     public ContextWindow(int maxTokens, TokenEstimator tokenEstimator) {
         if (tokenEstimator == null) {
@@ -23,6 +24,7 @@ public class ContextWindow {
         this.messages = new CopyOnWriteArrayList<>();
         this.tokenEstimator = tokenEstimator;
         this.injectedWarnings = new CopyOnWriteArrayList<>();
+        this.isRecalculating = false;
     }
 
     public void addMessage(Message message) {
@@ -46,6 +48,18 @@ public class ContextWindow {
     }
 
     private void recalculateBudget() {
+        if (isRecalculating) {
+            return;
+        }
+        try {
+            isRecalculating = true;
+            doRecalculate();
+        } finally {
+            isRecalculating = false;
+        }
+    }
+
+    private void doRecalculate() {
         List<Message> allMessages = new ArrayList<>();
         allMessages.addAll(messages);
         allMessages.addAll(injectedWarnings);
@@ -110,5 +124,15 @@ public class ContextWindow {
         messages.clear();
         injectedWarnings.clear();
         budget.reset();
+    }
+
+    public void forceRecalculate() {
+        boolean wasRecalculating = isRecalculating;
+        try {
+            isRecalculating = false;
+            recalculateBudget();
+        } finally {
+            isRecalculating = wasRecalculating;
+        }
     }
 }

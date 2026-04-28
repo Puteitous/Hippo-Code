@@ -34,16 +34,33 @@ public class ContextSummarizer {
         this(tokenEstimator, llmClient, memoryManager, null);
     }
 
+    public ContextSummarizer(TokenEstimator tokenEstimator, CompactForkExecutor forkExecutor) {
+        this.tokenEstimator = tokenEstimator;
+        this.llmClient = null;
+        this.memoryManager = null;
+        this.sessionId = null;
+        this.forkExecutor = forkExecutor;
+    }
+
     private ContextSummarizer(TokenEstimator tokenEstimator, LlmClient llmClient, 
                              SessionMemoryManager memoryManager, String sessionId) {
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.memoryManager = memoryManager;
         this.sessionId = sessionId;
-        this.forkExecutor = new CompactForkExecutor();
+        this.forkExecutor = new CompactForkExecutor(llmClient, null, tokenEstimator);
     }
 
     public List<Message> compact(List<Message> messages, int targetTokens) {
+        if (messages == null || messages.isEmpty()) {
+            String summary = "## 历史摘要\n- 对话历史为空";
+            lastResult = new CompactionResult(0, 0, 0, summary);
+            List<Message> result = new ArrayList<>();
+            result.add(Message.system("--- SESSION COMPACTION BOUNDARY ---"));
+            result.add(Message.user(createSummaryHeader(summary, 0, 0)));
+            return result;
+        }
+
         List<Message> immutable = List.copyOf(messages);
         int initialTokens = tokenEstimator.estimate(immutable);
 

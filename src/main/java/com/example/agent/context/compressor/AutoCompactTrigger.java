@@ -67,6 +67,25 @@ public class AutoCompactTrigger implements BudgetListener {
         this.compactionPerformed = false;
     }
 
+    public AutoCompactTrigger(
+            ContextWindow contextWindow, 
+            TokenEstimator tokenEstimator, 
+            CompactForkExecutor forkExecutor,
+            String sessionId,
+            SessionTranscript transcript,
+            SessionCompactionState state) {
+        this.contextWindow = contextWindow;
+        this.tokenEstimator = tokenEstimator;
+        this.sessionId = sessionId;
+        this.transcript = transcript;
+        this.clipper = new ContextClipper(tokenEstimator, forkExecutor);
+        this.summarizer = new ContextSummarizer(tokenEstimator, forkExecutor);
+        this.memoryManager = new SessionMemoryManager(sessionId);
+        this.metrics = new CompactionMetricsCollector();
+        this.state = state;
+        this.compactionPerformed = false;
+    }
+
     @Override
     public void onThresholdReached(BudgetThreshold threshold, int currentTokens, int maxTokens) {
         if (isCompactionForkContext()) {
