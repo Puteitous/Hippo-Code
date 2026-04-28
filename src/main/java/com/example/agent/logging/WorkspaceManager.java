@@ -13,7 +13,17 @@ public class WorkspaceManager {
     
     private static final Logger logger = LoggerFactory.getLogger(WorkspaceManager.class);
     
-    public static final Path HIPPO_ROOT = Paths.get(".hippo");
+    private static Path HIPPO_ROOT = Paths.get(".hippo");
+    
+    public static void overrideBasePath(Path basePath) {
+        HIPPO_ROOT = basePath.resolve(".hippo");
+        ensureCoreDirectories();
+    }
+
+    public static Path getHippoRoot() {
+        return HIPPO_ROOT;
+    }
+
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
     private static final String CURRENT_PROJECT_KEY = sanitizePath(getCurrentWorkingDir());

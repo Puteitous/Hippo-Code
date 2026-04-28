@@ -10,6 +10,7 @@ import com.example.agent.logging.WorkspaceManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,6 +22,9 @@ import static org.mockito.Mockito.mock;
 
 class TranscriptP0EndToEndTest {
 
+    @TempDir
+    Path tempDir;
+
     private String sessionId;
     private ConversationService service;
     private Conversation conversation;
@@ -28,11 +32,12 @@ class TranscriptP0EndToEndTest {
 
     @BeforeEach
     void setUp() {
+        WorkspaceManager.overrideBasePath(tempDir);
         sessionId = "p0-test-" + System.currentTimeMillis();
         tokenEstimator = TokenEstimatorFactory.getDefault();
         LlmClient mockLlmClient = mock(LlmClient.class);
         service = new ConversationService(tokenEstimator, mockLlmClient);
-        conversation = service.create("You are a helper");
+        conversation = service.create("You are a helper", 4000, sessionId);
     }
 
     @AfterEach
@@ -60,7 +65,7 @@ class TranscriptP0EndToEndTest {
     void testSessionStoragePrefersTranscript() {
         service.addUserMessage(conversation, "Transcript message");
 
-        SessionStorage storage = new SessionStorage();
+        SessionStorage storage = new SessionStorage(tempDir.resolve("sessions"), 10);
         storage.saveSession(SessionData.create(sessionId, conversation.getMessages(), SessionData.Status.INTERRUPTED));
         var loaded = storage.loadSession(sessionId);
 

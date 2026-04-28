@@ -3,54 +3,28 @@ package com.example.agent.core;
 import com.example.agent.application.ConversationService;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.logging.WorkspaceManager;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class SessionIdConsistencyTest {
 
-    private final List<String> testSessionIds = new ArrayList<>();
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
-        testSessionIds.clear();
-    }
-
-    @AfterEach
-    void tearDown() throws IOException {
-        String projectKey = WorkspaceManager.getCurrentProjectKey();
-        for (String sessionId : testSessionIds) {
-            Path sessionDir = WorkspaceManager.getSessionDir(projectKey, sessionId);
-            deleteRecursively(sessionDir);
-        }
-        testSessionIds.clear();
-    }
-
-    private void deleteRecursively(Path path) throws IOException {
-        if (Files.isDirectory(path)) {
-            Files.list(path).forEach(child -> {
-                try {
-                    deleteRecursively(child);
-                } catch (IOException e) {
-                }
-            });
-        }
-        Files.deleteIfExists(path);
+        WorkspaceManager.overrideBasePath(tempDir);
     }
 
     @Test
     void testAgentContextAndConversationHaveSameSessionId() throws Exception {
         AgentContext context = new AgentContext();
         context.initialize();
-        testSessionIds.add(context.getSessionId());
 
         String agentContextId = context.getSessionId();
         String conversationId = context.getConversation().getSessionId();
@@ -66,7 +40,6 @@ class SessionIdConsistencyTest {
     void testConversationRegisteredInServiceWithCorrectId() throws Exception {
         AgentContext context = new AgentContext();
         context.initialize();
-        testSessionIds.add(context.getSessionId());
 
         ConversationService service = ServiceLocator.get(ConversationService.class);
         String agentContextId = context.getSessionId();
@@ -80,7 +53,6 @@ class SessionIdConsistencyTest {
     void testResetConversationMaintainsSessionId() throws Exception {
         AgentContext context = new AgentContext();
         context.initialize();
-        testSessionIds.add(context.getSessionId());
 
         String originalSessionId = context.getSessionId();
 

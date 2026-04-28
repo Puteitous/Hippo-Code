@@ -20,7 +20,7 @@ public class LogDirectoryManager {
     /** @deprecated */
     @Deprecated
     public static Path getLogRoot() {
-        return WorkspaceManager.HIPPO_ROOT;
+        return WorkspaceManager.getHippoRoot();
     }
     
     /** @deprecated */

@@ -2,6 +2,7 @@ package com.example.agent.application;
 
 import com.example.agent.context.config.ContextConfig;
 import com.example.agent.domain.conversation.Conversation;
+import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimator;
@@ -9,21 +10,28 @@ import com.example.agent.service.TokenEstimatorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mockito;
+
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("ConversationService 应用服务测试")
 class ConversationServiceTest {
 
+    @TempDir
+    Path tempDir;
+
     private ConversationService service;
     private LlmClient mockLlmClient;
 
     @BeforeEach
     void setUp() {
+        WorkspaceManager.overrideBasePath(tempDir);
         mockLlmClient = Mockito.mock(LlmClient.class);
         TokenEstimator tokenEstimator = TokenEstimatorFactory.getDefault();
-        service = new ConversationService(tokenEstimator, mockLlmClient, new ContextConfig());
+        service = new ConversationService(tokenEstimator, mockLlmClient);
     }
 
     @Test

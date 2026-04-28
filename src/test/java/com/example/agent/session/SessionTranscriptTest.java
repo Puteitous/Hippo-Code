@@ -17,11 +17,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SessionTranscriptTest {
 
+    @TempDir
+    Path tempDir;
+
     private String sessionId;
     private SessionTranscript transcript;
 
     @BeforeEach
     void setUp() {
+        WorkspaceManager.overrideBasePath(tempDir);
         sessionId = "test-session-" + System.currentTimeMillis();
         transcript = new SessionTranscript(sessionId);
     }
@@ -29,15 +33,6 @@ class SessionTranscriptTest {
     @AfterEach
     void tearDown() throws IOException {
         transcript.close();
-        Path file = transcript.getTranscriptFile();
-        if (Files.exists(file)) {
-            Files.delete(file);
-            Path parent = file.getParent();
-            while (parent != null && !Files.list(parent).findAny().isPresent()) {
-                Files.delete(parent);
-                parent = parent.getParent();
-            }
-        }
     }
 
     @Test
