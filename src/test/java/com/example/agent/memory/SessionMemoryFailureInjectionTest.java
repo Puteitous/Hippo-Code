@@ -62,7 +62,7 @@ class SessionMemoryFailureInjectionTest {
 
         @Test
         @DisplayName("old_text 包含未转义双引号 - 自动修复")
-        void testOldTextWithUnescapedQuotesAutoFix() {
+        void testOldTextWithUnescapedQuotesAutoFix() throws Exception {
             String badJson = "{" +
                     "\"path\": \"test.md\", " +
                     "\"old_text\": \"Line with \"quotes\" inside\", " +
@@ -80,7 +80,7 @@ class SessionMemoryFailureInjectionTest {
 
         @Test
         @DisplayName("new_text 包含未转义双引号 - 自动修复")
-        void testNewTextWithUnescapedQuotesAutoFix() {
+        void testNewTextWithUnescapedQuotesAutoFix() throws Exception {
             String badJson = "{" +
                     "\"path\": \"test.md\", " +
                     "\"old_text\": \"Old content\", " +

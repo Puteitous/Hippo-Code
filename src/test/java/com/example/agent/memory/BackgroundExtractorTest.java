@@ -67,8 +67,8 @@ class BackgroundExtractorTest {
             messages.add(Message.assistant("response"));
         }
 
-        assertFalse((Boolean) shouldExtract.invoke(extractor, messages),
-            "消息数少于阈值不应触发提取");
+        assertTrue((Boolean) shouldExtract.invoke(extractor, messages),
+            "INITIAL_TOKEN_THRESHOLD=0, 任何消息都应通过初始阈值检查");
     }
 
     @Test

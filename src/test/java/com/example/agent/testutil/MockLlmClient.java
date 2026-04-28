@@ -67,6 +67,21 @@ public class MockLlmClient implements LlmClient {
         return new ArrayList<>(recordedMessages);
     }
 
+    public List<Message> getLastSentMessages() {
+        if (recordedMessages.isEmpty()) {
+            return null;
+        }
+        return new ArrayList<>(recordedMessages.get(recordedMessages.size() - 1));
+    }
+
+    public void enqueueNullResponse() {
+        responseQueue.offer(null);
+    }
+
+    public void enqueueSuccessResponse(String content) {
+        responseQueue.offer(LlmResponseBuilder.simpleContent(content));
+    }
+
     public void clearRecordings() {
         recordedRequests.clear();
         recordedMessages.clear();
