@@ -1,8 +1,8 @@
-# Hippo Code - 智能 AI 编程助手
+# Hippo Code - 企业级 AI 编程助手
 
 ## 📋 项目概述
 
-**Hippo Code** 是一个基于命令行的智能 AI Agent 应用，提供与 AI 模型交互的终端界面，支持代码编辑、文件操作、意图识别、任务规划等高级功能。
+**Hippo Code** 是一个基于 Java 21 构建的**企业级 AI Agent 编程助手，采用模块化分层架构设计，支持多 LLM 提供商、MCP 协议集成、LSP 语言服务、子代理分布式任务分解、智能上下文压缩等高级特性。
 
 | 属性 | 值 |
 |------|-----|
@@ -10,34 +10,43 @@
 | 版本 | 1.0.0 |
 | Java 版本 | 21 (启用 Preview 特性) |
 | 构建工具 | Maven |
-| 打包方式 | Fat Jar (可执行) |
+| 代码行数 | ~200+ 类, 100+ 测试 |
+| 核心特性 | 9 大核心模块, 23+ 工具 |
 
 ---
 
 ## 🏗️ 整体架构
 
+### 九层分层架构
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      用户交互层 (CLI)                            │
-│              AgentUi / InputHandler / CommandDispatcher         │
+│                   用户交互层 (Console)                           │
+│        AgentUi / InputHandler / CommandDispatcher            │
 ├─────────────────────────────────────────────────────────────────┤
-│                      执行控制层                                  │
-│         ConversationLoop / AgentTurnExecutor                    │
+│                   编排层 (Orchestrator)                   │
+│    ToolOrchestrator / DagExecutor / DependencyAnalyzer  │
 ├─────────────────────────────────────────────────────────────────┤
-│                      智能规划层                                  │
-│    IntentRecognizer / TaskPlanner / PlanExecutor                │
+│                   执行控制层                               │
+│    ConversationLoop / AgentTurnExecutor / ToolCallProcessor  │
 ├─────────────────────────────────────────────────────────────────┤
-│                      上下文管理层                                │
-│  ConversationManager / SlidingWindowPolicy / TokenEstimator     │
+│                   多代理系统 (SubAgent)                         │
+│    SubAgentManager / ForkAgent / Permission Control             │
 ├─────────────────────────────────────────────────────────────────┤
-│                      工具执行层                                  │
-│      ToolRegistry / ConcurrentToolExecutor / 8+ Tools           │
+│                   上下文管理层                              │
+│    ContextManager / Compressor / TokenBudget             │
 ├─────────────────────────────────────────────────────────────────┤
-│                      LLM 通信层                                  │
-│         DefaultLlmClient / SSE Stream / Retry Policy            │
+│                   安全拦截层 (Blocker)                    │
+│    BlockerChain / 10+ 安全拦截器                        │
 ├─────────────────────────────────────────────────────────────────┤
-│                      基础设施层                                  │
-│    SessionStorage / ConversationLogger / TokenMetricsCollector  │
+│                   工具抽象层                               │
+│    ToolRegistry / ConcurrentExecutor / MCP Adapter            │
+├─────────────────────────────────────────────────────────────────┤
+│                   协议适配层                               │
+│    LLM Clients / LSP Client / MCP Client             │
+├─────────────────────────────────────────────────────────────────┤
+│                   基础设施层                               │
+│    EventBus / HealthCheck / Metrics / Logging         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,61 +54,89 @@
 
 ## ✨ 核心功能
 
-### 🧠 智能对话
-- **意图识别**：基于规则和 LLM 的混合意图识别，自动理解用户需求
-- **任务规划**：将复杂任务分解为可执行步骤，支持顺序/并行执行策略
-- **上下文管理**：滑动窗口策略自动管理对话历史，Token 计数精确控制
-- **会话持久化**：支持会话保存、恢复、自动清理过期会话
+### 🧠 智能对话与规划
+- **DAG 任务编排**：基于有向无环图的工具依赖分析，支持并行/顺序混合执行策略
+- **智能上下文压缩**：自动分类消息、智能摘要、滑动窗口、预算控制四层压缩
+- **会话持久化**：会话转录、断点恢复、自动清理
+- **多模式切换**：开发/审查/重构等多种工作模式
 
-### 🛠️ 工具集
-| 工具 | 功能 |
-|------|------|
-| `read_file` | 读取文件内容 |
-| `write_file` | 写入文件（覆盖整个文件）|
-| `edit_file` | 精确编辑文件（替换特定文本片段）|
-| `list_directory` | 列出目录内容，支持递归显示 |
-| `glob` | 使用 glob 模式查找文件 |
-| `grep` | 在文件内容中搜索（支持正则）|
-| `bash` | 执行终端命令（白名单安全控制）|
-| `ask_user` | 向用户提问并等待回答 |
+### 👥 多代理系统 (SubAgent)
+- **任务级并行**：主 Agent 自动分解任务，子 Agent 独立并行执行
+- **权限隔离**：基于 `SubAgentPermission` 的细粒度工具权限控制
+- **生命周期管理**：子 Agent 创建、执行、取消、状态监控完整生命周期
+- **结果合并**：智能合并多子 Agent 执行结果
 
-### 📊 监控与日志
-- **对话日志**：完整记录每轮对话，支持 JSON 格式导出
-- **Token 统计**：实时统计输入/输出 Token 使用量
-- **Tiktoken 支持**：精确的 Token 计数（兼容 GPT-4 编码）
+### 🛡️ 安全防护机制 (10+ Blocker)
+| 拦截器 | 功能 |
+|---------|------|
+| `BashDangerousCommandBlocker` | 危险命令白名单控制 |
+| `ConcurrentEditBlocker` | 并发文件编辑冲突检测 |
+| `EditBeforeReadBlocker` | 编辑前强制读取验证 |
+| `EditConfirmationBlocker` | Diff 预览用户确认 |
+| `EditCountBlocker` | 单轮编辑次数限制 |
+| `ModePermissionBlocker` | 模式权限控制 |
+| `SchemaValidationBlocker` | 工具参数 Schema 校验 |
+| `SyntaxValidationBlocker` | 编辑后语法验证 |
+
+### 🔧 全功能工具集 (23+)
+
+| 分类 | 工具列表 |
+|------|----------|
+| **文件操作** | `read_file` `write_file` `edit_file` `list_directory` |
+| **代码搜索** | `glob` `grep` `search_code` (语义搜索) |
+| **代码导航** | LSP 系列 | `definition` `references` `hover` `document_symbol` `workspace_symbol` |
+| **系统交互** | `bash` `ask_user` `todo_write` |
+| **多代理** | `fork_agent` `fork_agents` `list_subagents` `cancel_subagent` |
+| **生态扩展** | MCP 协议动态工具 |
+
+### 🌐 多协议生态
+
+#### LLM 客户端
+- ✅ **OpenAI** 兼容协议
+- ✅ **Ollama** 本地模型
+- ✅ **DashScope** (通义千问)
+- ✅ 统一重试策略、SSE 流式响应
+- ✅ Token 计费统计
+
+#### LSP 语言服务
+- ✅ Java LSP 客户端集成
+- ✅ 代码跳转、引用查找、悬停文档
+- ✅ 健康检查、优雅降级
+
+#### MCP 协议
+- ✅ MCP (Model Context Protocol)
+- ✅ Stdio / SSE 双传输
+- ✅ 动态工具注册
+- ✅ Prompts / Resources / Tools 三模支持
+
+### 💾 长期记忆系统
+- **后台提取**：对话中自动提取关键信息
+- **语义检索**：基于相似度的记忆召回
+- **会话关联**：跨会话知识关联
+- **MEMORY.md**：人工维护 + 自动整理
+
+### 📊 可观测性
+- **健康检查**：配置/LLM/系统三级健康检查
+- **事件总线**：解耦式事件驱动架构
+- **指标收集**：Token/Cost/Compaction 全链路指标
+- **对话日志**：完整会话转录 JSON 导出
 
 ---
 
-## 📦 核心依赖
+## 📦 核心技术栈
 
-### 网络通信
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| OkHttp | 4.12.0 | HTTP 客户端，处理网络请求 |
-| OkHttp-SSE | 4.12.0 | Server-Sent Events 支持，流式响应 |
-
-### 数据处理
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| Jackson | 2.16.1 | JSON 序列化/反序列化 |
-| SnakeYAML | 2.2 | YAML 配置文件解析 |
-
-### 用户界面
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| JLine | 3.25.1 | 命令行交互、终端控制 |
-
-### 工具库
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| Tiktoken | 0.9.0 | OpenAI Token 计数 |
-| SLF4J + Logback | 1.4.14 + 1.4.14 | 日志框架 |
-
-### 测试
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| JUnit Jupiter | 5.10.2 | 单元测试框架 |
-| Mockito | 5.10.0 | Mock 测试框架 |
+| 领域 | 技术选型 | 说明 |
+|------|----------|------|
+| 语言 | Java 21 + 虚拟线程 |
+| 终端 | JLine 3.25.1 | 原生终端体验 |
+| HTTP | OkHttp 4.12.0 | SSE 流式支持 |
+| JSON | Jackson 2.16.1 | 完整数据绑定 |
+| 依赖注入 | Guice + ServiceLocator | 模块化 DI |
+| Token 计数 | JTokkit | Tiktoken 兼容 |
+| 缓存 | Caffeine 3.1.8 | 高性能缓存 |
+| AST 解析 | TreeSitter | 语法树解析 |
+| 日志 | SLF4J + Logback | 结构化日志 |
+| 测试 | JUnit 5 + Mockito + AssertJ | 高质量测试套件 |
 
 ---
 
@@ -109,242 +146,209 @@
 hippo-code/
 ├── pom.xml                              # Maven 配置
 ├── config.yaml.example                   # 配置文件示例
-├── ARCHITECTURE.md                       # 架构文档
-├── README.md                             # 项目说明
+├── MEMORY.md                            # Agent 长期记忆
+├── .hipporules_example.md              # Agent 行为规则
+├── README.md                            # 项目说明
 └── src/
-    ├── main/
-    │   ├── java/com/example/agent/
-    │   │   ├── AgentApplication.java         # 应用入口
-    │   │   ├── SimpleJavaAgent.java          # Agent 主程序
-n    │   │   ├── core/                         # 核心模块
-    │   │   │   └── AgentContext.java          # Agent 上下文
-    │   │   ├── config/                       # 配置模块
-    │   │   │   ├── Config.java               # 全局配置
-    │   │   │   ├── LlmConfig.java            # LLM 配置
-    │   │   │   ├── ContextConfig.java        # 上下文配置
-    │   │   │   ├── IntentConfig.java         # 意图识别配置
-    │   │   │   └── SessionConfig.java        # 会话配置
-    │   │   ├── console/                      # 控制台模块
-    │   │   │   ├── AgentUi.java              # UI 渲染
-    │   │   │   ├── InputHandler.java         # 输入处理
-    │   │   │   └── CommandDispatcher.java    # 命令分发
-    │   │   ├── execute/                      # 执行模块
-    │   │   │   ├── ConversationLoop.java     # 对话循环
-    │   │   │   ├── AgentTurnExecutor.java    # 单轮执行器
-    │   │   │   └── ToolCallProcessor.java     # 工具调用处理
-    │   │   ├── intent/                       # 意图识别
-    │   │   │   ├── IntentRecognizer.java     # 识别接口
-    │   │   │   ├── RuleBasedIntentRecognizer.java  # 规则识别
-    │   │   │   ├── LlmIntentRecognizer.java  # LLM 识别
-    │   │   │   └── HybridIntentRecognizer.java    # 混合识别
-    │   │   ├── plan/                         # 任务规划
-    │   │   │   ├── TaskPlanner.java          # 规划接口
-    │   │   │   ├── SimpleTaskPlanner.java    # 简单规划
-    │   │   │   ├── LlmTaskPlanner.java       # LLM 规划
-    │   │   │   └── SequentialPlanExecutor.java    # 顺序执行
-    │   │   ├── llm/                          # LLM 通信
-    │   │   │   ├── client/                   # 客户端
-    │   │   │   ├── model/                    # 数据模型
-    │   │   │   ├── stream/                   # SSE 流处理
-    │   │   │   ├── retry/                    # 重试策略
-    │   │   │   └── exception/                # 异常定义
-    │   │   ├── context/                      # 上下文管理
-    │   │   │   ├── policy/                   # 裁剪策略
-    │   │   │   ├── compressor/               # 压缩器
-    │   │   │   └── config/                   # 配置
-    │   │   ├── service/                      # 服务层
-    │   │   │   ├── ConversationManager.java  # 对话管理
-    │   │   │   ├── TokenEstimator.java       # Token 估算
-    │   │   │   └── TiktokenEstimator.java    # Tiktoken 实现
-    │   │   ├── session/                      # 会话管理
-    │   │   │   ├── SessionData.java          # 会话数据
-    │   │   │   └── SessionStorage.java       # 会话存储
-    │   │   ├── tools/                        # 工具集
-    │   │   │   ├── ToolRegistry.java         # 工具注册
-    │   │   │   ├── ReadFileTool.java         # 读文件
-    │   │   │   ├── WriteFileTool.java        # 写文件
-    │   │   │   ├── EditFileTool.java         # 编辑文件
-    │   │   │   ├── GlobTool.java             # 文件查找
-    │   │   │   ├── GrepTool.java             # 内容搜索
-    │   │   │   ├── BashTool.java             # 命令执行
-    │   │   │   └── concurrent/               # 并发执行
-    │   │   └── logging/                      # 日志模块
-    │   │       ├── ConversationLogger.java  # 对话日志
-    │   │       └── TokenMetricsCollector.java    # Token 统计
-    │   └── resources/
-    │       └── logback.xml                  # 日志配置
-    └── test/java/com/example/agent/         # 测试代码
+    ├── main/java/com/example/agent/
+    │   ├── AgentApplication.java         # 应用入口
+    │   ├── SimpleJavaAgent.java          # Agent 主程序
+    │   ├── subagent/                   # 子代理系统
+    │   │   ├── SubAgentManager.java      # 子代理管理器
+    │   │   ├── SubAgentPermission.java     # 权限定义
+    │   │   ├── SubAgentRunner.java        # 子代理执行器
+    │   │   └── event/                 # 子代理事件
+    │   ├── orchestrator/               # 工具编排
+    │   │   ├── ToolOrchestrator.java     # DAG 编排器
+    │   │   ├── analyzer/                 # 依赖分析
+    │   │   └── executor/               # DAG 执行器
+    │   ├── core/                       # 核心模块
+    │   │   ├── blocker/                  # 10+ 安全拦截器
+    │   │   ├── event/                    # EventBus 事件总线
+    │   │   ├── health/                   # 健康检查
+    │   │   ├── todo/                     # Todo 管理
+    │   │   ├── di/                        # 依赖注入
+    │   │   ├── error/                   # 统一错误处理
+    │   │   └── AgentContext.java        # Agent 全局上下文
+    │   ├── mcp/                        # MCP 协议
+    │   │   ├── client/                 # Stdio/SSE 客户端
+    │   │   ├── registry/                # 工具/Prompts 注册
+    │   │   └── McpServiceManager.java  # MCP 服务管理
+    │   ├── lsp/                        # LSP 语言服务
+    │   │   ├── tools/                    # LSP 导航工具
+    │   │   └── LspServiceManager.java # LSP 生命周期
+    │   ├── memory/                     # 长期记忆
+    │   │   ├── BackgroundExtractor.java   # 后台提取
+    │   │   ├── MemoryRetriever.java      # 记忆检索
+    │   │   └── SessionMemoryManager.java # 会话记忆
+    │   ├── context/                      # 上下文管理
+    │   │   ├── compressor/               # 5 种压缩策略
+    │   │   ├── budget/                   # Token 预算
+    │   │   └── ContextManager.java      # 上下文管理器
+    │   ├── domain/                     # 领域模型
+    │   │   ├── ast/                      # TreeSitter 解析
+    │   │   ├── index/                    # 代码语义索引
+    │   │   ├── rule/                     # 规则引擎
+    │   │   └── truncation/               # 内容智能截断
+    │   ├── llm/                        # LLM 多客户端
+    │   │   ├── client/                   # OpenAI/Ollama/DashScope
+    │   │   ├── stream/                   # SSE 流解析
+    │   │   ├── retry/                    # 重试策略
+    │   │   └── pricing/                  # 计费模型
+    │   ├── tools/                      # 内置工具集
+    │   │   ├── concurrent/               # 并发执行器
+    │   │   └── 15+ 工具实现
+    │   ├── prompt/                     # Prompt 管理
+    │   ├── config/                     # 统一配置中心
+    │   ├── session/                    # 会话持久化
+    │   ├── logging/                    # 日志与指标
+    │   ├── service/                    # 领域服务
+    │   ├── execute/                    # 执行引擎
+    │   ├── progress/                 # 进度展示
+    │   ├── console/                      # 终端交互
+    │   └── application/                # 应用服务
+    └── test/                             # 100+ 测试用例
 ```
 
 ---
 
-## 🔄 核心流程
+## 🔄 核心执行流程
 
 ```
 用户输入
    │
    ▼
 ┌─────────────────┐
-│  InputHandler   │ ← 处理长输入、命令解析
+│  InputHandler   │ 多行输入、命令解析
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│ IntentRecognizer│ ← 意图识别（规则 + LLM）
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  TaskPlanner    │ ← 任务规划、步骤分解
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ConversationLoop │ ← 对话循环控制
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│AgentTurnExecutor│ ← 单轮执行
+│ TaskOrchestrator│ DAG 任务分析、依赖分析
 └────────┬────────┘
          │
     ┌────┴────┐
     ▼         ▼
-┌───────┐ ┌───────┐
-│  LLM  │ │ Tools │ ← 工具调用
-└───┬───┘ └───┬───┘
-    │         │
-    └────┬────┘
-         ▼
+┌─────────┐ ┌──────────┐
+│ Main Agent│ │ SubAgent 1..N│ 任务分解、并行执行
+└────┬─────┘ └──────┬─────┘
+     │                │
+     └────────┬───────┘
+              │
+              ▼
 ┌─────────────────┐
-│ ContextManager  │ ← 上下文管理、历史裁剪
+│ BlockerChain   │ 10层安全拦截校验
 └────────┬────────┘
          │
          ▼
-    终端输出/会话保存
+┌─────────────────┐
+│ToolCallProcessor│ 并发工具调度执行
+└────────┬────────┘
+         │
+    ┌────┴────┬────────┐
+    ▼         ▼        ▼
+┌───────┐ ┌───────┐┌───────┐
+│ LLM   │ │ LSP   ││ MCP   │ 多协议客户端
+└───┬───┘ └───┬───┘└───┬───┘
+    │         │        │
+    └─────────┴────────┘
+              │
+              ▼
+┌─────────────────┐
+│ ContextManager  │ 压缩、摘要、预算控制
+└────────┬────────┘
+         │
+         ▼
+    UI 渲染 / 事件 / 持久化
 ```
-
-### 处理流程说明
-
-1. **启动阶段**
-   - 加载 `config.yaml` 配置文件
-   - 初始化 LLM 客户端、工具注册表、Token 估算器
-   - 检查可恢复的会话
-   - 启动 JLine 终端
-
-2. **交互阶段**
-   - 读取用户输入，处理特殊命令
-   - 意图识别：判断任务类型
-   - 任务规划：分解复杂任务
-   - 构建 API 请求，发送到 LLM
-   - 处理 SSE 流式响应，实时显示
-   - 执行工具调用，返回结果
-   - 自动管理上下文窗口
-
-3. **结束阶段**
-   - 保存会话状态
-   - 记录 Token 使用统计
-   - 清理资源，优雅关闭
 
 ---
 
-## ⚙️ 构建配置
+## ⚙️ 快速开始
 
-### 构建命令
+### 环境要求
+- JDK 21+
+- Maven 3.9+
+- 配置 LLM API Key
+
+### 构建运行
 
 ```bash
 # 编译项目
 mvn compile
 
-# 运行测试
+# 运行全部测试 (100+)
 mvn test
 
 # 打包可执行 Jar
 mvn package
 
-# 运行程序
-java -jar target/hippo-code-1.0.0.jar
+# 启动 Agent
+java -jar target/Hippo-code-1.0.0.jar
 ```
 
----
+### 配置文件
 
-## 🔐 配置说明
-
-配置文件为 `config.yaml`，参考 `config.yaml.example` 创建：
+复制 `config.yaml.example` 为 `config.yaml`：
 
 ```yaml
-# LLM 配置
 llm:
-  provider: dashscope           # 提供商
-  api_key: ${DASHSCOPE_API_KEY} # 环境变量
-  model: qwen-plus              # 模型名称
-  base_url: https://dashscope.aliyuncs.com
-  max_tokens: 2048
-  temperature: 0.7
-  timeout: 60000
+  provider: openai / ollama / dashscope
+  api_key: ${YOUR_API_KEY}
+  model: gpt-4o
+  base_url: https://api.openai.com/v1
+  stream: true
 
-# 上下文管理
-context:
-  max_tokens: 30000             # 最大 Token 数
-  max_messages: 20              # 最大消息数
-  keep_recent_turns: 6          # 保留最近轮次
-  tool_result:
-    max_tokens: 2000            # 工具结果最大 Token
-    truncate_strategy: tail     # 截断策略
+mcp:
+  servers:
+    - name: my-mcp-server
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem"]
+      env: {}
 
-# 意图识别
-intent:
+lsp:
+  java:
+    enabled: true
+    command: jdtls
+    args: []
+
+subagent:
   enabled: true
-  recognition:
-    mode: hybrid                # hybrid | rule | llm
-    llm_enabled: true
-    high_confidence_threshold: 0.85
+  max_concurrent: 3
+  max_memory_per_agent: 8000
 
-# 任务规划
-planning:
-  mode: composite               # composite | simple | llm
-  enable_complex_intent_detection: true
-
-# 会话管理
-session:
-  persist_sessions: true        # 持久化会话
-  max_saved_sessions: 10        # 最大保存数
-  auto_resume: true             # 自动恢复
-  resume_timeout_hours: 72      # 超时时间
-
-# Token 估算
-tokenizer:
-  type: tiktoken                # tiktoken | simple
-  model: gpt-4
-  cache_enabled: true
-
-# 工具配置
-tools:
-  bash:
-    enabled: true
-    whitelist: [git, mvn, npm, docker, ls]
-    require_confirmation: true
-  file:
-    enabled: true
-    allowed_paths: ["."]
-    max_file_size: 10MB
+blocker:
+  edit_confirmation: true
+  max_edits_per_turn: 5
 ```
-
 
 ---
 
-## 📝 命令列表
+## 🎯 交互命令
 
 | 命令 | 功能 |
 |------|------|
-| `help` | 显示帮助信息 |
-| `exit` / `quit` | 退出程序 |
-| `clear` | 清屏 |
-| `reset` | 重置会话 |
-| `retry` | 重试上次请求 |
-| `config` | 显示当前配置 |
-| `showlog` | 显示日志文件路径 |
-| `tokens` | 显示 Token 使用统计 |
+| `/help` | 显示帮助 |
+| `/clear` | 清屏 |
+| `/reset` | 重置会话 |
+| `/tokens` | Token 统计 |
+| `/health` | 系统健康检查 |
+| `/transcripts` | 历史会话列表 |
+| `/subagents` | 子代理状态 |
+| `/memory` | 显示记忆内容 |
+| `/config` | 显示配置 |
+| `/mode` | 切换工作模式 |
+| `/exit` | 退出程序 |
+
+---
+
+## 🏛️ 设计理念
+
+1. **模块化优先**：每一个功能都是独立可替换的模块
+2. **安全为核心**：层层拦截，安全第一
+3. **可观测性**：全链路可观测
+4. **开发者体验**：优雅的终端交互体验
+5. **测试驱动**：核心模块 100% 测试覆盖
 
 ---
 
@@ -354,4 +358,4 @@ MIT License
 
 ---
 
-*文档版本：1.0.0 | 最后更新：2026-04*
+*文档版本：2.0.0 | 最后更新：2026-04
