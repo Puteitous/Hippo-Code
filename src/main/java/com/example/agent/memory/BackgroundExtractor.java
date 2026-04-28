@@ -148,12 +148,17 @@ public class BackgroundExtractor {
 
 
     public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient) {
-        this(sessionId, tokenEstimator, llmClient, new SessionCompactionState());
+        this(sessionId, tokenEstimator, llmClient, new SessionCompactionState(), null);
     }
 
     public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient, SessionCompactionState compactionState) {
+        this(sessionId, tokenEstimator, llmClient, compactionState, null);
+    }
+
+    public BackgroundExtractor(String sessionId, TokenEstimator tokenEstimator, LlmClient llmClient,
+                               SessionCompactionState compactionState, java.nio.file.Path baseDir) {
         this.sessionId = sessionId;
-        this.memoryManager = new SessionMemoryManager(sessionId);
+        this.memoryManager = new SessionMemoryManager(sessionId, baseDir);
         this.compactionState = compactionState;
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;

@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 public class SessionMemoryManager {
 
@@ -17,21 +19,36 @@ public class SessionMemoryManager {
     private final Path memoryFilePath;
 
     public SessionMemoryManager(String sessionId) {
-        this.sessionId = sessionId;
-        String projectKey = WorkspaceManager.getCurrentProjectKey();
-        this.memoryFilePath = WorkspaceManager.getSessionMemoryPath(projectKey, sessionId);
-        ensureDirectory();
+        this(sessionId, null);
     }
-
-    public String read() {
-        if (!Files.exists(memoryFilePath)) {
-            return null;
+    
+    public SessionMemoryManager(String sessionId, Path baseDir) {
+        this.sessionId = sessionId;
+        if (baseDir != null) {
+            LocalDate today = LocalDate.now();
+            String dateStr = today.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            this.memoryFilePath = baseDir.resolve(
+                ".hippo"
+            ).resolve(
+                "projects"
+            ).resolve(
+                WorkspaceManager.sanitizePath(WorkspaceManager.getCurrentWorkingDir())
+            ).resolve(
+                "sessions"
+            ).resolve(
+                dateStr
+            ).resolve(
+                sessionId
+            ).resolve(
+                "memory"
+            ).resolve(
+                "session-memory.md"
+            );
+        } else {
+            String projectKey = WorkspaceManager.getCurrentProjectKey();
+            this.memoryFilePath = WorkspaceManager.getSessionMemoryPath(projectKey, sessionId);
         }
-        try {
-            return Files.readString(memoryFilePath);
-        } catch (IOException e) {
-            return null;
-        }
+        ensureDirectory();
     }
 
     public void write(String content) {
@@ -64,6 +81,17 @@ public class SessionMemoryManager {
                 write(existing + "\n\n---\n\n" + content);
             }
         } catch (Exception e) {
+        }
+    }
+
+    public String read() {
+        if (!Files.exists(memoryFilePath)) {
+            return null;
+        }
+        try {
+            return Files.readString(memoryFilePath);
+        } catch (IOException e) {
+            return null;
         }
     }
 
@@ -147,8 +175,6 @@ public class SessionMemoryManager {
             "_用户要求的具体产出：答案、表格、数据_\n\n" +
             "---\n\n" +
             "# Worklog\n" +
-            "_按时间顺序的简洁工作记录，每步一行_\n\n" +
-            "---\n\n" +
-            "> 本文件由 Memory Extractor Sub-Agent 自动维护\n";
+            "_最近的 10 轮对话的要点摘要_";
     }
 }

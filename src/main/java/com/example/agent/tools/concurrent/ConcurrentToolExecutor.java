@@ -258,47 +258,74 @@ public class ConcurrentToolExecutor {
     }
 
     private String fixJsonArguments(String toolName, String arguments) {
-        if (!"edit_file".equals(toolName)) {
+        if (!"edit_file".equals(toolName) || arguments == null) {
             return arguments;
         }
-        try {
-            objectMapper.readTree(arguments);
-            return arguments;
-        } catch (Exception e) {
-            logger.warn("JSON 解析失败，尝试自动修复转义问题: {}", e.getMessage());
-            String fixed = arguments;
-            fixed = fixFieldValue(fixed, "old_text");
-            fixed = fixFieldValue(fixed, "new_text");
-            return fixed;
-        }
+        String fixed = arguments;
+        fixed = fixFieldValue(fixed, "old_text");
+        fixed = fixFieldValue(fixed, "new_text");
+        return fixed;
     }
     
     private String fixFieldValue(String json, String fieldName) {
-        String fieldMarker = "\"" + fieldName + "\":\"";
-        int start = json.indexOf(fieldMarker);
-        if (start < 0) return json;
-        int valueStart = start + fieldMarker.length();
-        int valueEnd = findMatchingQuote(json, valueStart);
-        if (valueEnd < 0) return json;
+        String pattern1 = "\"" + fieldName + "\":\"";
+        String pattern2 = "\"" + fieldName + "\": \"";
         
-        String value = json.substring(valueStart, valueEnd);
-        String fixedValue = value.replace("\\", "\\\\").replace("\"", "\\\"");
+        int idx1 = json.indexOf(pattern1);
+        int idx2 = json.indexOf(pattern2);
         
-        return json.substring(0, valueStart) + fixedValue + json.substring(valueEnd);
-    }
-    
-    private int findMatchingQuote(String text, int start) {
-        for (int i = start; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '\"' && (i == 0 || text.charAt(i - 1) != '\\')) {
-                int next = i + 1;
-                while (next < text.length() && Character.isWhitespace(text.charAt(next))) next++;
-                if (next < text.length() && (text.charAt(next) == ',' || text.charAt(next) == '}')) {
-                    return i;
-                }
-            }
+        int pos;
+        if (idx1 >= 0 && idx2 >= 0) {
+            pos = Math.min(idx1, idx2) + (idx1 < idx2 ? pattern1.length() : pattern2.length());
+        } else if (idx1 >= 0) {
+            pos = idx1 + pattern1.length();
+        } else if (idx2 >= 0) {
+            pos = idx2 + pattern2.length();
+        } else {
+            return json;
         }
-        return -1;
+        
+        StringBuilder result = new StringBuilder(json.substring(0, pos));
+        
+        while (pos < json.length()) {
+            char c = json.charAt(pos);
+            
+            if (c == '\\' && pos + 1 < json.length()) {
+                char nextChar = json.charAt(pos + 1);
+                if (nextChar == '"' || nextChar == '\\' || nextChar == 'n' || 
+                    nextChar == 'r' || nextChar == 't') {
+                    result.append(c).append(nextChar);
+                    pos += 2;
+                    continue;
+                }
+                result.append("\\\\");
+                pos++;
+                continue;
+            }
+            
+            if (c == '\"') {
+                int next = pos + 1;
+                while (next < json.length() && Character.isWhitespace(json.charAt(next))) next++;
+                if (next < json.length() && (json.charAt(next) == ',' || json.charAt(next) == '}')) {
+                    result.append(json.substring(pos));
+                    break;
+                } else {
+                    result.append("\\\"");
+                }
+            } else if (c == '\n') {
+                result.append("\\n");
+            } else if (c == '\r') {
+                result.append("\\r");
+            } else if (c == '\t') {
+                result.append("\\t");
+            } else {
+                result.append(c);
+            }
+            
+            pos++;
+        }
+        
+        return result.toString();
     }
 
     public static class ExecutionStats {
