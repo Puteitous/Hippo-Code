@@ -1,5 +1,6 @@
 package com.example.agent.core.blocker;
 
+import com.example.agent.tools.BashTool;
 import com.example.agent.tools.EditFileTool;
 import com.example.agent.tools.ReadFileTool;
 import com.example.agent.tools.ToolRegistry;
@@ -20,6 +21,7 @@ class SchemaValidationBlockerTest {
         toolRegistry = new ToolRegistry();
         toolRegistry.register(new ReadFileTool());
         toolRegistry.register(new EditFileTool());
+        toolRegistry.register(new BashTool());
         blocker = new SchemaValidationBlocker(toolRegistry);
     }
 
@@ -87,5 +89,17 @@ class SchemaValidationBlockerTest {
         assertTrue(blocker.getRequiredFields("edit_file").contains("old_text"));
         assertTrue(blocker.getRequiredFields("edit_file").contains("new_text"));
         assertTrue(blocker.getRequiredFields("read_file").contains("path"));
+    }
+
+    @Test
+    void multipleMissingFields_shouldListAllMissing() {
+        JsonNode args = JsonNodeFactory.instance.objectNode();
+
+        HookResult result = blocker.check("edit_file", args);
+
+        assertFalse(result.isAllowed());
+        assertTrue(result.getReason().contains("path"));
+        assertTrue(result.getReason().contains("old_text"));
+        assertTrue(result.getReason().contains("new_text"));
     }
 }

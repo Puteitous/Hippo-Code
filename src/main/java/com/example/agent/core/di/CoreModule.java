@@ -84,7 +84,7 @@ public final class CoreModule {
 
         ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
-        logger.info("✅ [Level 3] 工具层: ToolRegistry (11 个内置工具, 9 个 Blocker)");
+        logger.info("✅ [Level 3] 工具层: ToolRegistry (11 个内置工具, 11 个 Blocker)");
 
         ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class,
             new com.example.agent.subagent.SubAgentManager());
@@ -132,6 +132,8 @@ public final class CoreModule {
         registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.EditConfirmationBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.RateLimitBlocker());
+        registry.getBlockerChain().add(new com.example.agent.core.blocker.ContextAwareBlocker());
 
         return registry;
     }
