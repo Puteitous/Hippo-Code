@@ -32,15 +32,16 @@ public class LspClientFactory {
                 .map(LspClientFactory::resolveVariables)
                 .collect(Collectors.toList());
 
-        logger.info("创建 LSP 客户端: {} - {}", languageId, resolvedCommand);
-        logger.debug("命令参数: {}", resolvedArgs);
+        logger.info("创建 LSP 客户端：{} - {}", languageId, resolvedCommand);
+        logger.debug("命令参数：{}", resolvedArgs);
 
         return new LspClient(
                 languageId,
                 resolvedCommand,
                 resolvedArgs,
                 Paths.get(".").toAbsolutePath().normalize(),
-                serverConfig.getEnv()
+                serverConfig.getEnv(),
+                config.getTimeout()
         );
     }
 

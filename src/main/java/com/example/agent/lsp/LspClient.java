@@ -46,6 +46,7 @@ public class LspClient {
     private final List<String> args;
     private final Path workspaceRoot;
     private final Map<String, String> env;
+    private final long timeoutSeconds;
 
     private final JsonRpcHandler jsonRpcHandler = new JsonRpcHandler();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -74,12 +75,17 @@ public class LspClient {
     }
 
     public LspClient(String languageId, String command, List<String> args, Path workspaceRoot, Map<String, String> env) {
+        this(languageId, command, args, workspaceRoot, env, 120);
+    }
+
+    public LspClient(String languageId, String command, List<String> args, Path workspaceRoot, Map<String, String> env, long timeoutSeconds) {
         this.languageId = languageId;
         this.command = resolveVariables(command);
         this.args = args != null ? args.stream().map(LspClient::resolveVariables).collect(Collectors.toList()) : new ArrayList<>();
         this.workspaceRoot = workspaceRoot.toAbsolutePath().normalize();
         this.env = env != null ? env.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> resolveVariables(e.getValue()))) : new HashMap<>();
+        this.timeoutSeconds = timeoutSeconds;
     }
 
     private static String resolveVariables(String value) {
@@ -205,22 +211,22 @@ public class LspClient {
 
         logger.info("发送 LSP initialize 请求");
 
-        logger.info("发送 initialize 请求，等待响应... (jdtls 首次启动需要 60-120 秒)");
+        logger.info("发送 initialize 请求，等待响应... (超时时间：{} 秒)", timeoutSeconds);
         
         return sendRequest("initialize", params)
-                .orTimeout(120, TimeUnit.SECONDS)
+                .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
                 .thenCompose(result -> {
-                    logger.info("✅ LSP initialize 成功！服务器信息: {}", result.path("serverInfo"));
+                    logger.info("✅ LSP initialize 成功！服务器信息：{}", result.path("serverInfo"));
                     initialized = true;
                     initializedTimestamp = System.currentTimeMillis();
                     logger.info("LSP 初始化完成，开始建立索引（预计需要 60-120 秒）");
                     return sendNotification("initialized", Map.of());
                 })
                 .exceptionally(e -> {
-                    logger.error("❌ LSP 初始化失败: {}", e.getMessage());
-                    logger.info("  提示: jdtls 首次启动需要下载依赖，请检查网络连接");
-                    logger.info("  提示: 检查任务管理器中 java.exe 的 CPU 使用率，高则表示正常建索引");
-                    throw new RuntimeException("LSP 初始化失败: " + e.getMessage(), e);
+                    logger.error("❌ LSP 初始化失败：{}", e.getMessage());
+                    logger.info("  提示：jdtls 首次启动需要下载依赖，请检查网络连接");
+                    logger.info("  提示：检查任务管理器中 java.exe 的 CPU 使用率，高则表示正常建索引");
+                    throw new RuntimeException("LSP 初始化失败：" + e.getMessage(), e);
                 });
     }
 

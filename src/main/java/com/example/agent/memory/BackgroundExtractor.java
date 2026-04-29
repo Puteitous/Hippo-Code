@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackgroundExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(BackgroundExtractor.class);
-    private static final int INITIAL_TOKEN_THRESHOLD = 0;
+    private static final int INITIAL_TOKEN_THRESHOLD = 10000;
     private static final int TOKEN_GROWTH_THRESHOLD = 5000;
     private static final int TOOL_CALL_THRESHOLD = 3;
 
