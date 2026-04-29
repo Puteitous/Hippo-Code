@@ -22,6 +22,7 @@ class AgentUiTest {
 
     private Terminal terminal;
     private Config config;
+    private LlmConfig llmConfig;
     private AgentUi ui;
     private StringWriter stringWriter;
     private PrintWriter printWriter;
@@ -30,22 +31,21 @@ class AgentUiTest {
     void setUp() {
         terminal = mock(Terminal.class);
         config = mock(Config.class);
+        llmConfig = mock(LlmConfig.class);
         stringWriter = new StringWriter();
         printWriter = new PrintWriter(stringWriter);
         
         when(terminal.writer()).thenReturn(printWriter);
-        when(config.getModel()).thenReturn("test-model");
-        when(config.getBaseUrl()).thenReturn("https://api.test.com");
-        when(config.getApiKey()).thenReturn("test-api-key-12345");
+        when(config.getLlm()).thenReturn(llmConfig);
+        when(llmConfig.getModel()).thenReturn("test-model");
+        when(llmConfig.getBaseUrl()).thenReturn("https://api.test.com");
+        when(llmConfig.getApiKey()).thenReturn("test-api-key-12345");
         when(config.getConfigFilePath()).thenReturn("/path/to/config.yaml");
-        when(config.getMaxTokens()).thenReturn(2048);
+        when(llmConfig.getMaxTokens()).thenReturn(2048);
         
-        // Mock LlmConfig
-        LlmConfig llmConfig = mock(LlmConfig.class);
         when(llmConfig.getProvider()).thenReturn("test-provider");
         when(llmConfig.getTemperature()).thenReturn(0.7);
         when(llmConfig.getTimeout()).thenReturn(30000);
-        when(config.getLlm()).thenReturn(llmConfig);
         
         // Mock ToolsConfig
         ToolsConfig toolsConfig = mock(ToolsConfig.class);

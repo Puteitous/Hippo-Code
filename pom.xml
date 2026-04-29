@@ -18,7 +18,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>2.16.1</jackson.version>
         <okhttp.version>4.12.0</okhttp.version>
-        <retrofit.version>2.9.0</retrofit.version>
+
         <jline.version>3.25.1</jline.version>
         <junit.version>5.10.2</junit.version>
         <logback.version>1.4.14</logback.version>
@@ -39,21 +39,15 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>5.10.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.25.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.0</version>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
+            <version>5.10.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -66,24 +60,10 @@
             <artifactId>okhttp-sse</artifactId>
             <version>${okhttp.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.squareup.retrofit2</groupId>
-            <artifactId>retrofit</artifactId>
-            <version>${retrofit.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup.retrofit2</groupId>
-            <artifactId>converter-jackson</artifactId>
-            <version>${retrofit.version}</version>
-        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>${jackson.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
             <version>${jackson.version}</version>
         </dependency>
         <dependency>
@@ -106,16 +86,7 @@
             <artifactId>jline</artifactId>
             <version>${jline.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.jline</groupId>
-            <artifactId>jline-terminal</artifactId>
-            <version>${jline.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.jline</groupId>
-            <artifactId>jline-reader</artifactId>
-            <version>${jline.version}</version>
-        </dependency>
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -136,12 +107,7 @@
             <artifactId>jtokkit</artifactId>
             <version>1.1.0</version>
         </dependency>
-        <dependency>
-            <groupId>com.github.ben-manes.caffeine</groupId>
-            <artifactId>caffeine</artifactId>
-            <version>3.1.8</version>
-            <scope>compile</scope>
-        </dependency>
+
         <dependency>
             <groupId>ch.usi.si.seart</groupId>
             <artifactId>java-tree-sitter</artifactId>
@@ -171,7 +137,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.example.agent.SimpleJavaAgent</mainClass>
+                            <mainClass>com.example.agent.AgentApplication</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -245,7 +211,7 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.example.agent.SimpleJavaAgent</mainClass>
+                                    <mainClass>com.example.agent.AgentApplication</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>

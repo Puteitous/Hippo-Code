@@ -180,13 +180,13 @@ public class ConversationLoop {
                     ui.println();
                     ui.println(ConsoleStyle.gray("  │"));
                     ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
-                    e.printStackTrace();
+                    logger.error("处理用户输入时发生RuntimeException", e);
                     break;
                 } catch (Exception e) {
                     ui.println();
                     ui.println(ConsoleStyle.gray("  │"));
                     ui.println(ConsoleStyle.gray("  └─ ") + ConsoleStyle.red("处理错误: " + e.getMessage()));
-                    e.printStackTrace();
+                    logger.error("处理用户输入时发生异常", e);
                     break;
                 }
             }

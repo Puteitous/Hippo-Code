@@ -135,6 +135,7 @@ public class SessionTranscript {
                         count++;
                     }
                 } catch (Exception e) {
+                    logger.warn("解析会话记录条目失败", e);
                 }
             }
         } catch (IOException e) {

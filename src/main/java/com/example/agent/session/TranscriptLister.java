@@ -161,6 +161,7 @@ public class TranscriptLister {
                             ZoneId.systemDefault()
                         ));
                     } catch (Exception e) {
+                        logger.warn("解析条目时间失败", e);
                     }
                 }
 

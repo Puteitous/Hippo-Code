@@ -115,7 +115,7 @@ public class LlmClientFactory {
 
     private static LlmClient createCustomClient(Config config, RetryPolicy retryPolicy) {
         logger.info("使用自定义 OpenAI 兼容模式: baseUrl={}, model={}", 
-            config.getBaseUrl(), config.getModel());
+            config.getLlm().getBaseUrl(), config.getLlm().getModel());
         return new OpenAiLlmClient(config, retryPolicy);
     }
 

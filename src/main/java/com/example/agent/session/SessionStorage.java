@@ -372,6 +372,7 @@ public class SessionStorage {
                 }
             }
         } catch (IOException e) {
+            logger.warn("清理过期会话失败", e);
         }
     }
 
@@ -518,6 +519,7 @@ public class SessionStorage {
                 return LocalDate.ofEpochDay(timestamp / 86400000).format(DATE_DIR_FORMAT);
             }
         } catch (NumberFormatException e) {
+            logger.warn("解析时间戳失败", e);
         }
         return LocalDate.now().format(DATE_DIR_FORMAT);
     }

@@ -135,6 +135,7 @@ public class WorkspaceManager {
                 return LocalDate.ofEpochDay(timestamp / 86400000).format(DATE_FORMAT);
             }
         } catch (NumberFormatException e) {
+            logger.warn("解析时间戳失败", e);
         }
         return LocalDate.now().format(DATE_FORMAT);
     }
@@ -228,10 +229,4 @@ public class WorkspaceManager {
         }
     }
     
-    @Deprecated
-    public static Path getLegacyConversationLogFile(String sessionId, LocalDate date) {
-        return Paths.get("logs").resolve("conversations")
-                    .resolve(date.format(DATE_FORMAT))
-                    .resolve("conv_" + sessionId + ".log");
-    }
 }

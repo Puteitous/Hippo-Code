@@ -11,8 +11,12 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Properties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ConfigLoader {
+
+    private static final Logger logger = LoggerFactory.getLogger(ConfigLoader.class);
 
     private static final String[] CONFIG_FILE_NAMES = {
         "config.yaml",
@@ -36,7 +40,7 @@ public class ConfigLoader {
             if (configFile.exists()) {
                 Config config = loadFromFile(configFile);
                 if (config != null) {
-                    System.out.println("Configuration loaded from: " + configFile.getAbsolutePath());
+                    logger.info("Configuration loaded from: {}", configFile.getAbsolutePath());
                     return config;
                 }
             }
@@ -59,7 +63,7 @@ public class ConfigLoader {
                 return loadProperties(file);
             }
         } catch (IOException e) {
-            System.err.println("Error loading config file: " + e.getMessage());
+            logger.error("Error loading config file: {}", e.getMessage());
         }
         
         return null;
@@ -112,7 +116,7 @@ public class ConfigLoader {
 
     private Config createDefaultConfig() {
         Config config = new Config();
-        System.out.println("No configuration file found. Creating default configuration.");
+        logger.info("No configuration file found. Creating default configuration.");
         return config;
     }
 
@@ -122,9 +126,9 @@ public class ConfigLoader {
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.enable(SerializationFeature.INDENT_OUTPUT);
             mapper.writeValue(configFile, config);
-            System.out.println("Default configuration created at: " + configFile.getAbsolutePath());
+            logger.info("Default configuration created at: {}", configFile.getAbsolutePath());
         } catch (IOException e) {
-            System.err.println("Error creating default config file: " + e.getMessage());
+            logger.error("Error creating default config file: {}", e.getMessage());
         }
     }
 
@@ -155,7 +159,7 @@ public class ConfigLoader {
                 return jarDir;
             }
         } catch (Exception e) {
-            System.err.println("Warning: Could not determine config directory: " + e.getMessage());
+            logger.warn("Could not determine config directory: {}", e.getMessage());
         }
         
         return userDir;

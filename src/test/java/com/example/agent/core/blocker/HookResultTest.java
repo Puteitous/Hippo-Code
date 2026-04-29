@@ -17,7 +17,7 @@ class HookResultTest {
 
     @Test
     void deny_shouldCreateDeniedResultWithReasonAndSuggestion() {
-        HookResult result = HookResult.deny("测试原因", "测试建议");
+        HookResult result = HookResult.validationError("测试原因", "测试建议");
 
         assertFalse(result.isAllowed());
         assertEquals("测试原因", result.getReason());

@@ -3,6 +3,8 @@ package com.example.agent.memory;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.service.TokenEstimator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,6 +14,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public class SessionMemoryManager {
+
+    private static final Logger logger = LoggerFactory.getLogger(SessionMemoryManager.class);
 
     private static final String MEMORY_FILE = "session-memory.md";
 
@@ -81,6 +85,7 @@ public class SessionMemoryManager {
                 write(existing + "\n\n---\n\n" + content);
             }
         } catch (Exception e) {
+            logger.warn("追加记忆内容失败", e);
         }
     }
 
@@ -103,6 +108,7 @@ public class SessionMemoryManager {
         try {
             Files.deleteIfExists(memoryFilePath);
         } catch (IOException e) {
+            logger.warn("删除记忆文件失败", e);
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.agent.llm.client;
 
 import com.example.agent.config.Config;
+import com.example.agent.config.LlmConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -25,31 +26,31 @@ class AbstractLlmClientDefaultsTest {
         @Test
         @DisplayName("config.model为null时返回getDefaultModel()")
         void testNullModelReturnsDefault() {
-            config.setModel(null);
+            config.getLlm().setModel(null);
 
             TestableDashScopeClient client = new TestableDashScopeClient();
             String result = client.getModel();
 
             assertEquals("qwen3.5-plus", result);
-            assertNull(config.getModel(), "Config对象不应该被修改");
+            assertNull(config.getLlm().getModel(), "Config对象不应该被修改");
         }
 
         @Test
         @DisplayName("config.model为空字符串时返回getDefaultModel()")
         void testEmptyModelReturnsDefault() {
-            config.setModel("");
+            config.getLlm().setModel("");
 
             TestableDashScopeClient client = new TestableDashScopeClient();
             String result = client.getModel();
 
             assertEquals("qwen3.5-plus", result);
-            assertEquals("", config.getModel(), "Config对象不应该被修改");
+            assertEquals("", config.getLlm().getModel(), "Config对象不应该被修改");
         }
 
         @Test
         @DisplayName("config.model为空白字符串时返回getDefaultModel()")
         void testBlankModelReturnsDefault() {
-            config.setModel("   ");
+            config.getLlm().setModel("   ");
 
             TestableDashScopeClient client = new TestableDashScopeClient();
             String result = client.getModel();
@@ -60,7 +61,7 @@ class AbstractLlmClientDefaultsTest {
         @Test
         @DisplayName("config.model有值时原样返回")
         void testExplicitModelPreserved() {
-            config.setModel("custom-model-v1");
+            config.getLlm().setModel("custom-model-v1");
 
             TestableDashScopeClient client = new TestableDashScopeClient();
             String result = client.getModel();
@@ -185,10 +186,10 @@ class AbstractLlmClientDefaultsTest {
         void testModelNullEmptyConsistency() {
             TestableDashScopeClient client = new TestableDashScopeClient();
 
-            config.setModel(null);
+            config.getLlm().setModel(null);
             String nullResult = client.getModel();
 
-            config.setModel("");
+            config.getLlm().setModel("");
             String emptyResult = client.getModel();
 
             assertEquals(nullResult, emptyResult, "null和空字符串处理结果应一致");

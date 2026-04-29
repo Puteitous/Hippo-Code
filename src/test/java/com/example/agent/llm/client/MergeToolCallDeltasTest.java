@@ -19,7 +19,7 @@ class MergeToolCallDeltasTest {
 
     private TestableLlmClient client;
 
-    static class TestableLlmClient extends DefaultLlmClient {
+    static class TestableLlmClient extends DashScopeLlmClient {
         public TestableLlmClient() {
             super(com.example.agent.testutil.TestConfigFactory.Llm.createTestConfig());
         }

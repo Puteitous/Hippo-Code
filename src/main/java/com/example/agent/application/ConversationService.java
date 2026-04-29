@@ -140,11 +140,6 @@ public class ConversationService {
         return conversation;
     }
 
-    @Deprecated
-    public Conversation createSubAgentConversation(String systemPrompt) {
-        return createSubAgentConversation(systemPrompt, null);
-    }
-
 
 
     public void ensureSessionComponents(Conversation conversation) {

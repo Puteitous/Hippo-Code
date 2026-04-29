@@ -84,25 +84,25 @@ class ConfigTest {
     void testDefaultValues() throws Exception {
         Config config = createConfigInstance();
         
-        assertEquals("qwen3.5-plus", config.getModel());
-        assertEquals("https://dashscope.aliyuncs.com", config.getBaseUrl());
-        assertEquals(2048, config.getMaxTokens());
-        assertNull(config.getApiKey());
+        assertEquals("qwen3.5-plus", config.getLlm().getModel());
+        assertEquals("https://dashscope.aliyuncs.com", config.getLlm().getBaseUrl());
+        assertEquals(2048, config.getLlm().getMaxTokens());
+        assertNull(config.getLlm().getApiKey());
     }
 
     @Test
     void testSettersAndGetters() throws Exception {
         Config config = createConfigInstance();
         
-        config.setApiKey("test-api-key");
-        config.setModel("qwen-max");
-        config.setBaseUrl("https://custom.api.com");
-        config.setMaxTokens(4096);
+        config.getLlm().setApiKey("test-api-key");
+        config.getLlm().setModel("qwen-max");
+        config.getLlm().setBaseUrl("https://custom.api.com");
+        config.getLlm().setMaxTokens(4096);
         
-        assertEquals("test-api-key", config.getApiKey());
-        assertEquals("qwen-max", config.getModel());
-        assertEquals("https://custom.api.com", config.getBaseUrl());
-        assertEquals(4096, config.getMaxTokens());
+        assertEquals("test-api-key", config.getLlm().getApiKey());
+        assertEquals("qwen-max", config.getLlm().getModel());
+        assertEquals("https://custom.api.com", config.getLlm().getBaseUrl());
+        assertEquals(4096, config.getLlm().getMaxTokens());
     }
 
     @Test
@@ -161,28 +161,28 @@ class ConfigTest {
     @Test
     void testIsValidWithEmptyApiKey() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("");
+        config.getLlm().setApiKey("");
         assertFalse(config.isValid());
     }
 
     @Test
     void testIsValidWithDefaultPlaceholder() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("your-api-key-here");
+        config.getLlm().setApiKey("your-api-key-here");
         assertFalse(config.isValid());
     }
 
     @Test
     void testIsValidWithValidApiKey() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("sk-1234567890abcdef");
+        config.getLlm().setApiKey("sk-1234567890abcdef");
         assertTrue(config.isValid());
     }
 
     @Test
     void testMaskApiKeyWithNull() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey(null);
+        config.getLlm().setApiKey(null);
         String masked = config.getLlm().maskApiKey();
         assertEquals("****", masked);
     }
@@ -190,7 +190,7 @@ class ConfigTest {
     @Test
     void testMaskApiKeyWithShortKey() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("abc");
+        config.getLlm().setApiKey("abc");
         String masked = config.getLlm().maskApiKey();
         assertEquals("****", masked);
     }
@@ -198,7 +198,7 @@ class ConfigTest {
     @Test
     void testMaskApiKeyWithLongKey() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("sk-1234567890abcdefghijklmnop");
+        config.getLlm().setApiKey("sk-1234567890abcdefghijklmnop");
         String masked = config.getLlm().maskApiKey();
         assertEquals("sk-1****mnop", masked);
     }
@@ -242,10 +242,10 @@ class ConfigTest {
     @Test
     void testYamlSerialization() throws Exception {
         Config config = createConfigInstance();
-        config.setApiKey("test-key-123");
-        config.setModel("qwen-max");
-        config.setBaseUrl("https://test.api.com");
-        config.setMaxTokens(8192);
+        config.getLlm().setApiKey("test-key-123");
+        config.getLlm().setModel("qwen-max");
+        config.getLlm().setBaseUrl("https://test.api.com");
+        config.getLlm().setMaxTokens(8192);
         
         String yaml = yamlMapper.writeValueAsString(config);
         
@@ -253,10 +253,10 @@ class ConfigTest {
         assertFalse(yaml.isEmpty());
         
         Config deserialized = yamlMapper.readValue(yaml, Config.class);
-        assertEquals("test-key-123", deserialized.getApiKey());
-        assertEquals("qwen-max", deserialized.getModel());
-        assertEquals("https://test.api.com", deserialized.getBaseUrl());
-        assertEquals(8192, deserialized.getMaxTokens());
+        assertEquals("test-key-123", deserialized.getLlm().getApiKey());
+        assertEquals("qwen-max", deserialized.getLlm().getModel());
+        assertEquals("https://test.api.com", deserialized.getLlm().getBaseUrl());
+        assertEquals(8192, deserialized.getLlm().getMaxTokens());
     }
 
     @Test
@@ -290,10 +290,10 @@ class ConfigTest {
         Config config = yamlMapper.readValue(yaml, Config.class);
         
         assertEquals("openai", config.getLlm().getProvider());
-        assertEquals("yaml-test-key", config.getApiKey());
-        assertEquals("gpt-4", config.getModel());
-        assertEquals("https://api.openai.com/v1", config.getBaseUrl());
-        assertEquals(4096, config.getMaxTokens());
+        assertEquals("yaml-test-key", config.getLlm().getApiKey());
+        assertEquals("gpt-4", config.getLlm().getModel());
+        assertEquals("https://api.openai.com/v1", config.getLlm().getBaseUrl());
+        assertEquals(4096, config.getLlm().getMaxTokens());
         assertEquals(0.5, config.getLlm().getTemperature());
         assertEquals(30000, config.getLlm().getTimeout());
         
@@ -322,10 +322,10 @@ class ConfigTest {
         
         Config config = jsonMapper.readValue(json, Config.class);
         
-        assertEquals("partial-key", config.getApiKey());
-        assertEquals("qwen3.5-plus", config.getModel());
-        assertEquals("https://dashscope.aliyuncs.com", config.getBaseUrl());
-        assertEquals(2048, config.getMaxTokens());
+        assertEquals("partial-key", config.getLlm().getApiKey());
+        assertEquals("qwen3.5-plus", config.getLlm().getModel());
+        assertEquals("https://dashscope.aliyuncs.com", config.getLlm().getBaseUrl());
+        assertEquals(2048, config.getLlm().getMaxTokens());
     }
 
     @Test
@@ -347,11 +347,11 @@ class ConfigTest {
     void testBackwardCompatibility() throws Exception {
         Config config = createConfigInstance();
         
-        config.setApiKey("test-key");
-        assertEquals("test-key", config.getApiKey());
+        config.getLlm().setApiKey("test-key");
+        assertEquals("test-key", config.getLlm().getApiKey());
         assertEquals("test-key", config.getLlm().getApiKey());
         
         config.getLlm().setApiKey("new-key");
-        assertEquals("new-key", config.getApiKey());
+        assertEquals("new-key", config.getLlm().getApiKey());
     }
 }

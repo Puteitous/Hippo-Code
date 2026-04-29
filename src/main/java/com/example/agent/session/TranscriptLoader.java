@@ -180,6 +180,7 @@ public class TranscriptLoader {
                     return entry.getBoundaryUuid();
                 }
             } catch (Exception e) {
+                logger.warn("解析边界UUID失败", e);
             }
         }
         return null;
@@ -193,6 +194,7 @@ public class TranscriptLoader {
                     return i + 1;
                 }
             } catch (Exception e) {
+                logger.warn("解析条目索引失败", e);
             }
         }
         return 0;
@@ -208,6 +210,7 @@ public class TranscriptLoader {
                     result.tags.add(entry.getTag());
                 }
             } catch (Exception e) {
+                logger.warn("解析标签失败", e);
             }
         }
     }
@@ -247,6 +250,7 @@ public class TranscriptLoader {
                     ZoneId.systemDefault()
                 );
             } catch (Exception e) {
+                logger.warn("解析时间戳失败: {}", e.getMessage());
             }
         }
 

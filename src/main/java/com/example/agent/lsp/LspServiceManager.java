@@ -115,10 +115,10 @@ public class LspServiceManager {
             if (ui != null) {
                 ui.println(message);
             } else {
-                System.out.println(message);
+                logger.info(message);
             }
         } catch (Exception e) {
-            System.out.println(message);
+            logger.info(message);
         }
     }
 }

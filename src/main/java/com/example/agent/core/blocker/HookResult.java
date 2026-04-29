@@ -16,19 +16,6 @@ public class HookResult {
         return new HookResult(true, null, null);
     }
 
-    /**
-     * 格式/契约类错误专用 - SchemaValidationBlocker 等参数校验使用
-     * 只有这类错误才允许提供格式示例
-     */
-    @Deprecated
-    public static HookResult deny(String reason, String suggestion) {
-        return validationError(reason, suggestion);
-    }
-
-    /**
-     * 格式/契约类错误专用 - 提供参数格式示例
-     * 仅限：SchemaValidationBlocker, SyntaxValidationBlocker
-     */
     public static HookResult validationError(String reason, String example) {
         return new HookResult(false, reason, example);
     }

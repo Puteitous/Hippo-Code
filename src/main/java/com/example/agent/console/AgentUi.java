@@ -2,7 +2,7 @@ package com.example.agent.console;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.AgentMode;
-import com.example.agent.logging.LogDirectoryManager;
+import com.example.agent.logging.WorkspaceManager;
 import org.jline.terminal.Terminal;
 
 import java.io.IOException;
@@ -35,8 +35,8 @@ public class AgentUi {
         println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
         printModeInfo(AgentMode.CHAT);
-        println(ConsoleStyle.info("模型: " + config.getModel()));
-        println(ConsoleStyle.info("API: " + config.getBaseUrl()));
+        println(ConsoleStyle.info("模型: " + config.getLlm().getModel()));
+        println(ConsoleStyle.info("API: " + config.getLlm().getBaseUrl()));
         println();
         println(ConsoleStyle.bold("快捷命令:"));
         println(ConsoleStyle.green("  /chat    ") + ConsoleStyle.gray(" - 切换到聊天模式（只读探索）"));
@@ -113,12 +113,12 @@ public class AgentUi {
         println();
         println(ConsoleStyle.boldCyan("  [LLM 配置]"));
         println(ConsoleStyle.green("  Provider: ") + config.getLlm().getProvider());
-        println(ConsoleStyle.green("  模型: ") + config.getModel());
-        println(ConsoleStyle.green("  API: ") + config.getBaseUrl());
-        println(ConsoleStyle.green("  MaxTokens: ") + config.getMaxTokens());
+        println(ConsoleStyle.green("  模型: ") + config.getLlm().getModel());
+        println(ConsoleStyle.green("  API: ") + config.getLlm().getBaseUrl());
+        println(ConsoleStyle.green("  MaxTokens: ") + config.getLlm().getMaxTokens());
         println(ConsoleStyle.green("  Temperature: ") + config.getLlm().getTemperature());
         println(ConsoleStyle.green("  Timeout: ") + config.getLlm().getTimeout() + "ms");
-        println(ConsoleStyle.green("  API Key: ") + maskApiKey(config.getApiKey()));
+        println(ConsoleStyle.green("  API Key: ") + maskApiKey(config.getLlm().getApiKey()));
         println();
         println(ConsoleStyle.boldCyan("  [工具配置]"));
         println(ConsoleStyle.green("  Bash: ") + (config.getTools().getBash().isEnabled() ? "启用" : "禁用"));
@@ -154,7 +154,7 @@ public class AgentUi {
             return;
         }
 
-        Path logFile = LogDirectoryManager.getConversationLogFile(currentConversationId, LocalDate.now());
+        Path logFile = WorkspaceManager.getSessionLogFile(WorkspaceManager.getCurrentProjectKey(), currentConversationId);
 
         if (!Files.exists(logFile)) {
             println(ConsoleStyle.yellow("日志文件不存在: " + logFile));

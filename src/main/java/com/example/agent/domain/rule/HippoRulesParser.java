@@ -8,8 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class HippoRulesParser {
+
+    private static final Logger logger = LoggerFactory.getLogger(HippoRulesParser.class);
 
     private final List<String> contextFilters = new ArrayList<>();
     private final List<String> globalRules = new ArrayList<>();
@@ -88,6 +92,7 @@ public class HippoRulesParser {
             try {
                 result = result.replaceAll("(?i)" + Pattern.quote(filter), "");
             } catch (Exception e) {
+                logger.warn("过滤规则内容失败", e);
             }
         }
         return result;

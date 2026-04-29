@@ -27,7 +27,7 @@ public class TokenEstimatorFactory {
         }
         
         if (modelName == null && config != null) {
-            modelName = config.getModel();
+            modelName = config.getLlm().getModel();
         }
         
         return create(tokenizerType, modelName, cacheEnabled, cacheMaxSize);

@@ -2,6 +2,7 @@ package com.example.agent.console;
 
 import com.example.agent.application.ConversationService;
 import com.example.agent.config.Config;
+import com.example.agent.config.LlmConfig;
 import com.example.agent.core.AgentContext;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.logging.TokenMetricsCollector;
@@ -23,6 +24,7 @@ class CommandDispatcherTest {
     private AgentUi ui;
     private InputHandler inputHandler;
     private Config config;
+    private LlmConfig llmConfig;
     private ConversationService conversationService;
     private Conversation conversation;
     private TokenMetricsCollector tokenMetricsCollector;
@@ -34,6 +36,8 @@ class CommandDispatcherTest {
         ui = mock(AgentUi.class);
         inputHandler = mock(InputHandler.class);
         config = mock(Config.class);
+        llmConfig = mock(LlmConfig.class);
+        when(config.getLlm()).thenReturn(llmConfig);
         conversationService = mock(ConversationService.class);
         conversation = mock(Conversation.class);
         tokenMetricsCollector = mock(TokenMetricsCollector.class);
@@ -210,7 +214,7 @@ class CommandDispatcherTest {
         @Test
         @DisplayName("有效API Key返回true")
         void testValidApiKey() {
-            when(config.getApiKey()).thenReturn("valid-api-key");
+            when(llmConfig.getApiKey()).thenReturn("valid-api-key");
             
             boolean result = dispatcher.validateConfig();
             
@@ -220,7 +224,7 @@ class CommandDispatcherTest {
         @Test
         @DisplayName("null API Key返回false")
         void testNullApiKey() {
-            when(config.getApiKey()).thenReturn(null);
+            when(llmConfig.getApiKey()).thenReturn(null);
             
             boolean result = dispatcher.validateConfig();
             
@@ -231,7 +235,7 @@ class CommandDispatcherTest {
         @Test
         @DisplayName("空API Key返回false")
         void testEmptyApiKey() {
-            when(config.getApiKey()).thenReturn("");
+            when(llmConfig.getApiKey()).thenReturn("");
             
             boolean result = dispatcher.validateConfig();
             

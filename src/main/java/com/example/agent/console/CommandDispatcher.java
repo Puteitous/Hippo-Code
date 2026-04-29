@@ -242,7 +242,7 @@ public class CommandDispatcher {
                 userInstruction = line.substring(spaceIndex).trim();
             }
 
-            int maxTokens = context.getConfig().getMaxTokens();
+            int maxTokens = context.getConfig().getLlm().getMaxTokens();
             ManualCompactor compactor = new ManualCompactor(
                 context.getTokenEstimator(),
                 context.getLlmClient()
@@ -884,12 +884,12 @@ public class CommandDispatcher {
     public boolean validateConfig() {
         registerSubAgentEventListeners();
 
-        if (config.getApiKey() == null || config.getApiKey().isEmpty()) {
+        if (config.getLlm().getApiKey() == null || config.getLlm().getApiKey().isEmpty()) {
             ui.printConfigValidationError();
             return false;
         }
 
-        if ("your-api-key-here".equals(config.getApiKey())) {
+        if ("your-api-key-here".equals(config.getLlm().getApiKey())) {
             ui.printDefaultApiKeyWarning();
 
             try {

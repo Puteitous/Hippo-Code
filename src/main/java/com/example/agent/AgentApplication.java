@@ -159,7 +159,7 @@ public class AgentApplication {
             }
 
         } catch (IOException e) {
-            System.err.println(ConsoleStyle.error("终端错误: " + e.getMessage()));
+            logger.error("终端错误: {}", e.getMessage());
         } finally {
             if (context != null) {
                 try {
@@ -244,7 +244,7 @@ public class AgentApplication {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             String osName = ManagementFactory.getRuntimeMXBean().getName();
             long pid = Long.parseLong(osName.split("@")[0]);
-            System.err.println("\n🛑 Agent 正在退出 (PID: " + pid + " 正在清理资源...");
+            logger.info("Agent 正在退出 (PID: {} 正在清理资源...", pid);
 
             try {
                 finalContext.close();

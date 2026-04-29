@@ -7,6 +7,8 @@ import com.example.agent.subagent.SubAgentResultFormatter;
 import com.example.agent.subagent.SubAgentStatus;
 import com.example.agent.subagent.SubAgentTask;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,6 +18,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class ForkAgentsTool implements ToolExecutor {
+
+    private static final Logger logger = LoggerFactory.getLogger(ForkAgentsTool.class);
     private SubAgentManager subAgentManager;
 
     public ForkAgentsTool() {
@@ -185,6 +189,7 @@ public class ForkAgentsTool implements ToolExecutor {
             try {
                 task.awaitCompletion(waitTimeoutSeconds, TimeUnit.SECONDS);
             } catch (Exception e) {
+                logger.warn("等待子Agent完成失败: {}", e.getMessage());
             }
         }
 

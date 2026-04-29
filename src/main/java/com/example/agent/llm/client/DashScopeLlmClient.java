@@ -32,7 +32,7 @@ public class DashScopeLlmClient extends AbstractLlmClient {
 
     @Override
     protected String getAuthorizationHeader() {
-        return "Bearer " + config.getApiKey();
+        return "Bearer " + config.getLlm().getApiKey();
     }
 
     @Override

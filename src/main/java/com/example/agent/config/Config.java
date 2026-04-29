@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,6 +19,8 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Config {
 
+    private static final Logger logger = LoggerFactory.getLogger(Config.class);
+
     private static Config instance;
 
     private LlmConfig llm = new LlmConfig();
@@ -24,10 +28,10 @@ public class Config {
     private SessionConfig session = new SessionConfig();
     private UiConfig ui = new UiConfig();
     private ContextConfig context = new ContextConfig();
-    private IntentConfig intent = new IntentConfig();
+
     private TokenEstimatorConfig tokenizer = new TokenEstimatorConfig();
     private RuleConfig rule = new RuleConfig();
-    private CacheConfig cache = new CacheConfig();
+
     private IndexConfig index = new IndexConfig();
     private McpConfig mcp = new McpConfig();
     private LspConfig lsp = new LspConfig();
@@ -51,13 +55,13 @@ public class Config {
         String envApiKey = System.getenv("DASHSCOPE_API_KEY");
         if (envApiKey != null && !envApiKey.isEmpty()) {
             llm.setApiKey(envApiKey);
-            System.out.println("API Key loaded from environment variable: DASHSCOPE_API_KEY");
+            logger.info("API Key loaded from environment variable: DASHSCOPE_API_KEY");
         }
         
         String envApiKeyAlt = System.getenv("OPENAI_API_KEY");
         if (envApiKeyAlt != null && !envApiKeyAlt.isEmpty() && (llm.getApiKey() == null || llm.getApiKey().isEmpty())) {
             llm.setApiKey(envApiKeyAlt);
-            System.out.println("API Key loaded from environment variable: OPENAI_API_KEY");
+            logger.info("API Key loaded from environment variable: OPENAI_API_KEY");
         }
         
         String envBaseUrl = System.getenv("DASHSCOPE_BASE_URL");
@@ -88,9 +92,9 @@ public class Config {
             }
             mapper.enable(SerializationFeature.INDENT_OUTPUT);
             mapper.writeValue(configFile, this);
-            System.out.println("Configuration saved to: " + configFile.getAbsolutePath());
+            logger.info("Configuration saved to: {}", configFile.getAbsolutePath());
         } catch (IOException e) {
-            System.err.println("Error saving config file: " + e.getMessage());
+            logger.error("Error saving config file: {}", e.getMessage());
         }
     }
 
@@ -117,17 +121,17 @@ public class Config {
                 this.session = reloaded.session;
                 this.ui = reloaded.ui;
                 this.context = reloaded.context;
-                this.intent = reloaded.intent;
+
                 this.tokenizer = reloaded.tokenizer;
                 this.rule = reloaded.rule;
-                this.cache = reloaded.cache;
+
                 this.index = reloaded.index;
                 this.mcp = reloaded.mcp;
                 this.lsp = reloaded.lsp;
                 this.loadFromEnvironment();
-                System.out.println("Configuration reloaded from: " + configFile.getAbsolutePath());
+                logger.info("Configuration reloaded from: {}", configFile.getAbsolutePath());
             } catch (IOException e) {
-                System.err.println("Error reloading config file: " + e.getMessage());
+                logger.error("Error reloading config file: {}", e.getMessage());
             }
         }
     }
@@ -233,13 +237,7 @@ public class Config {
         this.context = context;
     }
 
-    public IntentConfig getIntent() {
-        return intent;
-    }
 
-    public void setIntent(IntentConfig intent) {
-        this.intent = intent;
-    }
 
     public TokenEstimatorConfig getTokenizer() {
         return tokenizer;
@@ -257,13 +255,7 @@ public class Config {
         this.rule = rule;
     }
 
-    public CacheConfig getCache() {
-        return cache;
-    }
 
-    public void setCache(CacheConfig cache) {
-        this.cache = cache;
-    }
 
     public IndexConfig getIndex() {
         return index;
@@ -295,58 +287,6 @@ public class Config {
         this.lsp = lsp;
     }
 
-    @Deprecated
-    public String getApiKey() {
-        return llm != null ? llm.getApiKey() : null;
-    }
-
-    @Deprecated
-    public void setApiKey(String apiKey) {
-        if (llm != null) {
-            llm.setApiKey(apiKey);
-        }
-    }
-
-    @Deprecated
-    public String getModel() {
-        return llm != null ? llm.getModel() : null;
-    }
-
-    @Deprecated
-    public void setModel(String model) {
-        if (llm != null) {
-            llm.setModel(model);
-        }
-    }
-
-    @Deprecated
-    public String getBaseUrl() {
-        return llm != null ? llm.getBaseUrl() : null;
-    }
-
-    @Deprecated
-    public void setBaseUrl(String baseUrl) {
-        if (llm != null) {
-            llm.setBaseUrl(baseUrl);
-        }
-    }
-
-    @Deprecated
-    public int getMaxTokens() {
-        return llm != null ? llm.getMaxTokens() : 0;
-    }
-
-    public double getTemperature() {
-        return llm != null ? llm.getTemperature() : 0.7;
-    }
-
-    @Deprecated
-    public void setMaxTokens(int maxTokens) {
-        if (llm != null) {
-            llm.setMaxTokens(maxTokens);
-        }
-    }
-
     public String getConfigFilePath() {
         if (configLoader == null) {
             configLoader = new ConfigLoader();
@@ -362,10 +302,10 @@ public class Config {
                 ", session=" + session +
                 ", ui=" + ui +
                 ", context=" + context +
-                ", intent=" + intent +
+
                 ", tokenizer=" + tokenizer +
                 ", rule=" + rule +
-                ", cache=" + cache +
+
                 ", index=" + index +
                 '}';
     }

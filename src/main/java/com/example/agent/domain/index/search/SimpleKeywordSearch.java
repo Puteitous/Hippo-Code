@@ -33,7 +33,9 @@ public class SimpleKeywordSearch implements CodeSearchStrategy {
                         try {
                             String relativePath = projectRoot.relativize(path).toString().replace("\\", "/");
                             fileContents.put(relativePath, Files.readString(path));
-                        } catch (IOException ignored) {}
+                        } catch (IOException e) {
+                            logger.warn("读取文件失败: {}", path, e);
+                        }
                     });
         } catch (IOException e) {
             logger.warn("扫描文件失败: {}", e.getMessage());

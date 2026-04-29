@@ -17,18 +17,18 @@ public class ConfigHealthIndicator implements HealthIndicator {
     @Override
     public Health check() {
         try {
-            boolean hasApiKey = config.getApiKey() != null && !config.getApiKey().isBlank();
-            boolean hasModel = config.getModel() != null && !config.getModel().isBlank();
-            boolean hasBaseUrl = config.getBaseUrl() != null && !config.getBaseUrl().isBlank();
+            boolean hasApiKey = config.getLlm().getApiKey() != null && !config.getLlm().getApiKey().isBlank();
+            boolean hasModel = config.getLlm().getModel() != null && !config.getLlm().getModel().isBlank();
+            boolean hasBaseUrl = config.getLlm().getBaseUrl() != null && !config.getLlm().getBaseUrl().isBlank();
 
             Health.Builder builder = Health.up()
-                    .withDetail("model", config.getModel())
-                    .withDetail("base_url", config.getBaseUrl())
+                    .withDetail("model", config.getLlm().getModel())
+                    .withDetail("base_url", config.getLlm().getBaseUrl())
                     .withDetail("api_key_configured", hasApiKey)
                     .withDetail("mcp_enabled", config.getMcp().isEnabled())
                     .withDetail("mcp_servers", config.getMcp().getServers().size())
-                    .withDetail("max_tokens", config.getMaxTokens())
-                    .withDetail("temperature", config.getTemperature());
+                    .withDetail("max_tokens", config.getLlm().getMaxTokens())
+                    .withDetail("temperature", config.getLlm().getTemperature());
 
             if (!hasApiKey || !hasModel || !hasBaseUrl) {
                 return Health.degraded()

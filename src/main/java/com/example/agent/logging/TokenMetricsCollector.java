@@ -23,7 +23,7 @@ public class TokenMetricsCollector {
     
     public TokenMetricsCollector(LocalDate date) {
         this.date = date;
-        this.metricsFile = LogDirectoryManager.getTokenMetricsFile(date);
+        this.metricsFile = WorkspaceManager.getTokenMetricsFile(date);
         initializeMetricsFile();
     }
     
@@ -83,16 +83,14 @@ public class TokenMetricsCollector {
                 }
             }
             
-            System.out.println();
-            System.out.println("╔══════════════════════════════════════════╗");
-            System.out.printf("║   Token 消耗日报 - %10s      ║%n", date);
-            System.out.println("╠══════════════════════════════════════════╣");
-            System.out.printf("║ 对话次数: %30d ║%n", conversationCount);
-            System.out.printf("║ 总输入 Token: %26d ║%n", totalPrompt);
-            System.out.printf("║ 总输出 Token: %26d ║%n", totalCompletion);
-            System.out.printf("║ 总消耗 Token: %26d ║%n", totalPrompt + totalCompletion);
-            System.out.println("╚══════════════════════════════════════════╝");
-            System.out.println();
+            logger.info("╔══════════════════════════════════════════╗");
+            logger.info("║   Token 消耗日报 - {}      ║", date);
+            logger.info("╠══════════════════════════════════════════╣");
+            logger.info("║ 对话次数: {} ║", conversationCount);
+            logger.info("║ 总输入 Token: {} ║", totalPrompt);
+            logger.info("║ 总输出 Token: {} ║", totalCompletion);
+            logger.info("║ 总消耗 Token: {} ║", totalPrompt + totalCompletion);
+            logger.info("╚══════════════════════════════════════════╝");
             
             logger.info("Token 日报 - 对话: {}, 总Token: {}", 
                 conversationCount, totalPrompt + totalCompletion);

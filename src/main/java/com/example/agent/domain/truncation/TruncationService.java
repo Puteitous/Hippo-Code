@@ -123,11 +123,6 @@ public class TruncationService {
         return result;
     }
 
-    @Deprecated
-    public String truncate(String content, String contentType, int maxTokens) {
-        return truncateByExtension(content, contentType, maxTokens);
-    }
-
     private ContentType detectContentType(String filePath) {
         String extension = getFileExtension(filePath).toLowerCase();
         if (isCodeFile(extension)) {

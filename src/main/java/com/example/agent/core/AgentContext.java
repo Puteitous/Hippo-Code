@@ -13,7 +13,6 @@ import com.example.agent.domain.index.CodeIndex;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.logging.EventMetricsCollector;
-import com.example.agent.logging.LogDirectoryManager;
 import com.example.agent.logging.TokenMetricsCollector;
 import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.prompt.PromptLibrary;
@@ -116,7 +115,7 @@ public class AgentContext {
     }
 
     public void initialize() {
-        LogDirectoryManager.ensureDirectoriesExist();
+        WorkspaceManager.ensureProjectDirectories(WorkspaceManager.getCurrentProjectKey());
         LocalDate today = LocalDate.now();
         this.tokenMetricsCollector = new TokenMetricsCollector(today);
         this.eventMetricsCollector = new EventMetricsCollector(today);

@@ -1,6 +1,7 @@
 package com.example.agent.llm.client;
 
 import com.example.agent.config.Config;
+import com.example.agent.config.LlmConfig;
 import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
@@ -25,22 +26,25 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class DefaultLlmClientTest {
+class DashScopeLlmClientTest {
 
     private Config config;
+    private LlmConfig llmConfig;
     private RetryPolicy retryPolicy;
-    private DefaultLlmClient client;
+    private DashScopeLlmClient client;
 
     @BeforeEach
     void setUp() {
         config = mock(Config.class);
-        when(config.getApiKey()).thenReturn("test-api-key");
-        when(config.getBaseUrl()).thenReturn("https://api.test.com");
-        when(config.getModel()).thenReturn("test-model");
-        when(config.getMaxTokens()).thenReturn(2048);
+        llmConfig = mock(LlmConfig.class);
+        when(config.getLlm()).thenReturn(llmConfig);
+        when(llmConfig.getApiKey()).thenReturn("test-api-key");
+        when(llmConfig.getBaseUrl()).thenReturn("https://api.test.com");
+        when(llmConfig.getModel()).thenReturn("test-model");
+        when(llmConfig.getMaxTokens()).thenReturn(2048);
         
         retryPolicy = RetryPolicy.noRetry();
-        client = new DefaultLlmClient(config, retryPolicy);
+        client = new DashScopeLlmClient(config, retryPolicy);
     }
 
     @Nested
@@ -48,15 +52,9 @@ class DefaultLlmClientTest {
     class ConstructorTests {
 
         @Test
-        @DisplayName("默认构造函数")
-        void testDefaultConstructor() {
-            assertDoesNotThrow(() -> new DefaultLlmClient());
-        }
-
-        @Test
         @DisplayName("带Config构造")
         void testConstructorWithConfig() {
-            DefaultLlmClient client = new DefaultLlmClient(config);
+            DashScopeLlmClient client = new DashScopeLlmClient(config);
             
             assertNotNull(client);
         }
@@ -65,7 +63,7 @@ class DefaultLlmClientTest {
         @DisplayName("null Config抛出异常")
         void testNullConfig() {
             assertThrows(IllegalArgumentException.class, () -> {
-                new DefaultLlmClient(null);
+                new DashScopeLlmClient(null);
             });
         }
 
@@ -73,7 +71,7 @@ class DefaultLlmClientTest {
         @DisplayName("null RetryPolicy抛出异常")
         void testNullRetryPolicy() {
             assertThrows(IllegalArgumentException.class, () -> {
-                new DefaultLlmClient(config, null);
+                new DashScopeLlmClient(config, null);
             });
         }
     }
@@ -145,7 +143,7 @@ class DefaultLlmClientTest {
         @Test
         @DisplayName("401错误-认证失败")
         void testAuthenticationError() {
-            when(config.getApiKey()).thenReturn("invalid-key");
+            when(llmConfig.getApiKey()).thenReturn("invalid-key");
             List<Message> messages = List.of(Message.user("test"));
             
             // 由于测试环境没有真实API服务器，会抛出LlmException相关异常
@@ -192,7 +190,7 @@ class DefaultLlmClientTest {
                     .maxRetries(2)
                     .initialDelayMs(1)
                     .build();
-            client = new DefaultLlmClient(config, retryPolicy);
+            client = new DashScopeLlmClient(config, retryPolicy);
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -208,7 +206,7 @@ class DefaultLlmClientTest {
                     .maxRetries(2)
                     .initialDelayMs(1)
                     .build();
-            client = new DefaultLlmClient(config, retryPolicy);
+            client = new DashScopeLlmClient(config, retryPolicy);
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -224,7 +222,7 @@ class DefaultLlmClientTest {
                     .maxRetries(2)
                     .initialDelayMs(1)
                     .build();
-            client = new DefaultLlmClient(config, retryPolicy);
+            client = new DashScopeLlmClient(config, retryPolicy);
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -314,7 +312,7 @@ class DefaultLlmClientTest {
         @Test
         @DisplayName("无效baseUrl")
         void testInvalidBaseUrl() {
-            when(config.getBaseUrl()).thenReturn("invalid-url");
+            when(llmConfig.getBaseUrl()).thenReturn("invalid-url");
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -326,7 +324,7 @@ class DefaultLlmClientTest {
         @Test
         @DisplayName("空apiKey")
         void testEmptyApiKey() {
-            when(config.getApiKey()).thenReturn("");
+            when(llmConfig.getApiKey()).thenReturn("");
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -338,7 +336,7 @@ class DefaultLlmClientTest {
         @Test
         @DisplayName("null apiKey")
         void testNullApiKey() {
-            when(config.getApiKey()).thenReturn(null);
+            when(llmConfig.getApiKey()).thenReturn(null);
             
             List<Message> messages = List.of(Message.user("test"));
             
@@ -392,7 +390,7 @@ class DefaultLlmClientTest {
         @Test
         @DisplayName("连接失败抛出LlmConnectionException")
         void testConnectionFailed() {
-            when(config.getBaseUrl()).thenReturn("https://nonexistent.invalid.domain");
+            when(llmConfig.getBaseUrl()).thenReturn("https://nonexistent.invalid.domain");
             
             List<Message> messages = List.of(Message.user("test"));
             

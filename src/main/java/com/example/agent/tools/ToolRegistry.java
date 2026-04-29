@@ -1,12 +1,13 @@
 package com.example.agent.tools;
 
 import com.example.agent.core.blocker.BlockerChain;
-import com.example.agent.core.error.ErrorFormatter;
 import com.example.agent.core.event.EventBus;
 import com.example.agent.core.event.ToolExecutedEvent;
 import com.example.agent.llm.model.Tool;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 public class ToolRegistry {
+
+    private static final Logger logger = LoggerFactory.getLogger(ToolRegistry.class);
 
     private final Map<String, ToolExecutor> executors = new HashMap<>();
     private final ObjectMapper objectMapper;
@@ -54,14 +57,14 @@ public class ToolRegistry {
             try {
                 String schemaJson = executor.getParametersSchema();
                 if (schemaJson == null || schemaJson.trim().isEmpty()) {
-                    System.err.println("Empty schema for tool: " + executor.getName());
+                    logger.warn("Empty schema for tool: {}", executor.getName());
                     continue;
                 }
                 JsonNode schema = objectMapper.readTree(schemaJson);
                 Map<String, Object> parameters = objectMapper.convertValue(schema, Map.class);
                 tools.add(Tool.of(executor.getName(), executor.getDescription(), parameters));
             } catch (Exception e) {
-                System.err.println("Failed to parse schema for tool: " + executor.getName() + " - " + e.getMessage());
+                logger.warn("Failed to parse schema for tool: {} - {}", executor.getName(), e.getMessage());
             }
         }
         return tools;

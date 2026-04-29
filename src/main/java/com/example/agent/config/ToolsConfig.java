@@ -5,9 +5,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ToolsConfig {
+
+    private static final Logger logger = LoggerFactory.getLogger(ToolsConfig.class);
 
     private BashToolConfig bash = new BashToolConfig();
     private FileToolConfig file = new FileToolConfig();
@@ -151,7 +155,7 @@ public class ToolsConfig {
                 }
                 return Long.parseLong(size);
             } catch (NumberFormatException e) {
-                System.err.println("Invalid file size format: " + size + ", using default 10MB");
+                logger.warn("Invalid file size format: {}, using default 10MB", size);
                 return 10 * 1024 * 1024;
             }
         }

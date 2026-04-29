@@ -1,6 +1,8 @@
 package com.example.agent.memory;
 
 import com.example.agent.llm.client.LlmClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,6 +15,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 public class MemoryStore {
+
+    private static final Logger logger = LoggerFactory.getLogger(MemoryStore.class);
 
     private final List<MemoryEntry> memories = new CopyOnWriteArrayList<>();
     private final Set<String> pendingMemories = ConcurrentHashMap.newKeySet();
@@ -38,6 +42,7 @@ public class MemoryStore {
             String content = Files.readString(memoryFilePath);
             parseMemoryFile(content);
         } catch (IOException e) {
+            logger.warn("加载记忆文件失败", e);
         }
     }
 
@@ -130,6 +135,7 @@ public class MemoryStore {
             String result = llmClient.generateSync(prompt);
             processDreamResult(result);
         } catch (Exception e) {
+            logger.warn("生成记忆失败", e);
         }
     }
 
@@ -187,6 +193,7 @@ public class MemoryStore {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
+            logger.warn("保存记忆文件失败", e);
         }
     }
 

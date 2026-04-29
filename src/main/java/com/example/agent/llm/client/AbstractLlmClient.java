@@ -70,13 +70,13 @@ public abstract class AbstractLlmClient implements LlmClient {
 
     @Override
     public String getModel() {
-        String model = config.getModel();
+        String model = config.getLlm().getModel();
         return (model != null && !model.isBlank()) ? model : getDefaultModel();
     }
 
     @Override
     public String getBaseUrl() {
-        String baseUrl = config.getBaseUrl();
+        String baseUrl = config.getLlm().getBaseUrl();
         return (baseUrl != null && !baseUrl.isBlank()) ? baseUrl : getDefaultBaseUrl();
     }
 
@@ -114,7 +114,7 @@ public abstract class AbstractLlmClient implements LlmClient {
         List<Message> processedMessages = applyCacheStrategy(messages);
         
         ChatRequest request = ChatRequest.of(getModel(), processedMessages)
-                .maxTokens(config.getMaxTokens());
+                .maxTokens(config.getLlm().getMaxTokens());
         
         if (tools != null && !tools.isEmpty()) {
             request.tools(tools).toolChoiceAuto();
@@ -143,7 +143,7 @@ public abstract class AbstractLlmClient implements LlmClient {
         
         ChatRequest request = ChatRequest.of(getModel(), processedMessages)
                 .stream(true)
-                .maxTokens(config.getMaxTokens());
+                .maxTokens(config.getLlm().getMaxTokens());
         
         if (tools != null && !tools.isEmpty()) {
             request.tools(tools).toolChoiceAuto();
@@ -195,8 +195,8 @@ public abstract class AbstractLlmClient implements LlmClient {
                 STREAM_TIMEOUT_SECONDS, e);
         } catch (java.net.ConnectException e) {
             throw new LlmConnectionException(
-                "无法连接到 API 服务器: " + config.getBaseUrl() + "。请检查网络连接。", 
-                config.getBaseUrl(), e);
+                "无法连接到 API 服务器: " + config.getLlm().getBaseUrl() + "。请检查网络连接。", 
+                config.getLlm().getBaseUrl(), e);
         } catch (Exception e) {
             throw new LlmException("流式请求失败: " + e.getMessage(), e);
         }
@@ -522,8 +522,8 @@ public abstract class AbstractLlmClient implements LlmClient {
                 API_TIMEOUT_SECONDS, e);
         } catch (java.net.ConnectException e) {
             throw new LlmConnectionException(
-                "无法连接到 API 服务器: " + config.getBaseUrl() + "。请检查网络连接。", 
-                config.getBaseUrl(), e);
+                "无法连接到 API 服务器: " + config.getLlm().getBaseUrl() + "。请检查网络连接。", 
+                config.getLlm().getBaseUrl(), e);
         } catch (java.net.SocketTimeoutException e) {
             throw new LlmTimeoutException(
                 "连接超时。请检查网络连接或稍后重试。", 
@@ -560,7 +560,7 @@ public abstract class AbstractLlmClient implements LlmClient {
                     "访问被拒绝。请检查 API Key 权限或账户状态。", statusCode, body);
             case 404:
                 throw new LlmApiException(
-                    "API 端点不存在。请检查 baseUrl 配置: " + config.getBaseUrl(), statusCode, body);
+                    "API 端点不存在。请检查 baseUrl 配置: " + config.getLlm().getBaseUrl(), statusCode, body);
             case 429:
                 throw new LlmApiException(
                     "请求过于频繁，已触发限流。请稍后重试。\n" + errorMessage, statusCode, body);
