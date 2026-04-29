@@ -180,7 +180,39 @@ public class ConcurrentToolExecutor {
             logger.debug("开始执行");
             
             String fixedArguments = ToolArgumentSanitizer.fixJsonArguments(toolName, arguments);
-            JsonNode argumentsNode = objectMapper.readTree(fixedArguments);
+            
+            // 双重验证：确保修复后的 JSON 是有效的
+            JsonNode argumentsNode;
+            try {
+                argumentsNode = objectMapper.readTree(fixedArguments);
+            } catch (Exception e) {
+                logger.error("JSON 参数解析失败（即使经过修复）: {}", e.getMessage());
+                logger.error("原始参数：{}", arguments);
+                logger.error("修复后参数：{}", fixedArguments);
+                
+                // 尝试最后一次宽容解析
+                try {
+                    objectMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+                    objectMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+                    objectMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true);
+                    argumentsNode = objectMapper.readTree(fixedArguments);
+                    logger.warn("⚠️ 使用宽容模式解析成功，继续执行");
+                } catch (Exception e2) {
+                    long executionTime = System.currentTimeMillis() - startTime;
+                    logger.error("❌ 宽容模式解析也失败，终止执行");
+                    return ToolExecutionResult.builder()
+                            .index(index)
+                            .toolCallId(toolCallId)
+                            .toolName(toolName)
+                            .success(false)
+                            .errorMessage("JSON 参数格式错误：" + e2.getMessage() + 
+                                " | 原始：" + truncate(arguments, 100) + 
+                                " | 修复：" + truncate(fixedArguments, 100))
+                            .executionTimeMs(executionTime)
+                            .build();
+                }
+            }
+            
             String result = toolRegistry.execute(toolName, fixedArguments);
             
             long executionTime = System.currentTimeMillis() - startTime;
@@ -258,7 +290,10 @@ public class ConcurrentToolExecutor {
         return new ExecutionStats(totalCount, successCount, failureCount, totalTime);
     }
 
-
+    private static String truncate(String s, int maxLength) {
+        if (s == null) return "null";
+        return s.length() > maxLength ? s.substring(0, maxLength) + "..." : s;
+    }
 
     public static class ExecutionStats {
         private final int totalCount;

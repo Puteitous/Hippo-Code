@@ -4,16 +4,22 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.ToolCall;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.StringWriter;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ToolArgumentSanitizer {
 
     private static final Logger logger = LoggerFactory.getLogger(ToolArgumentSanitizer.class);
     private static final JsonFactory JSON_FACTORY = new JsonFactory();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Pattern UNESCAPED_UNICODE_PATTERN = Pattern.compile("[^\\\\]u([0-9a-fA-F]{4})");
 
     private ToolArgumentSanitizer() {
     }
@@ -56,20 +62,221 @@ public class ToolArgumentSanitizer {
             return arguments;
         }
 
+        logger.debug("检测到 {} 的 JSON 参数无效，尝试修复...", toolName);
+        
         String fixed = arguments;
+        
+        // 1. 修复字段值的转义问题
         fixed = fixFieldValue(fixed, "old_text");
         fixed = fixFieldValue(fixed, "new_text");
         fixed = fixFieldValue(fixed, "content");
+        fixed = fixFieldValue(fixed, "path");
+        fixed = fixFieldValue(fixed, "query");
+        
+        // 2. 尝试修复常见的 JSON 格式问题
+        fixed = fixCommonJsonIssues(fixed);
 
-        if (!fixed.equals(arguments) && isValidJson(fixed)) {
-            logger.debug("已修复 {} 参数的 JSON 转义问题", toolName);
+        if (!fixed.equals(arguments)) {
+            logger.debug("已修复 {} 参数的 JSON 问题，尝试验证...", toolName);
+            if (isValidJson(fixed)) {
+                logger.debug("✅ {} 参数修复成功", toolName);
+                return fixed;
+            } else {
+                logger.warn("⚠️ {} 参数修复后仍然无效，尝试更激进的修复策略", toolName);
+            }
         }
+        
+        // 3. 如果仍然无效，尝试使用更宽松的解析器
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(fixed);
+            logger.debug("✅ 使用宽松模式解析成功");
+            return fixed;
+        } catch (Exception e) {
+            logger.warn("宽松模式解析失败：{}", e.getMessage());
+        }
+
+        // 4. 最后的尝试：提取并重新构建 JSON
+        String reconstructed = tryReconstructJson(fixed);
+        if (reconstructed != null && isValidJson(reconstructed)) {
+            logger.debug("✅ 成功重建 JSON");
+            return reconstructed;
+        }
+
+        logger.error("❌ 所有修复策略均失败，返回原始参数（可能导致后续错误）");
+        return arguments;
+    }
+
+    private static String fixCommonJsonIssues(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+
+        String fixed = json;
+        
+        // 修复未转义的双引号
+        fixed = fixUnescapedQuotes(fixed);
+        
+        // 修复缺失的逗号
+        fixed = fixMissingCommas(fixed);
+        
+        // 修复多余的逗号
+        fixed = fixTrailingCommas(fixed);
+        
+        // 修复单引号为双引号
+        fixed = fixSingleQuotes(fixed);
+        
+        // 修复未转义的控制字符
+        fixed = fixControlCharacters(fixed);
 
         return fixed;
     }
 
+    private static String fixUnescapedQuotes(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+
+        StringBuilder result = new StringBuilder(json.length() + 100);
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (escaped) {
+                result.append(c);
+                escaped = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                result.append(c);
+                escaped = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                result.append(c);
+                continue;
+            }
+
+            if (c == ':' && !inString) {
+                result.append(c);
+                continue;
+            }
+
+            if (c == '"' && !inString) {
+                result.append("\\\"");
+                continue;
+            }
+
+            result.append(c);
+        }
+
+        return result.toString();
+    }
+
+    private static String fixMissingCommas(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+        
+        // 在 }{ 或 ][ 或 }[ 或 ]{ 之间添加逗号
+        String fixed = json.replaceAll("\\}\\s*\\{", "},{");
+        fixed = fixed.replaceAll("\\]\\s*\\[", "],[");
+        fixed = fixed.replaceAll("\\}\\s*\\[", "],[");
+        fixed = fixed.replaceAll("\\]\\s*\\{", "],[");
+        
+        // 在值后面缺少逗号的地方添加
+        fixed = fixed.replaceAll("\"\\s*\\n\\s*\"", "\",\n\"");
+        fixed = fixed.replaceAll("\\d\\s*\\n\\s*\"", ",\n\"");
+        fixed = fixed.replaceAll("true\\s*\\n\\s*\"", ",\n\"");
+        fixed = fixed.replaceAll("false\\s*\\n\\s*\"", ",\n\"");
+        fixed = fixed.replaceAll("null\\s*\\n\\s*\"", ",\n\"");
+        
+        return fixed;
+    }
+
+    private static String fixTrailingCommas(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+        
+        // 移除最后一个逗号在 } 或 ] 之前
+        return json.replaceAll(",\\s*([\\}\\]])", "$1");
+    }
+
+    private static String fixSingleQuotes(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+        
+        // 将键和值的单引号都替换为双引号
+        String fixed = json;
+        
+        // 替换键的单引号：'key': -> "key":
+        fixed = fixed.replaceAll("'([^']*?)'\\s*:", "\"$1\":");
+        
+        // 替换值的单引号（在冒号后面）：: 'value' -> : "value"
+        // 匹配 : 后面的单引号字符串，直到下一个逗号、} 或 ]
+        fixed = fixed.replaceAll(":\\s*'([^']*?)'(\\s*[,}\\]])", ":\"$1\"$2");
+        
+        return fixed;
+    }
+
+    private static String fixControlCharacters(String json) {
+        if (json == null || json.isEmpty()) {
+            return json;
+        }
+        
+        StringBuilder result = new StringBuilder(json.length());
+        for (char c : json.toCharArray()) {
+            if (c < 32 && c != '\n' && c != '\r' && c != '\t') {
+                // 替换未转义的控制字符
+                result.append("\\u").append(String.format("%04x", (int) c));
+            } else {
+                result.append(c);
+            }
+        }
+        return result.toString();
+    }
+
+    private static String tryReconstructJson(String brokenJson) {
+        try {
+            // 尝试提取关键的键值对并重新构建
+            StringBuilder reconstructed = new StringBuilder("{");
+            boolean first = true;
+            
+            // 简单的键值对提取（适用于扁平结构）
+            Pattern pattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\"");
+            Matcher matcher = pattern.matcher(brokenJson);
+            
+            while (matcher.find()) {
+                if (!first) {
+                    reconstructed.append(",");
+                }
+                String key = matcher.group(1);
+                String value = matcher.group(2);
+                reconstructed.append("\"").append(key).append("\":\"").append(value).append("\"");
+                first = false;
+            }
+            
+            reconstructed.append("}");
+            
+            if (reconstructed.length() > 2) {
+                return reconstructed.toString();
+            }
+        } catch (Exception e) {
+            logger.debug("重建 JSON 失败：{}", e.getMessage());
+        }
+        
+        return null;
+    }
+
     public static boolean requiresFixing(String toolName) {
-        return "edit_file".equals(toolName) || "write_file".equals(toolName);
+        // 所有工具都可能需要修复 JSON 问题
+        return true;
     }
 
     private static boolean isValidJson(String json) {
