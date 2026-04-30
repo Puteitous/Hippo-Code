@@ -77,7 +77,8 @@ public class DuplicateToolCallBlocker implements Blocker {
     }
 
     public void onTurnComplete() {
-        pruneHistory();
+        recentCalls.clear();
+        callHistory.clear();
     }
 
     public void reset() {
