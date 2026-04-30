@@ -47,29 +47,40 @@ public class MemoryStore {
     }
 
     private void parseMemoryFile(String content) {
-        String[] sections = content.split("(?=### )");
+        String[] lines = content.split("\n");
+        MemoryEntry.MemoryType currentType = null;
 
-        for (String section : sections) {
-            section = section.trim();
-            if (section.isEmpty()) continue;
+        for (String line : lines) {
+            line = line.trim();
 
-            String[] lines = section.split("\n", 2);
-            if (lines.length < 2) continue;
+            if (line.startsWith("## ") && !line.startsWith("### ")) {
+                String typeName = line.substring(3).trim();
+                currentType = parseTypeFromString(typeName);
+            } else if (line.startsWith("### ") && currentType != null) {
+                String header = line.substring(4).trim();
+                header = header.replaceFirst("^#+\\s*", "");
 
-            String header = lines[0].replace("### ", "").trim();
-            String body = lines[1].trim();
-
-            Set<String> tags = extractTags(header);
-            MemoryEntry.MemoryType type = extractType(header);
-
-            memories.add(new MemoryEntry(
-                UUID.randomUUID().toString(),
-                body,
-                type,
-                tags,
-                0.7
-            ));
+                Set<String> tags = extractTags(header);
+                memories.add(new MemoryEntry(
+                    UUID.randomUUID().toString(),
+                    header,
+                    currentType,
+                    tags,
+                    0.7
+                ));
+            }
         }
+    }
+
+    private MemoryEntry.MemoryType parseTypeFromString(String typeName) {
+        if (typeName == null) return MemoryEntry.MemoryType.FACT;
+        String normalized = typeName.trim();
+        if ("用户偏好".equals(normalized)) return MemoryEntry.MemoryType.USER_PREFERENCE;
+        if ("技术上下文".equals(normalized)) return MemoryEntry.MemoryType.TECHNICAL_CONTEXT;
+        if ("关键决策".equals(normalized)) return MemoryEntry.MemoryType.DECISION;
+        if ("经验教训".equals(normalized)) return MemoryEntry.MemoryType.LESSON_LEARNED;
+        if ("项目上下文".equals(normalized)) return MemoryEntry.MemoryType.PROJECT_CONTEXT;
+        return MemoryEntry.MemoryType.FACT;
     }
 
     private Set<String> extractTags(String header) {
@@ -87,11 +98,12 @@ public class MemoryStore {
 
     private MemoryEntry.MemoryType extractType(String header) {
         String lower = header.toLowerCase();
+
         if (lower.contains("偏好") || lower.contains("preference")) return MemoryEntry.MemoryType.USER_PREFERENCE;
-        if (lower.contains("技术") || lower.contains("technical")) return MemoryEntry.MemoryType.TECHNICAL_CONTEXT;
         if (lower.contains("决策") || lower.contains("decision")) return MemoryEntry.MemoryType.DECISION;
-        if (lower.contains("教训") || lower.contains("lesson")) return MemoryEntry.MemoryType.LESSON_LEARNED;
-        if (lower.contains("项目") || lower.contains("project")) return MemoryEntry.MemoryType.PROJECT_CONTEXT;
+        if (lower.contains("教训") || lower.contains("lesson") || lower.contains("踩坑") || lower.contains("经验")) return MemoryEntry.MemoryType.LESSON_LEARNED;
+        if (lower.contains("技术") || lower.contains("technical") || lower.contains("框架") || lower.contains("库")) return MemoryEntry.MemoryType.TECHNICAL_CONTEXT;
+        if (lower.contains("项目") || lower.contains("project") || lower.contains("架构") || lower.contains("模块")) return MemoryEntry.MemoryType.PROJECT_CONTEXT;
         return MemoryEntry.MemoryType.FACT;
     }
 
@@ -144,30 +156,45 @@ public class MemoryStore {
             return;
         }
 
+        Set<String> existingContents = memories.stream()
+            .map(MemoryEntry::getContent)
+            .collect(Collectors.toSet());
+
         String[] lines = result.split("\n");
+        boolean hasNewMemory = false;
+
         for (String line : lines) {
             line = line.trim();
+            line = line.replaceFirst("^###\\s+#+\\s*", "### ");
+
             if (line.startsWith("### ")) {
                 String[] parts = line.split(" ", 2);
                 if (parts.length >= 2) {
                     String header = parts[1];
-                    Set<String> tags = extractTags(header);
-                    MemoryEntry.MemoryType type = extractType(header);
+                    if (!existingContents.contains(header)) {
+                        Set<String> tags = extractTags(header);
+                        MemoryEntry.MemoryType type = extractType(header);
 
-                    memories.add(new MemoryEntry(
-                        UUID.randomUUID().toString(),
-                        header,
-                        type,
-                        tags,
-                        0.8
-                    ));
+                        memories.add(new MemoryEntry(
+                            UUID.randomUUID().toString(),
+                            header,
+                            type,
+                            tags,
+                            0.8
+                        ));
+                        existingContents.add(header);
+                        hasNewMemory = true;
+                    }
                 }
             }
         }
-        save();
+
+        if (hasNewMemory) {
+            save();
+        }
     }
 
-    private void save() {
+    private synchronized void save() {
         StringBuilder sb = new StringBuilder();
         sb.append("# MEMORY.md - Hippo Agent 长期记忆\n\n");
         sb.append("> 本文件由 Auto Dream 自动整理，也可手动编辑\n\n");
