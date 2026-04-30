@@ -3,6 +3,7 @@ package com.example.agent.memory;
 import com.example.agent.application.ConversationService;
 import com.example.agent.context.SessionCompactionState;
 import com.example.agent.core.di.ServiceLocator;
+import com.example.agent.core.event.EventBus;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.ChatResponse;
@@ -38,6 +39,8 @@ public class BackgroundExtractor {
     private final SubAgentManager subAgentManager;
     private final ConversationService conversationService;
     private final ConsolidationGate consolidationGate;
+    private final MemoryStore memoryStore;
+    private final EventBus eventBus;
 
     private final AtomicInteger toolCallCountSinceLastExtraction = new AtomicInteger(0);
     private final AtomicBoolean extractionInProgress = new AtomicBoolean(false);
@@ -180,6 +183,20 @@ public class BackgroundExtractor {
             ? baseDir.resolve(".hippo/memory") 
             : java.nio.file.Paths.get(".hippo/memory");
         this.consolidationGate = new ConsolidationGate(memoryDir);
+        
+        // 初始化 MemoryStore（用于 L2 信息源）
+        MemoryStore tempStore;
+        try {
+            MemoryToolSandbox sandbox = new MemoryToolSandbox(memoryDir);
+            tempStore = new MemoryStore(sandbox);
+        } catch (Exception e) {
+            logger.warn("初始化 MemoryStore 失败，整合功能将受限", e);
+            tempStore = null;
+        }
+        this.memoryStore = tempStore;
+        
+        // 初始化 EventBus
+        this.eventBus = ServiceLocator.getOrNull(EventBus.class);
     }
 
     public void onMessageAdded(Message message, List<Message> fullConversation) {
@@ -396,22 +413,37 @@ public class BackgroundExtractor {
                 long startTime = System.currentTimeMillis();
                 try {
                     performCrossSessionConsolidation();
+                    // 成功：重置状态
                     consolidationGate.markConsolidationComplete();
                     
                     long duration = System.currentTimeMillis() - startTime;
                     logger.info("✅ 长期记忆整理完成，耗时：{} ms", duration);
                 } catch (Exception e) {
                     logger.error("❌ 长期记忆整理失败", e);
+                    // 失败：不重置状态，只记录失败
                     consolidationGate.markConsolidationFailed();
+                    
+                    // 发布失败事件
+                    if (eventBus != null) {
+                        eventBus.publish(new MemoryConsolidationFailedEvent(
+                            consolidationGate.getInfo().consecutiveFailures,
+                            e.getMessage()
+                        ));
+                    }
+                } finally {
+                    // 确保锁被释放（防止僵尸锁）
+                    consolidationGate.releaseLock();
                 }
             });
         }
     }
 
     /**
-     * 执行跨会话整理（占位实现，Phase 2 完善）
+     * 执行跨会话整理（Phase 2 完整实现）
      */
     private void performCrossSessionConsolidation() {
+        long startTime = System.currentTimeMillis();
+        
         // 扫描未处理的 session 文件
         java.nio.file.Path sessionDir = memoryManager.getSessionDir();
         if (sessionDir == null || !Files.exists(sessionDir)) {
@@ -419,40 +451,171 @@ public class BackgroundExtractor {
             return;
         }
 
-        try (var stream = Files.list(sessionDir)) {
-            List<java.nio.file.Path> unprocessedSessions = stream
-                .filter(Files::isRegularFile)
-                .filter(p -> p.getFileName().toString().startsWith("session-memory-"))
-                .filter(p -> p.getFileName().toString().endsWith(".md"))
-                .toList();
+        try {
+            // 1. 收集 L1 信息源：未处理的 session-memory.md
+            List<java.nio.file.Path> unprocessedSessionFiles;
+            try (var stream = Files.list(sessionDir)) {
+                unprocessedSessionFiles = stream
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().startsWith("session-memory-"))
+                    .filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .toList();
+            }
 
-            logger.info("发现 {} 个未处理的会话记忆", unprocessedSessions.size());
+            if (unprocessedSessionFiles.isEmpty()) {
+                logger.debug("没有未处理的会话记忆，跳过整理");
+                return;
+            }
 
-            int consolidatedCount = 0;
-            for (java.nio.file.Path sessionFile : unprocessedSessions) {
+            logger.info("发现 {} 个未处理的会话记忆", unprocessedSessionFiles.size());
+
+            // 2. 收集 L2 信息源：现有长期记忆索引
+            String indexText = memoryStore != null ? memoryStore.getIndexText() : "";
+
+            // 3. 读取所有未处理会话的内容
+            List<String> sessionContents = new ArrayList<>();
+            List<String> processedSessionIds = new ArrayList<>();
+            
+            for (java.nio.file.Path sessionFile : unprocessedSessionFiles) {
                 try {
-                    // 读取并打印摘要（占位）
-                    String summary = readSessionSummary(sessionFile);
-                    logger.info("处理会话：{}", summary);
-
-                    // 标记为已处理
-                    markSessionAsProcessed(sessionFile);
+                    String content = Files.readString(sessionFile);
+                    sessionContents.add(content);
                     
-                    // 同步更新 ConsolidationGate 的状态
                     String sessionId = extractSessionId(sessionFile);
                     if (sessionId != null) {
-                        consolidationGate.markSessionAsProcessed(sessionId);
+                        processedSessionIds.add(sessionId);
                     }
-
-                    consolidatedCount++;
-                } catch (Exception e) {
-                    logger.warn("处理会话失败：{}", sessionFile, e);
+                } catch (IOException e) {
+                    logger.warn("读取会话文件失败：{}", sessionFile, e);
                 }
             }
 
-            logger.info("整理完成，共处理 {} 个会话", consolidatedCount);
+            if (sessionContents.isEmpty()) {
+                logger.warn("没有成功读取任何会话内容，跳过整理");
+                return;
+            }
+
+            // 4. 构建四阶段 Prompt
+            String prompt = ConsolidationPromptBuilder.buildConsolidationPrompt(
+                indexText, sessionContents
+            );
+
+            // 5. 在 Sandbox 内启动 forkAgent（如果可用）
+            if (subAgentManager != null) {
+                performConsolidationWithSubAgent(prompt, processedSessionIds, startTime);
+            } else {
+                // 回退到传统模式
+                performConsolidationLegacy(prompt, processedSessionIds, startTime);
+            }
+
         } catch (IOException e) {
             logger.error("扫描会话目录失败", e);
+            throw new RuntimeException("整理失败", e);
+        }
+    }
+
+    /**
+     * 使用 SubAgent 执行整合
+     */
+    private void performConsolidationWithSubAgent(String prompt, List<String> processedSessionIds, long startTime) {
+        try {
+            Conversation parentConversation = conversationService.getConversation(sessionId);
+            
+            String taskInstruction = """
+                ⚠️ 【核心任务】你是 Session Memory 整合器！
+                你的唯一任务是：将未处理的会话记忆整合到长期记忆中！
+                
+                🚨 重要规则：
+                - 使用 MemoryStore API 进行所有写操作
+                - 不要直接修改文件
+                - 完成所有操作后，输出 "DONE" 并结束任务
+                
+                请立即开始执行四阶段整合流程。
+                """;
+            
+            String taskDescription = String.format(
+                "跨会话记忆整合：处理 %d 个未处理会话",
+                processedSessionIds.size()
+            );
+
+            SubAgentTask task = subAgentManager.forkAgent(
+                parentConversation,
+                taskDescription,
+                taskInstruction + "\n\n" + prompt,
+                300, // 5 分钟超时
+                null,
+                SubAgentPermission.MEMORY_EXTRACTOR,
+                () -> onConsolidationCompleted(processedSessionIds, startTime),
+                builder -> {}
+            );
+
+            logger.info("✅ 记忆整合任务已提交给 SubAgent: taskId={}", task.getTaskId());
+
+            // 等待完成
+            task.awaitCompletion(300, java.util.concurrent.TimeUnit.SECONDS);
+
+        } catch (Exception e) {
+            logger.error("❌ SubAgent 整合失败", e);
+            throw new RuntimeException("整合失败", e);
+        }
+    }
+
+    /**
+     * 传统模式整合（无 SubAgent 时）
+     */
+    private void performConsolidationLegacy(String prompt, List<String> processedSessionIds, long startTime) {
+        try {
+            // 使用 LLM 直接处理
+            List<Message> consolidationMessages = new ArrayList<>();
+            consolidationMessages.add(Message.user(prompt));
+
+            ChatResponse response = llmClient.chat(consolidationMessages);
+            if (response == null || response.getMessage() == null) {
+                logger.warn("LLM 返回空响应，跳过整合");
+                return;
+            }
+
+            String result = response.getMessage().getContent();
+            logger.info("LLM 整合结果：{}", result);
+
+            // 标记为已处理
+            onConsolidationCompleted(processedSessionIds, startTime);
+
+        } catch (Exception e) {
+            logger.error("❌ 传统模式整合失败", e);
+            throw new RuntimeException("整合失败", e);
+        }
+    }
+
+    /**
+     * 整合完成回调
+     */
+    private void onConsolidationCompleted(List<String> processedSessionIds, long startTime) {
+        try {
+            long duration = System.currentTimeMillis() - startTime;
+            
+            // 1. 标记会话为已处理
+            for (String sessionId : processedSessionIds) {
+                consolidationGate.markSessionAsProcessed(sessionId);
+            }
+
+            // 2. 触发生命周期管理（Phase 2 任务 3）
+            // LifecycleManager.runCheck(); // 如果存在
+
+            // 3. 发布完成事件
+            int memoriesCreated = memoryStore != null ? memoryStore.getIndexSize() : 0;
+            eventBus.publish(new MemoryConsolidationCompletedEvent(
+                processedSessionIds.size(),
+                memoriesCreated,
+                0, // mergedCount（Phase 2 后续完善）
+                duration
+            ));
+
+            logger.info("✅ 记忆整合完成，处理 {} 个会话，耗时 {} ms", 
+                processedSessionIds.size(), duration);
+
+        } catch (Exception e) {
+            logger.error("❌ 整合完成回调异常", e);
         }
     }
 

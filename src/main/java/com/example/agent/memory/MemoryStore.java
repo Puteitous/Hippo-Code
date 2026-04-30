@@ -456,6 +456,21 @@ public class MemoryStore {
     }
 
     /**
+     * 获取索引文本（用于 LLM 读取现有记忆）
+     */
+    public String getIndexText() {
+        if (!Files.exists(indexPath)) {
+            return "";
+        }
+        try {
+            return Files.readString(indexPath);
+        } catch (IOException e) {
+            logger.warn("读取索引文件失败", e);
+            return "";
+        }
+    }
+
+    /**
      * 获取实际文件数量
      */
     public int getFileCount() {

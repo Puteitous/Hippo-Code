@@ -1,9 +1,11 @@
 package com.example.agent.memory;
 
+import com.example.agent.core.event.Event;
+
 /**
  * 记忆整理失败事件
  */
-public class MemoryConsolidationFailedEvent {
+public class MemoryConsolidationFailedEvent implements Event {
     private final int consecutiveFailures;
     private final String errorMessage;
 

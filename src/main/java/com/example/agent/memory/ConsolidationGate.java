@@ -254,9 +254,9 @@ public class ConsolidationGate {
     }
 
     /**
-     * 释放锁
+     * 释放锁（用于 finally 块确保锁被释放）
      */
-    private void releaseLock() {
+    public void releaseLock() {
         lockHeld.set(false);
         logger.debug("释放整理锁");
     }
