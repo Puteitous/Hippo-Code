@@ -1,5 +1,8 @@
 package com.example.agent.memory;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -13,6 +16,8 @@ import java.util.Map;
  */
 public class MemoryToolSandbox {
 
+    private static final Logger logger = LoggerFactory.getLogger(MemoryToolSandbox.class);
+    
     private final Path memoryRoot;
 
     public MemoryToolSandbox(Path memoryRoot) {
@@ -111,12 +116,13 @@ public class MemoryToolSandbox {
             // 先解码 URL 编码的字符（如 %2e → .）
             String decodedPath = URLDecoder.decode(targetPath, StandardCharsets.UTF_8);
             
-            Path normalizedTarget = Paths.get(decodedPath).normalize();
-            Path normalizedRoot = memoryRoot.normalize();
+            Path normalizedTarget = Paths.get(decodedPath).toAbsolutePath().normalize();
+            Path normalizedRoot = memoryRoot.toAbsolutePath().normalize();
             
             // 检查规范化后的路径是否以 memoryRoot 开头
             return normalizedTarget.startsWith(normalizedRoot);
         } catch (Exception e) {
+            logger.debug("路径检查失败：{} (memoryRoot: {})", targetPath, memoryRoot, e);
             return false;
         }
     }

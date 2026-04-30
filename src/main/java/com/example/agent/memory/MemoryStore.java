@@ -1,283 +1,647 @@
 package com.example.agent.memory;
 
-import com.example.agent.llm.client.LlmClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
+/**
+ * 多文件记忆存储
+ * 
+ * 核心特性：
+ * - 一条记忆一个文件（UUID.md）
+ * - 内存索引加速检索
+ * - 原子写入（临时文件 → fsync → 重命名）
+ * - 文件锁保护并发写入
+ * - 沙箱权限检查
+ */
 public class MemoryStore {
 
     private static final Logger logger = LoggerFactory.getLogger(MemoryStore.class);
 
-    private final List<MemoryEntry> memories = new CopyOnWriteArrayList<>();
-    private final Set<String> pendingMemories = ConcurrentHashMap.newKeySet();
-    private final LlmClient llmClient;
-    private final Path memoryFilePath;
+    private static final String MEMORY_DIR = ".hippo/memory";
+    private static final String INDEX_FILE = "MEMORY.md";
+    private static final String TEMP_SUFFIX = ".tmp";
 
-    public MemoryStore(LlmClient llmClient) {
-        this(llmClient, System.getProperty("user.dir"));
-    }
+    // 内存索引（只存元数据，不存内容）
+    private final ConcurrentHashMap<String, MemoryEntryMeta> index = new ConcurrentHashMap<>();
+    
+    // 文件级锁（用于 JVM 内并发控制）
+    private final ConcurrentHashMap<String, Object> fileLocks = new ConcurrentHashMap<>();
+    
+    // 沙箱
+    private final MemoryToolSandbox sandbox;
+    
+    // 存储目录
+    private final Path memoryDir;
+    
+    // 索引文件路径
+    private final Path indexPath;
+    
+    // 后台刷新线程（低负载时全量重建索引）
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
 
-    public MemoryStore(LlmClient llmClient, String workspacePath) {
-        this.llmClient = llmClient;
-        this.memoryFilePath = Paths.get(workspacePath, "MEMORY.md");
-        load();
-    }
+    /**
+     * 记忆条目元数据（轻量级，用于索引）
+     */
+    public static class MemoryEntryMeta {
+        public final String id;
+        public String title;
+        public MemoryEntry.MemoryType type;
+        public double importance;
+        public double confidence;
+        public Set<String> tags;
+        public Instant lastUpdated;
+        public Instant lastAccessed;
 
-    private void load() {
-        if (!Files.exists(memoryFilePath)) {
-            return;
+        public MemoryEntryMeta(MemoryEntry entry) {
+            this.id = entry.getId();
+            this.title = extractTitle(entry.getContent());
+            this.type = entry.getType();
+            this.importance = entry.getImportance();
+            this.confidence = entry.getConfidence();
+            this.tags = new HashSet<>(entry.getTags());
+            this.lastUpdated = entry.getLastUpdated();
+            this.lastAccessed = entry.getLastAccessed();
         }
 
+        public MemoryEntryMeta(String id, String title, MemoryEntry.MemoryType type, 
+                               double importance, double confidence) {
+            this.id = id;
+            this.title = title;
+            this.type = type;
+            this.importance = importance;
+            this.confidence = confidence;
+            this.tags = new HashSet<>();
+            this.lastUpdated = Instant.now();
+            this.lastAccessed = Instant.now();
+        }
+
+        private String extractTitle(String content) {
+            if (content == null || content.isEmpty()) {
+                return "Untitled";
+            }
+            String[] lines = content.split("\n");
+            for (String line : lines) {
+                line = line.trim();
+                if (line.startsWith("# ")) {
+                    return line.substring(2).trim();
+                }
+                if (!line.isEmpty()) {
+                    return line.length() > 50 ? line.substring(0, 50) + "..." : line;
+                }
+            }
+            return "Untitled";
+        }
+    }
+
+    public MemoryStore(MemoryToolSandbox sandbox) {
+        this.sandbox = sandbox;
+        this.memoryDir = sandbox.getMemoryRoot();
+        this.indexPath = memoryDir.resolve(INDEX_FILE);
+        ensureDirectory();
+        loadIndex();
+    }
+
+    /**
+     * 确保存储目录存在
+     */
+    private void ensureDirectory() {
         try {
-            String content = Files.readString(memoryFilePath);
-            parseMemoryFile(content);
+            if (!Files.exists(memoryDir)) {
+                Files.createDirectories(memoryDir);
+            }
         } catch (IOException e) {
-            logger.warn("加载记忆文件失败", e);
+            throw new MemoryAccessException("创建记忆目录失败", e);
         }
     }
 
-    private void parseMemoryFile(String content) {
+    /**
+     * 加载索引（从 MEMORY.md 或扫描目录）
+     */
+    private void loadIndex() {
+        // 优先从索引文件加载
+        if (Files.exists(indexPath)) {
+            try {
+                loadIndexFromFile();
+                
+                // 一致性校验：索引数 vs 文件数
+                int indexCount = index.size();
+                int fileCount = countMemoryFiles();
+                
+                if (indexCount != fileCount) {
+                    logger.warn(
+                        "索引与文件数不一致（索引：{}，文件：{}），全量重建索引",
+                        indexCount, fileCount
+                    );
+                    index.clear();
+                    scanDirectory();
+                }
+                
+                return;
+            } catch (IOException e) {
+                logger.warn("从索引文件加载失败，尝试扫描目录", e);
+            }
+        }
+        
+        // 回退：扫描目录
+        scanDirectory();
+    }
+
+    /**
+     * 快速统计记忆文件数量（不解析内容）
+     */
+    private int countMemoryFiles() {
+        if (!Files.exists(memoryDir)) {
+            return 0;
+        }
+        
+        try (var stream = Files.list(memoryDir)) {
+            return (int) stream
+                .filter(Files::isRegularFile)
+                .filter(p -> p.getFileName().toString().endsWith(".md"))
+                .filter(p -> !p.getFileName().toString().equals(INDEX_FILE))
+                .filter(p -> !p.getFileName().toString().endsWith(TEMP_SUFFIX))
+                .count();
+        } catch (IOException e) {
+            logger.warn("统计文件数失败", e);
+            return 0;
+        }
+    }
+
+    /**
+     * 从索引文件加载（快速）
+     */
+    private void loadIndexFromFile() throws IOException {
+        String content = Files.readString(indexPath);
         String[] lines = content.split("\n");
-        MemoryEntry.MemoryType currentType = null;
-
+        
         for (String line : lines) {
             line = line.trim();
-
-            if (line.startsWith("## ") && !line.startsWith("### ")) {
-                String typeName = line.substring(3).trim();
-                currentType = parseTypeFromString(typeName);
-            } else if (line.startsWith("### ") && currentType != null) {
-                String header = line.substring(4).trim();
-                header = header.replaceFirst("^#+\\s*", "");
-
-                Set<String> tags = extractTags(header);
-                memories.add(new MemoryEntry(
-                    UUID.randomUUID().toString(),
-                    header,
-                    currentType,
-                    tags,
-                    0.7
-                ));
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            
+            // 跳过表头分隔符行（如 |----|-------|...）
+            if (line.matches("\\|[-\\s|]+\\|")) {
+                continue;
+            }
+            
+            // 解析索引行：| UUID | Title | Type | Importance | Confidence | Tags | LastUpdated |
+            if (line.startsWith("|") && line.endsWith("|")) {
+                MemoryEntryMeta meta = parseIndexLine(line);
+                if (meta != null) {
+                    index.put(meta.id, meta);
+                }
             }
         }
+        
+        logger.info("从索引文件加载了 {} 条记忆", index.size());
     }
 
-    private MemoryEntry.MemoryType parseTypeFromString(String typeName) {
-        if (typeName == null) return MemoryEntry.MemoryType.FACT;
-        String normalized = typeName.trim();
-        if ("用户偏好".equals(normalized)) return MemoryEntry.MemoryType.USER_PREFERENCE;
-        if ("技术上下文".equals(normalized)) return MemoryEntry.MemoryType.TECHNICAL_CONTEXT;
-        if ("关键决策".equals(normalized)) return MemoryEntry.MemoryType.DECISION;
-        if ("经验教训".equals(normalized)) return MemoryEntry.MemoryType.LESSON_LEARNED;
-        if ("项目上下文".equals(normalized)) return MemoryEntry.MemoryType.PROJECT_CONTEXT;
-        return MemoryEntry.MemoryType.FACT;
-    }
-
-    private Set<String> extractTags(String header) {
-        Set<String> tags = new HashSet<>();
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\(([^)]+)\\)");
-        java.util.regex.Matcher matcher = pattern.matcher(header);
-        while (matcher.find()) {
-            String[] tagArray = matcher.group(1).split("[,，]");
-            for (String tag : tagArray) {
-                tags.add(tag.trim());
-            }
-        }
-        return tags;
-    }
-
-    private MemoryEntry.MemoryType extractType(String header) {
-        String lower = header.toLowerCase();
-
-        if (lower.contains("偏好") || lower.contains("preference")) return MemoryEntry.MemoryType.USER_PREFERENCE;
-        if (lower.contains("决策") || lower.contains("decision")) return MemoryEntry.MemoryType.DECISION;
-        if (lower.contains("教训") || lower.contains("lesson") || lower.contains("踩坑") || lower.contains("经验")) return MemoryEntry.MemoryType.LESSON_LEARNED;
-        if (lower.contains("技术") || lower.contains("technical") || lower.contains("框架") || lower.contains("库")) return MemoryEntry.MemoryType.TECHNICAL_CONTEXT;
-        if (lower.contains("项目") || lower.contains("project") || lower.contains("架构") || lower.contains("模块")) return MemoryEntry.MemoryType.PROJECT_CONTEXT;
-        return MemoryEntry.MemoryType.FACT;
-    }
-
-    public void addPendingMemory(String memoryCandidate) {
-        if (memoryCandidate != null && !memoryCandidate.isBlank()) {
-            pendingMemories.add(memoryCandidate);
-        }
-    }
-
-    public void triggerAutoDream() {
-        if (pendingMemories.size() < 3) {
+    /**
+     * 扫描目录重建索引（较慢，作为备用）
+     */
+    private void scanDirectory() {
+        if (!Files.exists(memoryDir)) {
+            logger.debug("记忆目录不存在：{}", memoryDir);
             return;
         }
 
-        List<String> candidates = new ArrayList<>(pendingMemories);
-        pendingMemories.clear();
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(memoryDir, "*.md")) {
+            int fileCount = 0;
+            for (Path file : stream) {
+                String fileName = file.getFileName().toString();
+                if (fileName.equals(INDEX_FILE) || fileName.endsWith(TEMP_SUFFIX)) {
+                    continue;
+                }
+                fileCount++;
 
-        new Thread(() -> processAutoDream(candidates)).start();
-    }
-
-    private void processAutoDream(List<String> candidates) {
-        if (candidates == null || candidates.isEmpty()) {
-            return;
-        }
-
-        String prompt = String.format(
-            "## Auto Dream - 记忆整理任务\n\n" +
-            "请从以下候选记忆中筛选出真正值得长期记住的内容。\n" +
-            "记住标准：\n" +
-            "- 用户明确的偏好设置\n" +
-            "- 重要的技术决策和架构选择\n" +
-            "- 踩过的坑和经验教训\n" +
-            "- 项目关键上下文\n\n" +
-            "不要记住：临时调试信息、中间状态、一次性工具输出。\n\n" +
-            "候选记忆：\n%s\n\n" +
-            "输出格式：每条记忆一行，使用 ### 开头，后跟标签，如 ### 用户偏好 (java, style)",
-            String.join("\n\n---\n\n", candidates)
-        );
-
-        try {
-            String result = llmClient.generateSync(prompt);
-            processDreamResult(result);
-        } catch (Exception e) {
-            logger.warn("生成记忆失败", e);
-        }
-    }
-
-    private void processDreamResult(String result) {
-        if (result == null || result.isBlank()) {
-            return;
-        }
-
-        Set<String> existingContents = memories.stream()
-            .map(MemoryEntry::getContent)
-            .collect(Collectors.toSet());
-
-        String[] lines = result.split("\n");
-        boolean hasNewMemory = false;
-
-        for (String line : lines) {
-            line = line.trim();
-            line = line.replaceFirst("^###\\s+#+\\s*", "### ");
-
-            if (line.startsWith("### ")) {
-                String[] parts = line.split(" ", 2);
-                if (parts.length >= 2) {
-                    String header = parts[1];
-                    if (!existingContents.contains(header)) {
-                        Set<String> tags = extractTags(header);
-                        MemoryEntry.MemoryType type = extractType(header);
-
-                        memories.add(new MemoryEntry(
-                            UUID.randomUUID().toString(),
-                            header,
-                            type,
-                            tags,
-                            0.8
-                        ));
-                        existingContents.add(header);
-                        hasNewMemory = true;
+                try {
+                    // 只解析 frontmatter，不解析 body
+                    Map<String, Object> frontmatter = FrontmatterParser.parse(file);
+                    if (frontmatter.containsKey("id")) {
+                        String id = (String) frontmatter.get("id");
+                        logger.trace("扫描到记忆文件：{}", id);
+                        // 读取完整 entry 构建 meta
+                        MemoryEntry entry = FrontmatterParser.parseEntry(file);
+                        index.put(id, new MemoryEntryMeta(entry));
+                    } else {
+                        logger.warn("文件 {} 没有 id 字段", fileName);
                     }
+                } catch (IOException e) {
+                    logger.warn("解析文件失败：{}", fileName, e);
                 }
             }
-        }
-
-        if (hasNewMemory) {
-            save();
-        }
-    }
-
-    private synchronized void save() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("# MEMORY.md - Hippo Agent 长期记忆\n\n");
-        sb.append("> 本文件由 Auto Dream 自动整理，也可手动编辑\n\n");
-        sb.append("---\n\n");
-
-        Map<MemoryEntry.MemoryType, List<MemoryEntry>> byType = memories.stream()
-            .collect(Collectors.groupingBy(MemoryEntry::getType));
-
-        for (Map.Entry<MemoryEntry.MemoryType, List<MemoryEntry>> entry : byType.entrySet()) {
-            sb.append("## ").append(getTypeName(entry.getKey())).append("\n\n");
-            for (MemoryEntry mem : entry.getValue()) {
-                String tags = String.join(", ", mem.getTags());
-                sb.append("### ").append(mem.getContent());
-                if (!tags.isEmpty()) {
-                    sb.append(" (").append(tags).append(")");
-                }
-                sb.append("\n\n");
-            }
-        }
-
-        try {
-            Files.writeString(memoryFilePath, sb.toString(),
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING);
+            
+            logger.info("扫描目录加载了 {} 条记忆（共 {} 个文件）", index.size(), fileCount);
         } catch (IOException e) {
-            logger.warn("保存记忆文件失败", e);
+            logger.error("扫描记忆目录失败", e);
         }
     }
 
-    private String getTypeName(MemoryEntry.MemoryType type) {
-        switch (type) {
-            case USER_PREFERENCE: return "用户偏好";
-            case TECHNICAL_CONTEXT: return "技术上下文";
-            case DECISION: return "关键决策";
-            case LESSON_LEARNED: return "经验教训";
-            case PROJECT_CONTEXT: return "项目上下文";
-            default: return "事实记忆";
+    /**
+     * 解析索引行
+     */
+    private MemoryEntryMeta parseIndexLine(String line) {
+        // 移除首尾的 | 和空格
+        line = line.trim();
+        if (line.startsWith("|")) line = line.substring(1);
+        if (line.endsWith("|")) line = line.substring(0, line.length() - 1);
+        
+        String[] parts = line.split("\\|");
+        if (parts.length < 6) {
+            return null;
+        }
+        
+        try {
+            String id = parts[0].trim();
+            String title = parts[1].trim();
+            MemoryEntry.MemoryType type = MemoryEntry.MemoryType.valueOf(parts[2].trim());
+            double importance = Double.parseDouble(parts[3].trim());
+            double confidence = Double.parseDouble(parts[4].trim());
+            
+            MemoryEntryMeta meta = new MemoryEntryMeta(id, title, type, importance, confidence);
+            
+            // 解析 tags
+            String[] tagParts = parts[5].trim().split(",");
+            for (String tag : tagParts) {
+                meta.tags.add(tag.trim());
+            }
+            
+            return meta;
+        } catch (Exception e) {
+            logger.warn("解析索引行失败：{}", line, e);
+            return null;
         }
     }
 
-    public List<MemoryEntry> searchRelevant(String query, int limit) {
-        if (query == null || query.isBlank() || memories.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        return memories.stream()
-            .sorted((a, b) -> Double.compare(
-                b.calculateRelevance(query),
-                a.calculateRelevance(query)
-            ))
-            .filter(m -> m.calculateRelevance(query) > 0.1)
-            .limit(Math.max(1, limit))
-            .collect(Collectors.toList());
+    // 构造器辅助方法
+    private MemoryEntryMeta createMeta(MemoryEntry entry) {
+        return new MemoryEntryMeta(entry);
     }
 
-    public String getRelevantMemoriesAsPrompt(String query) {
+    /**
+     * 添加记忆条目
+     */
+    public void add(MemoryEntry entry) {
+        // 1. 沙箱权限检查
+        assertCanWrite(entry.getId());
+        
+        // 2. 写入文件
+        writeMemoryFile(entry);
+        
+        // 3. 更新索引
+        index.put(entry.getId(), createMeta(entry));
+        
+        // 4. 异步更新索引文件
+        scheduleIndexUpdate();
+        
+        logger.debug("添加记忆：{}", entry.getId());
+    }
+
+    /**
+     * 更新记忆条目
+     */
+    public void update(String id, java.util.function.Consumer<MemoryEntry> updater) {
+        // 1. 沙箱权限检查
+        assertCanWrite(id);
+        
+        // 2. 获取文件锁
+        Object lock = getFileLock(id);
+        synchronized (lock) {
+            try {
+                // 3. 读取现有内容
+                MemoryEntry entry = findById(id);
+                if (entry == null) {
+                    throw new MemoryAccessException("记忆不存在：" + id);
+                }
+                
+                // 4. 应用更新
+                updater.accept(entry);
+                
+                // 5. 写回文件
+                writeMemoryFile(entry);
+                
+                // 6. 更新索引
+                index.put(id, createMeta(entry));
+                
+                // 7. 异步更新索引文件
+                scheduleIndexUpdate();
+                
+                logger.debug("更新记忆：{}", id);
+            } catch (Exception e) {
+                throw new MemoryAccessException("更新记忆失败：" + id, e);
+            }
+        }
+    }
+
+    /**
+     * 删除记忆条目
+     */
+    public void delete(String id) {
+        // 1. 沙箱权限检查
+        assertCanWrite(id);
+        
+        // 2. 获取文件锁
+        Object lock = getFileLock(id);
+        synchronized (lock) {
+            try {
+                Path file = getMemoryFilePath(id);
+                if (Files.exists(file)) {
+                    Files.delete(file);
+                    index.remove(id);
+                    scheduleIndexUpdate();
+                    logger.debug("删除记忆：{}", id);
+                }
+            } catch (IOException e) {
+                throw new MemoryAccessException("删除记忆失败：" + id, e);
+            }
+        }
+    }
+
+    /**
+     * 根据 ID 查找记忆（按需加载完整内容）
+     */
+    public MemoryEntry findById(String id) {
+        MemoryEntryMeta meta = index.get(id);
+        if (meta == null) {
+            return null;
+        }
+        
+        // 记录访问
+        meta.lastAccessed = Instant.now();
+        
+        // 从磁盘读取完整内容
+        try {
+            Path file = getMemoryFilePath(id);
+            if (Files.exists(file)) {
+                return FrontmatterParser.parseEntry(file);
+            }
+        } catch (IOException e) {
+            logger.warn("读取记忆文件失败：{}", id, e);
+        }
+        
+        return null;
+    }
+
+    /**
+     * 根据 ID 查找元数据（快速，不读文件）
+     */
+    public MemoryEntryMeta findMetaById(String id) {
+        return index.get(id);
+    }
+
+    /**
+     * 搜索记忆（基于索引）
+     */
+    public List<MemoryEntry> search(String query) {
+        List<MemoryEntry> results = new ArrayList<>();
+        
+        for (MemoryEntryMeta meta : index.values()) {
+            if (matchesQuery(meta, query)) {
+                MemoryEntry entry = findById(meta.id);
+                if (entry != null) {
+                    results.add(entry);
+                }
+            }
+        }
+        
+        // 按相关性排序
+        results.sort((e1, e2) -> Double.compare(
+            RelevanceScorer.calculateRelevance(e2, query),
+            RelevanceScorer.calculateRelevance(e1, query)
+        ));
+        
+        return results;
+    }
+
+    /**
+     * 判断元数据是否匹配查询
+     */
+    private boolean matchesQuery(MemoryEntryMeta meta, String query) {
         if (query == null || query.isBlank()) {
-            return "";
+            return true;
         }
+        
+        String queryLower = query.toLowerCase();
+        return meta.title.toLowerCase().contains(queryLower) ||
+               meta.tags.stream().anyMatch(tag -> tag.toLowerCase().contains(queryLower)) ||
+               meta.type.name().toLowerCase().contains(queryLower);
+    }
 
-        List<MemoryEntry> relevant = searchRelevant(query, 8);
-        if (relevant.isEmpty()) {
-            return "";
+    /**
+     * 获取所有记忆的元数据列表
+     */
+    public Collection<MemoryEntryMeta> getAllMetas() {
+        return Collections.unmodifiableCollection(index.values());
+    }
+
+    /**
+     * 获取索引大小
+     */
+    public int getIndexSize() {
+        return index.size();
+    }
+
+    /**
+     * 获取实际文件数量
+     */
+    public int getFileCount() {
+        try (Stream<Path> stream = Files.list(memoryDir)) {
+            return (int) stream
+                .filter(Files::isRegularFile)
+                .filter(p -> p.getFileName().toString().endsWith(".md"))
+                .filter(p -> !p.getFileName().toString().equals(INDEX_FILE))
+                .filter(p -> !p.getFileName().toString().endsWith(TEMP_SUFFIX))
+                .count();
+        } catch (IOException e) {
+            logger.warn("统计文件数失败", e);
+            return 0;
         }
+    }
 
+    /**
+     * 写入记忆文件（原子操作 + 文件锁）
+     */
+    private void writeMemoryFile(MemoryEntry entry) {
+        Path file = getMemoryFilePath(entry.getId());
+        Path tempFile = file.resolveSibling(file.getFileName() + TEMP_SUFFIX);
+        
+        // 获取 JVM 内文件锁
+        Object lock = getFileLock(entry.getId());
+        synchronized (lock) {
+            try {
+                // 1. 生成带 frontmatter 的完整内容
+                String frontmatter = FrontmatterParser.generate(entry);
+                String content = frontmatter + entry.getContent();
+                
+                // 2. 写入临时文件
+                try (FileChannel channel = FileChannel.open(tempFile,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE,
+                        StandardOpenOption.TRUNCATE_EXISTING)) {
+                    
+                    channel.write(java.nio.ByteBuffer.wrap(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    channel.force(true); // fsync：确保数据和元数据都刷到磁盘
+                }
+                
+                // 3. 沙箱检查（写操作前最后一次检查）
+                assertCanWrite(entry.getId());
+                
+                // 4. 原子重命名
+                Files.move(tempFile, file,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+                
+                logger.trace("原子写入记忆文件：{}", entry.getId());
+            } catch (IOException e) {
+                // 清理临时文件
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException ex) {
+                    logger.warn("清理临时文件失败", ex);
+                }
+                throw new MemoryAccessException("写入记忆文件失败：" + entry.getId(), e);
+            }
+        }
+    }
+
+    /**
+     * 获取文件路径
+     */
+    private Path getMemoryFilePath(String id) {
+        return memoryDir.resolve(id + ".md");
+    }
+
+    /**
+     * 获取文件锁（JVM 内）
+     */
+    private Object getFileLock(String id) {
+        return fileLocks.computeIfAbsent(id, k -> new Object());
+    }
+
+    /**
+     * 沙箱权限检查
+     */
+    private void assertCanWrite(String id) {
+        if (sandbox == null) {
+            return; // 测试模式可能没有沙箱
+        }
+        
+        Path targetPath = getMemoryFilePath(id).toAbsolutePath();
+        Map<String, Object> input = new HashMap<>();
+        input.put("file_path", targetPath.toString());
+        
+        MemoryPermissionResult result = sandbox.check("write_file", input);
+        if (!result.isAllowed()) {
+            throw new MemoryAccessException("写入权限被拒绝：" + result.getMessage());
+        }
+    }
+
+    /**
+     * 异步更新索引文件
+     */
+    private void scheduleIndexUpdate() {
+        backgroundExecutor.submit(() -> {
+            try {
+                // 延迟一点时间，合并多次更新
+                TimeUnit.MILLISECONDS.sleep(100);
+                updateIndexFile();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (IOException e) {
+                logger.warn("更新索引文件失败", e);
+            }
+        });
+    }
+
+    /**
+     * 更新索引文件（增量或全量）
+     */
+    private void updateIndexFile() throws IOException {
+        // 简单实现：全量重写索引文件
+        // 优化：可以只更新变化的行
+        
         StringBuilder sb = new StringBuilder();
-        sb.append("## 🧠 相关记忆 (从 MEMORY.md 检索)\n\n");
-        for (MemoryEntry mem : relevant) {
-            sb.append("- ").append(mem.getContent()).append("\n");
+        sb.append("# MEMORY Index\n\n");
+        sb.append("| ID | Title | Type | Importance | Confidence | Tags | Last Updated |\n");
+        sb.append("|----|-------|------|------------|------------|------|--------------|\n");
+        
+        for (MemoryEntryMeta meta : index.values()) {
+            sb.append(String.format("| %s | %s | %s | %.1f | %.1f | %s | %s |\n",
+                meta.id,
+                meta.title,
+                meta.type.name(),
+                meta.importance,
+                meta.confidence,
+                String.join(", ", meta.tags),
+                meta.lastUpdated != null ? meta.lastUpdated.toString().substring(0, 10) : "N/A"
+            ));
         }
-        sb.append("\n---\n\n");
-        return sb.toString();
+        
+        // 原子写入索引文件
+        Path tempIndex = indexPath.resolveSibling(indexPath.getFileName() + TEMP_SUFFIX);
+        Files.writeString(tempIndex, sb.toString());
+        Files.move(tempIndex, indexPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        
+        logger.trace("更新索引文件，共 {} 条", index.size());
     }
 
-    public List<MemoryEntry> getAllMemories() {
-        return new ArrayList<>(memories);
+    /**
+     * 关闭存储（清理资源）
+     */
+    public void close() {
+        try {
+            // 等待后台任务完成
+            backgroundExecutor.shutdown();
+            if (!backgroundExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                backgroundExecutor.shutdownNow();
+            }
+            
+            // 确保索引文件已更新
+            updateIndexFile();
+        } catch (Exception e) {
+            logger.error("关闭 MemoryStore 失败", e);
+        }
     }
 
-    public int getPendingCount() {
-        return pendingMemories.size();
+    // ========== Phase 2 占位方法（保持向后兼容） ==========
+    
+    /**
+     * 获取相关记忆作为提示（Phase 2 实现）
+     * 当前返回空字符串
+     */
+    public String getRelevantMemoriesAsPrompt(String context) {
+        // TODO: Phase 2 实现记忆检索和提示生成
+        return "";
     }
 
-    public int size() {
-        return memories.size();
+    /**
+     * 触发自动梦境（Phase 2 实现）
+     * 当前为空操作
+     */
+    public void triggerAutoDream() {
+        // TODO: Phase 2 实现后台记忆巩固
+    }
+
+    /**
+     * 添加待处理记忆（Phase 2 实现）
+     * 当前为空操作
+     */
+    public void addPendingMemory(String candidate) {
+        // TODO: Phase 2 实现待处理记忆队列
+        logger.debug("待处理记忆：{}", candidate);
     }
 }

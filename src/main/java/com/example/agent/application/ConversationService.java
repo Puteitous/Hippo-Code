@@ -15,7 +15,9 @@ import com.example.agent.llm.model.Usage;
 import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryStore;
+import com.example.agent.memory.MemoryToolSandbox;
 import com.example.agent.service.TokenEstimator;
+import java.nio.file.Paths;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionTranscript;
 import com.example.agent.tools.ToolArgumentSanitizer;
@@ -74,16 +76,19 @@ public class ConversationService {
 
     public ConversationService(TokenEstimator tokenEstimator, LlmClient llmClient, ContextConfig config) {
         if (tokenEstimator == null) {
-            throw new IllegalArgumentException("tokenEstimator不能为null");
+            throw new IllegalArgumentException("tokenEstimator 不能为 null");
         }
         if (llmClient == null) {
-            throw new IllegalArgumentException("llmClient不能为null");
+            throw new IllegalArgumentException("llmClient 不能为 null");
         }
         this.tokenEstimator = tokenEstimator;
         this.llmClient = llmClient;
         this.defaultConfig = config != null ? config : new ContextConfig();
         this.toolResultCompressor = new TruncateCompressor(tokenEstimator, this.defaultConfig.getToolResult());
-        this.globalMemoryStore = new MemoryStore(llmClient);
+        
+        // 创建沙箱并初始化 MemoryStore
+        MemoryToolSandbox sandbox = new MemoryToolSandbox(Paths.get(System.getProperty("user.dir"), ".hippo/memory"));
+        this.globalMemoryStore = new MemoryStore(sandbox);
     }
 
     public Conversation create(String systemPrompt) {
