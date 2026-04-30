@@ -96,6 +96,101 @@ class RepetitionPatternHookTest {
     }
 
     @Nested
+    @DisplayName("参数感重检测")
+    class ParameterAwareDetectionTests {
+
+        @Test
+        @DisplayName("list_directory 不同路径：不触发终止")
+        void listDirectoryDifferentPathsDoNotTriggerStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("list_directory{\"path\":\".\"}"),
+                List.of("list_directory{\"path\":\"src/main/java\"}"),
+                List.of("list_directory{\"path\":\"src/main/java/agent\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertFalse(result.isShouldStop(), "不同路径的 list_directory 不应该被拦截");
+        }
+
+        @Test
+        @DisplayName("list_directory 相同路径：触发终止")
+        void listDirectorySamePathTriggersStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("list_directory{\"path\":\"src\"}"),
+                List.of("list_directory{\"path\":\"src\"}"),
+                List.of("list_directory{\"path\":\"src\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertTrue(result.isShouldStop(), "相同路径的 list_directory 应该被拦截");
+        }
+
+        @Test
+        @DisplayName("glob 不同 pattern：不触发终止")
+        void globDifferentPatternsDoNotTriggerStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("glob{\"pattern\":\"**/*.java\"}"),
+                List.of("glob{\"pattern\":\"**/Config.java\"}"),
+                List.of("glob{\"pattern\":\"src/**/Config.java\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertFalse(result.isShouldStop(), "不同 pattern 的 glob 不应该被拦截");
+        }
+
+        @Test
+        @DisplayName("glob 相同 pattern：触发终止")
+        void globSamePatternTriggersStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("glob{\"pattern\":\"**/*.java\"}"),
+                List.of("glob{\"pattern\":\"**/*.java\"}"),
+                List.of("glob{\"pattern\":\"**/*.java\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertTrue(result.isShouldStop(), "相同 pattern 的 glob 应该被拦截");
+        }
+
+        @Test
+        @DisplayName("read_file 不同文件：不触发终止")
+        void readFileDifferentFilesDoNotTriggerStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("read_file{\"path\":\"Config.java\"}"),
+                List.of("read_file{\"path\":\"Service.java\"}"),
+                List.of("read_file{\"path\":\"Controller.java\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertFalse(result.isShouldStop(), "不同文件的 read_file 不应该被拦截");
+        }
+
+        @Test
+        @DisplayName("混合参数：部分相同不触发终止")
+        void mixedParametersDoNotTriggerStop() {
+            List<Message> messages = createMessagesWithToolCalls(
+                List.of("list_directory{\"path\":\"src\"}"),
+                List.of("list_directory{\"path\":\"test\"}"),
+                List.of("list_directory{\"path\":\"src\"}")
+            );
+
+            StopHook.StopHookContext context = createContext(messages, 3);
+            StopHook.StopHookResult result = hook.evaluate(context);
+
+            assertFalse(result.isShouldStop(), "参数交替出现不应该被拦截");
+        }
+    }
+
+    @Nested
     @DisplayName("多工具调用签名")
     class MultiToolCallTests {
 
