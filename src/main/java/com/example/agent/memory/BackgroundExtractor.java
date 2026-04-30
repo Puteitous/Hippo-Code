@@ -14,6 +14,8 @@ import com.example.agent.subagent.SubAgentTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -35,6 +37,7 @@ public class BackgroundExtractor {
     private final LlmClient llmClient;
     private final SubAgentManager subAgentManager;
     private final ConversationService conversationService;
+    private final ConsolidationGate consolidationGate;
 
     private final AtomicInteger toolCallCountSinceLastExtraction = new AtomicInteger(0);
     private final AtomicBoolean extractionInProgress = new AtomicBoolean(false);
@@ -171,6 +174,12 @@ public class BackgroundExtractor {
         this.llmClient = llmClient;
         this.subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
         this.conversationService = ServiceLocator.getOrNull(ConversationService.class);
+        
+        // 初始化三重门
+        java.nio.file.Path memoryDir = baseDir != null 
+            ? baseDir.resolve(".hippo/memory") 
+            : java.nio.file.Paths.get(".hippo/memory");
+        this.consolidationGate = new ConsolidationGate(memoryDir);
     }
 
     public void onMessageAdded(Message message, List<Message> fullConversation) {
@@ -361,11 +370,123 @@ public class BackgroundExtractor {
             updateLastSummarizedMessageIdIfSafe(fullConversation);
             pendingConversation.clear();
             logger.info("✅ Session Memory 提取完成，状态已更新");
+            
+            // 检查三重门，触发跨会话整理
+            checkAndTriggerConsolidation();
         } catch (Exception e) {
             logger.error("❌ 记忆提取完成回调异常", e);
         } finally {
             extractionInProgress.set(false);
         }
+    }
+
+    /**
+     * 检查三重门并触发跨会话整理
+     */
+    private void checkAndTriggerConsolidation() {
+        if (consolidationGate == null) {
+            return;
+        }
+
+        if (consolidationGate.shouldConsolidate()) {
+            logger.info("🧠 三重门触发，开始整理长期记忆...");
+            
+            // 异步提交整理任务，不阻塞主流程
+            EXECUTOR.submit(() -> {
+                long startTime = System.currentTimeMillis();
+                try {
+                    performCrossSessionConsolidation();
+                    consolidationGate.markConsolidationComplete();
+                    
+                    long duration = System.currentTimeMillis() - startTime;
+                    logger.info("✅ 长期记忆整理完成，耗时：{} ms", duration);
+                } catch (Exception e) {
+                    logger.error("❌ 长期记忆整理失败", e);
+                    consolidationGate.markConsolidationFailed();
+                }
+            });
+        }
+    }
+
+    /**
+     * 执行跨会话整理（占位实现，Phase 2 完善）
+     */
+    private void performCrossSessionConsolidation() {
+        // 扫描未处理的 session 文件
+        java.nio.file.Path sessionDir = memoryManager.getSessionDir();
+        if (sessionDir == null || !Files.exists(sessionDir)) {
+            logger.debug("会话目录不存在，跳过整理");
+            return;
+        }
+
+        try (var stream = Files.list(sessionDir)) {
+            List<java.nio.file.Path> unprocessedSessions = stream
+                .filter(Files::isRegularFile)
+                .filter(p -> p.getFileName().toString().startsWith("session-memory-"))
+                .filter(p -> p.getFileName().toString().endsWith(".md"))
+                .toList();
+
+            logger.info("发现 {} 个未处理的会话记忆", unprocessedSessions.size());
+
+            int consolidatedCount = 0;
+            for (java.nio.file.Path sessionFile : unprocessedSessions) {
+                try {
+                    // 读取并打印摘要（占位）
+                    String summary = readSessionSummary(sessionFile);
+                    logger.info("处理会话：{}", summary);
+
+                    // 标记为已处理
+                    markSessionAsProcessed(sessionFile);
+                    
+                    // 同步更新 ConsolidationGate 的状态
+                    String sessionId = extractSessionId(sessionFile);
+                    if (sessionId != null) {
+                        consolidationGate.markSessionAsProcessed(sessionId);
+                    }
+
+                    consolidatedCount++;
+                } catch (Exception e) {
+                    logger.warn("处理会话失败：{}", sessionFile, e);
+                }
+            }
+
+            logger.info("整理完成，共处理 {} 个会话", consolidatedCount);
+        } catch (IOException e) {
+            logger.error("扫描会话目录失败", e);
+        }
+    }
+
+    /**
+     * 读取会话摘要（占位实现）
+     */
+    private String readSessionSummary(java.nio.file.Path sessionFile) {
+        try {
+            String content = Files.readString(sessionFile);
+            // 简单提取前 100 个字符作为摘要
+            return content.length() > 100 ? content.substring(0, 100) + "..." : content;
+        } catch (IOException e) {
+            return "无法读取：" + sessionFile.getFileName();
+        }
+    }
+
+    /**
+     * 标记会话为已处理（占位实现）
+     */
+    private void markSessionAsProcessed(java.nio.file.Path sessionFile) {
+        // 占位：可以重命名文件、移动文件、或添加标记
+        logger.debug("标记会话为已处理：{}", sessionFile.getFileName());
+    }
+
+    /**
+     * 从文件名提取会话 ID
+     */
+    private String extractSessionId(java.nio.file.Path sessionFile) {
+        String fileName = sessionFile.getFileName().toString();
+        // 格式：session-memory-{sessionId}.md
+        if (fileName.startsWith("session-memory-") && fileName.endsWith(".md")) {
+            return fileName.substring(15, fileName.length() - 3);
+        }
+        return null;
     }
 
     private void performExtractionLegacy(List<Message> fullConversation) {

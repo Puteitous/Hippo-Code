@@ -116,6 +116,13 @@ public class SessionMemoryManager {
         return memoryFilePath;
     }
 
+    /**
+     * 获取会话目录（用于三重门扫描）
+     */
+    public Path getSessionDir() {
+        return memoryFilePath.getParent();
+    }
+
     private void ensureDirectory() {
         try {
             Files.createDirectories(memoryFilePath.getParent());
