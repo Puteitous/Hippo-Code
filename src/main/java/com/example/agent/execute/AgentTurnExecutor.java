@@ -133,6 +133,7 @@ public class AgentTurnExecutor {
             toolCallProcessor.processToolCallsConcurrently(toolCalls, conversationLogger);
 
             ui.println(ConsoleStyle.gray("  │"));
+            context.getToolRegistry().getBlockerChain().onTurnComplete();
             return AgentTurnResult.CONTINUE;
         } else {
             if ((assistantMessage.getContent() == null || assistantMessage.getContent().isBlank()) && contentBuilder.length() > 0) {

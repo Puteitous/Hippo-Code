@@ -30,6 +30,12 @@ public class ConversationLoop {
 
     private static final Logger logger = LoggerFactory.getLogger(ConversationLoop.class);
     private static final int MAX_EMPTY_RESPONSE_RETRIES = 3;
+    private static final int DEFAULT_MAX_TURNS_PER_SESSION = 50;
+
+    private final List<StopHook> stopHooks = List.of(
+        new RepetitionPatternHook(),
+        new TaskCompletionHook()
+    );
 
     private final AgentContext context;
     private final AgentTurnExecutor turnExecutor;
@@ -145,6 +151,12 @@ public class ConversationLoop {
 
         try {
             while (!turnExecutor.isInterrupted()) {
+                if (conversationRound > DEFAULT_MAX_TURNS_PER_SESSION) {
+                    ui.println(ConsoleStyle.red("  └─ 达到最大轮次限制 (" + DEFAULT_MAX_TURNS_PER_SESSION + ")，强制终止"));
+                    logger.warn("会话达到最大轮次限制: {}", DEFAULT_MAX_TURNS_PER_SESSION);
+                    break;
+                }
+
                 try {
                     AgentTurnResult result = turnExecutor.execute(conversationLogger, currentSessionId);
 
@@ -168,6 +180,20 @@ public class ConversationLoop {
                     if (result == null || result == AgentTurnResult.DONE || result == AgentTurnResult.ERROR) {
                         completed = (result == AgentTurnResult.DONE);
                         break;
+                    }
+
+                    StopHook.StopHookResult hookResult = evaluateStopHooks(result);
+                    if (hookResult.isShouldStop()) {
+                        ui.println(ConsoleStyle.gray("  │"));
+                        ui.println(ConsoleStyle.red("  └─ " + hookResult.getReason()));
+                        logger.warn("StopHook 触发强制终止: {}", hookResult.getReason());
+                        completed = false;
+                        break;
+                    } else if (hookResult.isWarning()) {
+                        ui.println(ConsoleStyle.gray("  │"));
+                        ui.println(ConsoleStyle.yellow("  ├─ " + hookResult.getReason()));
+                        ui.println(ConsoleStyle.gray("  │"));
+                        logger.warn("StopHook 发送停滞警告: {}", hookResult.getReason());
                     }
 
                 } catch (LlmException e) {
@@ -366,6 +392,22 @@ public class ConversationLoop {
         conversationLogger = new ConversationLogger(sessionId, logFile);
         
         logger.info("恢复会话: {}, {} 轮对话", sessionId, conversationRound);
+    }
+
+    private StopHook.StopHookResult evaluateStopHooks(AgentTurnResult result) {
+        List<Message> recentMessages = conversationService.getHistory(conversation);
+        StopHook.StopHookContext context = new StopHook.StopHookContext(
+            conversation, recentMessages, conversationRound, result
+        );
+
+        for (StopHook hook : stopHooks) {
+            StopHook.StopHookResult hookResult = hook.evaluate(context);
+            if (hookResult.isShouldStop()) {
+                return hookResult;
+            }
+        }
+
+        return StopHook.StopHookResult.continueExecution();
     }
 
     private int countUserMessages(List<Message> messages) {

@@ -2,6 +2,7 @@ package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.di.ServiceLocator;
+import com.example.agent.core.blocker.DuplicateToolCallBlocker;
 import com.example.agent.core.blocker.EditBeforeReadBlocker;
 import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
@@ -123,7 +124,9 @@ public final class CoreModule {
         FileOperationStateMachine stateMachine = new FileOperationStateMachine();
         EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();
         editBeforeReadBlocker.setStateMachine(stateMachine);
+        DuplicateToolCallBlocker duplicateBlocker = new DuplicateToolCallBlocker();
 
+        registry.getBlockerChain().add(duplicateBlocker);
         registry.getBlockerChain().add(stateMachine);
         registry.getBlockerChain().add(new com.example.agent.core.blocker.SchemaValidationBlocker(registry));
         registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
