@@ -63,6 +63,7 @@ public class AgentContext {
     private CodeIndex codeIndex;
     private McpServiceManager mcpServiceManager;
     private LspServiceManager lspServiceManager;
+    private com.example.agent.memory.MemoryRetriever memoryRetriever;
     private AgentMode currentMode = AgentMode.CHAT;
     private final java.util.List<java.util.function.Consumer<AgentMode>> modeChangeListeners = new java.util.ArrayList<>();
 
@@ -155,6 +156,13 @@ public class AgentContext {
         // 初始化 LSP 服务管理器
         this.lspServiceManager = new LspServiceManager(config, toolRegistry);
         this.lspServiceManager.initialize();
+
+        // 初始化记忆模块（带主备切换自动化）
+        Path memoryRoot = WorkspaceManager.getUserMemoryDir();
+        com.example.agent.memory.MemoryRetriever memoryRetriever = 
+            com.example.agent.memory.MemoryModule.initialize(config, memoryRoot);
+        this.memoryRetriever = memoryRetriever;
+        logger.info("记忆模块初始化完成 ✅");
 
 
 
@@ -318,6 +326,10 @@ public class AgentContext {
 
     public CodeIndex getCodeIndex() {
         return codeIndex;
+    }
+
+    public com.example.agent.memory.MemoryRetriever getMemoryRetriever() {
+        return memoryRetriever;
     }
 
     public ToolOrchestrator getToolOrchestrator() {

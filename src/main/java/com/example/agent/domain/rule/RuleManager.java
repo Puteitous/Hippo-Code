@@ -2,6 +2,7 @@ package com.example.agent.domain.rule;
 
 import com.example.agent.config.RuleConfig;
 import com.example.agent.config.UserResourceManager;
+import com.example.agent.memory.MemoryStore;
 import com.example.agent.service.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,9 +14,11 @@ import java.nio.file.Path;
 public class RuleManager {
 
     private static final Logger logger = LoggerFactory.getLogger(RuleManager.class);
+    private static final int MAX_INJECTED_INDEX_ENTRIES = 50;
 
     private final TokenEstimator tokenEstimator;
     private final RuleConfig config;
+    private MemoryStore memoryStore;
 
     private String hippoRulesContent;
     private String memoryMdContent;
@@ -34,6 +37,10 @@ public class RuleManager {
 
     public RuleManager(TokenEstimator tokenEstimator) {
         this(tokenEstimator, null);
+    }
+
+    public void setMemoryStore(MemoryStore memoryStore) {
+        this.memoryStore = memoryStore;
     }
 
     public void loadHippoRules() {
@@ -74,6 +81,18 @@ public class RuleManager {
         if (!memoryMdContent.isEmpty()) {
             enhanced.append("=== 项目上下文记忆 ===\n");
             enhanced.append(memoryMdContent).append("\n\n");
+        }
+
+        // 注入长期记忆索引（会话启动时一次注入）
+        if (memoryStore != null) {
+            String indexText = memoryStore.getIndexText(MAX_INJECTED_INDEX_ENTRIES);
+            if (!indexText.isEmpty()) {
+                enhanced.append("## 🧠 Long-term Memories\n");
+                enhanced.append("Below is a summary of key information from past sessions. ");
+                enhanced.append("Do not repeat this verbatim to the user unless asked.\n");
+                enhanced.append("```markdown\n").append(indexText).append("\n```\n\n");
+                logger.info("🧠 注入长期记忆索引，共 {} 条", MAX_INJECTED_INDEX_ENTRIES);
+            }
         }
 
         String result = enhanced.toString();

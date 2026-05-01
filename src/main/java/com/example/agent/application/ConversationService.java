@@ -170,7 +170,15 @@ public class ConversationService {
         );
         autoCompactTrigger.register();
 
-        MemoryRetriever memoryRetriever = new MemoryRetriever(globalMemoryStore);
+        // 使用 DI 容器中的 MemoryRetriever（由 MemoryModule 初始化）
+        MemoryRetriever memoryRetriever;
+        try {
+            memoryRetriever = com.example.agent.core.di.ServiceLocator.get(MemoryRetriever.class);
+        } catch (Exception e) {
+            // 降级：如果 DI 容器中没有，使用简化版本
+            logger.warn("DI 容器中未找到 MemoryRetriever，使用简化版本（无向量检索能力）");
+            memoryRetriever = new MemoryRetriever(globalMemoryStore);
+        }
 
         BackgroundExtractor backgroundExtractor = new BackgroundExtractor(
             sessionId,
