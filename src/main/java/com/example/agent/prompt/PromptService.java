@@ -26,7 +26,6 @@ public class PromptService {
 
     private final PromptLibrary library;
     private boolean enabled = true;
-    private boolean autoInjectExpert = true;
 
     public PromptService() {
         this.library = PromptLibrary.getInstance();
@@ -50,15 +49,7 @@ public class PromptService {
         this.enabled = enabled;
     }
 
-    public void setAutoInjectExpert(boolean autoInjectExpert) {
-        this.autoInjectExpert = autoInjectExpert;
-    }
-
     public boolean isEnabled() {
         return enabled;
-    }
-
-    public boolean isAutoInjectExpert() {
-        return autoInjectExpert;
     }
 }

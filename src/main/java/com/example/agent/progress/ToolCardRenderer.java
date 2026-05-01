@@ -47,11 +47,9 @@ public class ToolCardRenderer implements ToolExecutionCallback {
     }
 
     public void renderFooter(int totalTools, long totalTimeMs) {
-        ui.println(ConsoleStyle.gray("  │"));
         if (totalTools > 1) {
             ui.println(ConsoleStyle.gray("  │  ") + ConsoleStyle.dim(
                     String.format("并发执行 %d 个工具，总耗时 %d ms", totalTools, totalTimeMs)));
         }
-        ui.println(ConsoleStyle.gray("  │"));
     }
 }

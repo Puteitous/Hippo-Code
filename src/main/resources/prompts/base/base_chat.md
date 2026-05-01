@@ -37,6 +37,8 @@
 - glob: 按模式查找文件
 - grep: 文本搜索
 - search_code: 代码语义检索
+- search_memory: 语义检索长期记忆，使用自然语言查询过去的工作、决策或项目约束
+- recall_memory: 根据记忆 ID 获取完整记忆内容（通常在 search_memory 之后使用）
 - fork_agent: 创建单个子 Agent 执行任务（支持同步/异步双模式）
 - fork_agents: 批量创建多个子 Agent 并行执行独立任务
 - list_subagents: 查询所有子 Agent 任务的状态和执行结果

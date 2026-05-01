@@ -20,6 +20,20 @@ public class SpinnerManager {
     private int spinnerFrame = 0;
     private final AgentUi ui;
 
+    private int getTerminalWidth() {
+        if (ui != null) {
+            try {
+                com.example.agent.core.AgentContext context = ServiceLocator.get(com.example.agent.core.AgentContext.class);
+                if (context != null && context.getTerminal() != null) {
+                    return context.getTerminal().getWidth();
+                }
+            } catch (Exception e) {
+                // 忽略异常，使用默认值
+            }
+        }
+        return TERMINAL_WIDTH;
+    }
+
     private SpinnerManager() {
         this.ui = ServiceLocator.get(AgentUi.class);
     }
@@ -102,7 +116,8 @@ public class SpinnerManager {
     }
 
     private void renderCardLine(StringBuilder sb, ToolCallCard card, String spinner) {
-        sb.append(" ".repeat(TERMINAL_WIDTH));
+        int terminalWidth = getTerminalWidth();
+        sb.append(" ".repeat(terminalWidth));
         sb.append("\r");
 
         String prefix = String.format("[%d/%d]", card.getIndex() + 1, card.getTotal());

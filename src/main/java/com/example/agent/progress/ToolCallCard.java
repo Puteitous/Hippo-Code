@@ -59,6 +59,20 @@ public class ToolCallCard {
         complete("❌", ConsoleStyle::red, "失败", errorMessage);
     }
 
+    private int getTerminalWidth() {
+        if (ui != null) {
+            try {
+                com.example.agent.core.AgentContext context = ServiceLocator.get(com.example.agent.core.AgentContext.class);
+                if (context != null && context.getTerminal() != null) {
+                    return context.getTerminal().getWidth();
+                }
+            } catch (Exception e) {
+                // 忽略异常，使用默认值
+            }
+        }
+        return TERMINAL_WIDTH;
+    }
+
     private void complete(String marker, java.util.function.Function<String, String> color, String status, String detail) {
         spinnerManager.unregisterCard(this);
         running.set(false);
@@ -69,10 +83,11 @@ public class ToolCallCard {
 
         String prefix = String.format("[%d/%d]", index + 1, total);
         String displayDetail = truncate(detail, 60);
+        int terminalWidth = getTerminalWidth();
 
         StringBuilder line = new StringBuilder();
         line.append("\r");
-        line.append(" ".repeat(TERMINAL_WIDTH));
+        line.append(" ".repeat(terminalWidth));
         line.append("\r");
         line.append("  ");
         line.append(ConsoleStyle.gray(prefix));
