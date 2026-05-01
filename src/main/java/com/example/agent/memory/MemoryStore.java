@@ -51,6 +51,9 @@ public class MemoryStore {
     
     // 后台刷新线程（低负载时全量重建索引）
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
+    
+    // 期望的向量维度（用于维度一致性检查）
+    private Integer expectedEmbeddingDimension = null;
 
     /**
      * 记忆条目元数据（轻量级，用于索引）
@@ -104,6 +107,38 @@ public class MemoryStore {
             }
             return "Untitled";
         }
+
+        public MemoryEntry.MemoryType getType() {
+            return type;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public double getImportance() {
+            return importance;
+        }
+
+        public Instant getLastUpdated() {
+            return lastUpdated;
+        }
+
+        public Instant getLastAccessed() {
+            return lastAccessed;
+        }
+
+        public Set<String> getTags() {
+            return tags;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public double getConfidence() {
+            return confidence;
+        }
     }
 
     public MemoryStore(MemoryToolSandbox sandbox) {
@@ -112,6 +147,24 @@ public class MemoryStore {
         this.indexPath = memoryDir.resolve(INDEX_FILE);
         ensureDirectory();
         loadIndex();
+    }
+
+    /**
+     * 设置期望的向量维度
+     * 
+     * 在初始化时从 EmbeddingService.getDimension() 获取
+     * 用于在 searchSimilar 时做维度断言
+     */
+    public void setExpectedEmbeddingDimension(int dimension) {
+        this.expectedEmbeddingDimension = dimension;
+        logger.info("设置期望向量维度：{}", dimension);
+    }
+
+    /**
+     * 获取当前期望的向量维度
+     */
+    public Integer getExpectedEmbeddingDimension() {
+        return expectedEmbeddingDimension;
     }
 
     /**
@@ -380,6 +433,9 @@ public class MemoryStore {
             return null;
         }
         
+        // 沙箱权限检查（只读操作）
+        assertCanRead(id);
+        
         // 记录访问
         meta.lastAccessed = Instant.now();
         
@@ -428,6 +484,89 @@ public class MemoryStore {
     }
 
     /**
+     * 基于向量相似度搜索记忆
+     * 
+     * @param queryEmbedding 查询向量
+     * @param topK 返回最相似的 K 条记忆
+     * @param minScore 最低相似度阈值（0.0-1.0）
+     * @return 按相似度降序排列的记忆列表
+     */
+    public List<MemoryEntry> searchSimilar(float[] queryEmbedding, int topK, double minScore) {
+        if (queryEmbedding == null || index.isEmpty()) {
+            return List.of();
+        }
+
+        // 维度一致性检查
+        if (expectedEmbeddingDimension != null && queryEmbedding.length != expectedEmbeddingDimension) {
+            logger.warn("向量维度不匹配：期望 {} 维，实际 {} 维。可能发生了模型切换，建议触发全量重新向量化。",
+                expectedEmbeddingDimension, queryEmbedding.length);
+            // 返回空列表，让上层触发降级或重新向量化
+            return List.of();
+        }
+
+        List<ScoredEntry> scoredEntries = new ArrayList<>();
+
+        for (MemoryEntryMeta meta : index.values()) {
+            MemoryEntry entry = findById(meta.id);
+            if (entry != null && entry.hasEmbedding()) {
+                // 检查记忆向量维度是否匹配
+                if (expectedEmbeddingDimension != null && entry.getEmbedding().length != expectedEmbeddingDimension) {
+                    logger.debug("记忆 {} 的向量维度 ({}) 与期望维度 ({}) 不匹配，跳过",
+                        entry.getId(), entry.getEmbedding().length, expectedEmbeddingDimension);
+                    continue;
+                }
+                
+                double similarity = cosineSimilarity(queryEmbedding, entry.getEmbedding());
+                if (similarity >= minScore) {
+                    scoredEntries.add(new ScoredEntry(entry, similarity));
+                }
+            }
+        }
+
+        // 按相似度降序排序，取 topK
+        return scoredEntries.stream()
+            .sorted((a, b) -> Double.compare(b.score, a.score))
+            .limit(topK)
+            .map(se -> se.entry)
+            .toList();
+    }
+
+    /**
+     * 计算余弦相似度
+     */
+    private double cosineSimilarity(float[] vec1, float[] vec2) {
+        if (vec1.length != vec2.length) {
+            return 0.0;
+        }
+
+        double dotProduct = 0.0;
+        double norm1 = 0.0;
+        double norm2 = 0.0;
+
+        for (int i = 0; i < vec1.length; i++) {
+            dotProduct += vec1[i] * vec2[i];
+            norm1 += vec1[i] * vec1[i];
+            norm2 += vec2[i] * vec2[i];
+        }
+
+        if (norm1 == 0.0 || norm2 == 0.0) {
+            return 0.0;
+        }
+
+        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
+    }
+
+    private static class ScoredEntry {
+        final MemoryEntry entry;
+        final double score;
+
+        ScoredEntry(MemoryEntry entry, double score) {
+            this.entry = entry;
+            this.score = score;
+        }
+    }
+
+    /**
      * 判断元数据是否匹配查询
      */
     private boolean matchesQuery(MemoryEntryMeta meta, String query) {
@@ -436,9 +575,35 @@ public class MemoryStore {
         }
         
         String queryLower = query.toLowerCase();
-        return meta.title.toLowerCase().contains(queryLower) ||
-               meta.tags.stream().anyMatch(tag -> tag.toLowerCase().contains(queryLower)) ||
-               meta.type.name().toLowerCase().contains(queryLower);
+        String[] queryTokens = queryLower.split("[\\s\\p{Punct}]+");
+        
+        // 检查标题是否包含任何查询词
+        String titleLower = meta.title.toLowerCase();
+        for (String token : queryTokens) {
+            if (!token.isEmpty() && titleLower.contains(token)) {
+                return true;
+            }
+        }
+        
+        // 检查标签是否包含任何查询词
+        for (String tag : meta.tags) {
+            String tagLower = tag.toLowerCase();
+            for (String token : queryTokens) {
+                if (!token.isEmpty() && (tagLower.contains(token) || token.contains(tagLower))) {
+                    return true;
+                }
+            }
+        }
+        
+        // 检查类型
+        String typeLower = meta.type.name().toLowerCase();
+        for (String token : queryTokens) {
+            if (!token.isEmpty() && typeLower.contains(token)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -468,6 +633,56 @@ public class MemoryStore {
             logger.warn("读取索引文件失败", e);
             return "";
         }
+    }
+
+    /**
+     * 获取索引文本（限制条数，按重要性排序）
+     * 
+     * @param maxEntries 最大注入条数（防止上下文膨胀）
+     * @return 格式化后的索引文本
+     */
+    public String getIndexText(int maxEntries) {
+        if (index.isEmpty()) {
+            return "";
+        }
+
+        // 按重要性排序，取前 N 条
+        List<MemoryEntryMeta> sortedEntries = index.values().stream()
+            .sorted((a, b) -> Double.compare(b.importance, a.importance))
+            .limit(maxEntries)
+            .toList();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# 🧠 长期记忆索引\n\n");
+        sb.append("> 共 ").append(index.size()).append(" 条记忆，以下展示最重要的 ").append(sortedEntries.size()).append(" 条\n\n");
+
+        for (MemoryEntryMeta meta : sortedEntries) {
+            String title = meta.title != null ? meta.title : "Untitled";
+            String typeIcon = getTypeIcon(meta.type);
+            String importanceStars = getImportanceStars(meta.importance);
+            
+            sb.append(String.format("- %s [%s](%s.md) — 重要性 %s | 置信度 %.0f%%\n",
+                typeIcon, title, meta.id, importanceStars, meta.confidence * 100));
+        }
+
+        return sb.toString();
+    }
+
+    private String getTypeIcon(MemoryEntry.MemoryType type) {
+        return switch (type) {
+            case FACT -> "📌";
+            case USER_PREFERENCE -> "👤";
+            case TECHNICAL_CONTEXT -> "🔧";
+            case DECISION -> "✅";
+            case LESSON_LEARNED -> "💡";
+            case PROJECT_CONTEXT -> "📋";
+            default -> "📝";
+        };
+    }
+
+    private String getImportanceStars(double importance) {
+        int stars = (int) Math.round(importance * 5);
+        return "⭐".repeat(Math.max(1, Math.min(5, stars)));
     }
 
     /**
@@ -548,7 +763,25 @@ public class MemoryStore {
     }
 
     /**
-     * 沙箱权限检查
+     * 沙箱权限检查（只读操作）
+     */
+    private void assertCanRead(String id) {
+        if (sandbox == null) {
+            return;
+        }
+        
+        Path targetPath = getMemoryFilePath(id).toAbsolutePath();
+        Map<String, Object> input = new HashMap<>();
+        input.put("file_path", targetPath.toString());
+        
+        MemoryPermissionResult result = sandbox.check("read_file", input);
+        if (!result.isAllowed()) {
+            throw new MemoryAccessException("读取权限被拒绝：" + result.getMessage());
+        }
+    }
+
+    /**
+     * 沙箱权限检查（写操作）
      */
     private void assertCanWrite(String id) {
         if (sandbox == null) {
@@ -632,15 +865,113 @@ public class MemoryStore {
         }
     }
 
-    // ========== Phase 2 占位方法（保持向后兼容） ==========
+    // ========== Phase 3: 记忆注入实现 ==========
     
     /**
-     * 获取相关记忆作为提示（Phase 2 实现）
-     * 当前返回空字符串
+     * 获取相关记忆作为提示（每轮对话前预取）
+     * 
+     * @param context 当前对话上下文（用于关键词匹配）
+     * @return 格式化的相关记忆文本
      */
     public String getRelevantMemoriesAsPrompt(String context) {
-        // TODO: Phase 2 实现记忆检索和提示生成
-        return "";
+        if (context == null || context.isBlank() || index.isEmpty()) {
+            return "";
+        }
+
+        // 从上下文中提取关键词
+        Set<String> keywords = extractKeywords(context);
+        if (keywords.isEmpty()) {
+            return "";
+        }
+
+        // 搜索相关记忆（按相关性评分）
+        List<ScoredMemory> scoredMemories = index.values().stream()
+            .map(meta -> {
+                double score = calculateRelevanceScore(meta, keywords);
+                return new ScoredMemory(meta, score);
+            })
+            .filter(s -> s.score > RELEVANCE_THRESHOLD)
+            .sorted((a, b) -> Double.compare(b.score, a.score))
+            .limit(MAX_RELEVANT_MEMORIES)
+            .toList();
+
+        if (scoredMemories.isEmpty()) {
+            return "";
+        }
+
+        // 构建提示文本
+        StringBuilder sb = new StringBuilder();
+        sb.append("## 📚 相关历史记忆\n\n");
+        sb.append("以下是从过去会话中检索到的相关记忆，可能对你有帮助：\n\n");
+
+        for (ScoredMemory scored : scoredMemories) {
+            MemoryEntry entry = findById(scored.meta.id);
+            if (entry != null) {
+                sb.append(String.format("### %s (相关性: %.0f%%)\n", scored.meta.title, scored.score * 100));
+                sb.append(entry.getContent()).append("\n\n");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private static final int MAX_RELEVANT_MEMORIES = 5;
+    private static final double RELEVANCE_THRESHOLD = 0.15;
+
+    private Set<String> extractKeywords(String context) {
+        Set<String> keywords = new HashSet<>();
+        String[] words = context.toLowerCase().split("[\\s\\p{Punct}]+");
+        for (String word : words) {
+            if (word.length() > 2) {
+                keywords.add(word);
+            }
+        }
+        return keywords;
+    }
+
+    private double calculateRelevanceScore(MemoryEntryMeta meta, Set<String> keywords) {
+        double score = 0.0;
+
+        // 标题匹配（权重高）
+        if (meta.title != null) {
+            String titleLower = meta.title.toLowerCase();
+            for (String keyword : keywords) {
+                if (titleLower.contains(keyword)) {
+                    score += 0.3;
+                }
+            }
+        }
+
+        // 标签匹配（权重最高）
+        for (String tag : meta.tags) {
+            String tagLower = tag.toLowerCase();
+            for (String keyword : keywords) {
+                if (tagLower.contains(keyword) || keyword.contains(tagLower)) {
+                    score += 0.4;
+                }
+            }
+        }
+
+        // 类型权重
+        score += meta.importance * 0.2;
+
+        // 最近访问权重
+        long daysSinceAccess = java.time.Duration.between(meta.lastAccessed, Instant.now()).toDays();
+        if (daysSinceAccess < 7) {
+            score += 0.1;
+        }
+
+        return Math.min(1.0, score);
+    }
+
+    private static class ScoredMemory {
+        final MemoryEntryMeta meta;
+        final double score;
+
+        ScoredMemory(MemoryEntryMeta meta, double score) {
+            this.meta = meta;
+            this.score = score;
+        }
     }
 
     /**

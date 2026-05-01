@@ -25,6 +25,7 @@ public class MemoryEntry {
     private volatile Instant lastUpdated;
     private AtomicInteger accessCount;
     private String scope;
+    private float[] embedding;
 
     public MemoryEntry(String id, String content, MemoryType type, Set<String> tags, double importance) {
         this(id, content, type, tags, importance, 0.8);
@@ -46,12 +47,22 @@ public class MemoryEntry {
     }
 
     public enum MemoryType {
-        FACT,
-        USER_PREFERENCE,
-        TECHNICAL_CONTEXT,
-        DECISION,
-        LESSON_LEARNED,
-        PROJECT_CONTEXT
+        FACT("Fact"),
+        USER_PREFERENCE("User Preference"),
+        TECHNICAL_CONTEXT("Technical Context"),
+        DECISION("Decision"),
+        LESSON_LEARNED("Lesson Learned"),
+        PROJECT_CONTEXT("Project Context");
+
+        private final String displayName;
+
+        MemoryType(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
     }
 
     // Getters
@@ -96,6 +107,17 @@ public class MemoryEntry {
     public void setScope(String scope) {
         this.scope = scope;
         this.lastUpdated = Instant.now();
+    }
+
+    public float[] getEmbedding() { return embedding; }
+
+    public void setEmbedding(float[] embedding) {
+        this.embedding = embedding;
+        this.lastUpdated = Instant.now();
+    }
+
+    public boolean hasEmbedding() {
+        return embedding != null && embedding.length > 0;
     }
 
     /**
