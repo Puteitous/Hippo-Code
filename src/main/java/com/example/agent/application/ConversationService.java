@@ -12,10 +12,12 @@ import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
 import com.example.agent.llm.model.Usage;
-import com.example.agent.memory.BackgroundExtractor;
 import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryStore;
 import com.example.agent.memory.MemoryToolSandbox;
+import com.example.agent.memory.extraction.MemoryExtractor;
+import com.example.agent.memory.consolidation.MemoryConsolidator;
+import com.example.agent.memory.session.SessionMemoryExtractor;
 import com.example.agent.service.TokenEstimator;
 import java.nio.file.Paths;
 import com.example.agent.session.SessionData;
@@ -51,20 +53,23 @@ public class ConversationService {
         final BudgetWarningInjector warningInjector;
         final AutoCompactTrigger autoCompactTrigger;
         final MemoryRetriever memoryRetriever;
-        final BackgroundExtractor backgroundExtractor;
+        final SessionMemoryExtractor sessionMemoryExtractor;
+        final MemoryConsolidator memoryConsolidator;
         final SessionTranscript transcript;
         final SessionCompactionState compactionState;
 
         ConversationComponents(BudgetWarningInjector warningInjector,
                                 AutoCompactTrigger autoCompactTrigger,
                                 MemoryRetriever memoryRetriever,
-                                BackgroundExtractor backgroundExtractor,
+                                SessionMemoryExtractor sessionMemoryExtractor,
+                                MemoryConsolidator memoryConsolidator,
                                 SessionTranscript transcript,
                                 SessionCompactionState compactionState) {
             this.warningInjector = warningInjector;
             this.autoCompactTrigger = autoCompactTrigger;
             this.memoryRetriever = memoryRetriever;
-            this.backgroundExtractor = backgroundExtractor;
+            this.sessionMemoryExtractor = sessionMemoryExtractor;
+            this.memoryConsolidator = memoryConsolidator;
             this.transcript = transcript;
             this.compactionState = compactionState;
         }
@@ -180,23 +185,31 @@ public class ConversationService {
             memoryRetriever = new MemoryRetriever(globalMemoryStore);
         }
 
-        BackgroundExtractor backgroundExtractor = new BackgroundExtractor(
+        // 创建会话记忆提取器
+        SessionMemoryExtractor sessionMemoryExtractor = new SessionMemoryExtractor(
             sessionId,
             tokenEstimator,
             llmClient,
             compactionState
         );
 
+        // 创建后台记忆整合器
+        MemoryConsolidator memoryConsolidator = new MemoryConsolidator(llmClient);
+        
+        // 注册新会话到整合器
+        memoryConsolidator.registerSession(sessionId);
+
         autoCompactTrigger.setCompactionCompleteHook(messages -> {
             logger.debug("✅ 压缩完成钩子触发，调度低优先级记忆提取");
-            backgroundExtractor.requestExtractionAfterCompaction(messages);
+            sessionMemoryExtractor.requestExtractionAfterCompaction(messages);
         });
 
         componentRegistry.put(sessionId, new ConversationComponents(
             warningInjector,
             autoCompactTrigger,
             memoryRetriever,
-            backgroundExtractor,
+            sessionMemoryExtractor,
+            memoryConsolidator,
             transcript,
             compactionState
         ));
@@ -318,7 +331,7 @@ public class ConversationService {
         notifyMessageAdded(message);
 
         if (components != null) {
-            components.backgroundExtractor.onMessageAdded(message, conversation.getMessages());
+            components.sessionMemoryExtractor.onMessageAdded(message, conversation.getMessages());
             
             if (message.getContent() != null && conversation.shouldMarkForMemory(message)) {
                 components.memoryRetriever.markForMemory(message.getContent());

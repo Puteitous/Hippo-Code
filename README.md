@@ -178,9 +178,16 @@ hippo-code/
     │   │   ├── tools/                    # LSP 导航工具
     │   │   └── LspServiceManager.java # LSP 生命周期
     │   ├── memory/                     # 长期记忆
-    │   │   ├── BackgroundExtractor.java   # 后台提取
-    │   │   ├── MemoryRetriever.java      # 记忆检索
-    │   │   └── SessionMemoryManager.java # 会话记忆
+    │   │   ├── session/                # 会话记忆模块
+    │   │   │   ├── SessionMemoryManager.java # 会话记忆管理器
+    │   │   │   └── SessionMemoryExtractor.java # 会话记忆提取器
+    │   │   ├── extraction/             # 实时提取模块
+    │   │   │   ├── ExtractionTrigger.java # 提取触发器
+    │   │   │   └── MemoryExtractor.java # 长期记忆提取器
+    │   │   ├── consolidation/          # 后台整合模块
+    │   │   │   ├── ConsolidationGate.java # 三重门触发器
+    │   │   │   └── MemoryConsolidator.java # 后台整合器
+    │   │   └── MemoryRetriever.java    # 记忆检索
     │   ├── context/                      # 上下文管理
     │   │   ├── compressor/               # 5 种压缩策略
     │   │   ├── budget/                   # Token 预算

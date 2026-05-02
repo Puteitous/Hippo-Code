@@ -1,8 +1,11 @@
 package com.example.agent.memory;
 
+import com.example.agent.context.SessionCompactionState;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.session.SessionMemoryExtractor;
+import com.example.agent.memory.session.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +36,7 @@ class SessionMemoryEdgeCasesTest {
 
     private LlmClient llmClient;
     private TokenEstimator tokenEstimator;
-    private BackgroundExtractor extractor;
+    private SessionMemoryExtractor extractor;
     private SessionMemoryManager memoryManager;
     private String testSessionId;
     private Path memoryFilePath;
@@ -46,7 +49,7 @@ class SessionMemoryEdgeCasesTest {
         memoryManager = new SessionMemoryManager(testSessionId, tempDir);
         memoryFilePath = memoryManager.getMemoryFilePath();
         
-        extractor = new BackgroundExtractor(testSessionId, tokenEstimator, llmClient, null, tempDir);
+        extractor = new SessionMemoryExtractor(testSessionId, tokenEstimator, llmClient, new SessionCompactionState(), tempDir);
         
         memoryManager.initializeIfNotExists();
         when(tokenEstimator.estimate(anyList())).thenReturn(5000);
@@ -63,7 +66,7 @@ class SessionMemoryEdgeCasesTest {
         @Test
         @DisplayName("0 条消息 - 静默跳过，不启动提取")
         void testZeroMessages() throws Exception {
-            Field lockField = BackgroundExtractor.class.getDeclaredField("extractionInProgress");
+            Field lockField = SessionMemoryExtractor.class.getDeclaredField("extractionInProgress");
             lockField.setAccessible(true);
             AtomicBoolean lock = (AtomicBoolean) lockField.get(extractor);
             
@@ -77,7 +80,7 @@ class SessionMemoryEdgeCasesTest {
         @Test
         @DisplayName("1 条消息 - 不满足提取阈值，不启动")
         void testSingleMessage() throws Exception {
-            Field lockField = BackgroundExtractor.class.getDeclaredField("extractionInProgress");
+            Field lockField = SessionMemoryExtractor.class.getDeclaredField("extractionInProgress");
             lockField.setAccessible(true);
             AtomicBoolean lock = (AtomicBoolean) lockField.get(extractor);
             
@@ -154,7 +157,7 @@ class SessionMemoryEdgeCasesTest {
         @Test
         @DisplayName("提取进行中触发新提取 - 静默丢弃")
         void testExtractionInProgressNewRequestDropped() throws Exception {
-            Field lockField = BackgroundExtractor.class.getDeclaredField("extractionInProgress");
+            Field lockField = SessionMemoryExtractor.class.getDeclaredField("extractionInProgress");
             lockField.setAccessible(true);
             AtomicBoolean lock = (AtomicBoolean) lockField.get(extractor);
             lock.set(true);

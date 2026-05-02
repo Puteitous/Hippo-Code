@@ -1,8 +1,11 @@
 package com.example.agent.memory;
 
+import com.example.agent.context.SessionCompactionState;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.model.Message;
+import com.example.agent.memory.session.SessionMemoryExtractor;
+import com.example.agent.memory.session.SessionMemoryManager;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.tools.ToolArgumentSanitizer;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,7 +34,7 @@ class SessionMemoryFailureInjectionTest {
 
     private LlmClient llmClient;
     private TokenEstimator tokenEstimator;
-    private BackgroundExtractor extractor;
+    private SessionMemoryExtractor extractor;
     private SessionMemoryManager memoryManager;
     private String testSessionId;
     private Path memoryFilePath;
@@ -49,7 +52,7 @@ class SessionMemoryFailureInjectionTest {
         memoryManager.initializeIfNotExists();
         when(tokenEstimator.estimate(anyList())).thenReturn(5000);
         
-        extractor = new BackgroundExtractor(testSessionId, tokenEstimator, llmClient, null, tempDir);
+        extractor = new SessionMemoryExtractor(testSessionId, tokenEstimator, llmClient, new SessionCompactionState(), tempDir);
     }
 
     @AfterEach
