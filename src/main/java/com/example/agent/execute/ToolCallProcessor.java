@@ -102,6 +102,8 @@ public class ToolCallProcessor {
 
         concurrentToolExecutor.removeCallback(renderer);
 
+        com.example.agent.progress.SpinnerManager.getInstance().clear();
+
         long totalTime = System.currentTimeMillis() - startTime;
         
         renderer.renderFooter(validToolCalls.size(), totalTime);

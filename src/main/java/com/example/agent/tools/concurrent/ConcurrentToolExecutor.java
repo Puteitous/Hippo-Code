@@ -48,10 +48,10 @@ public class ConcurrentToolExecutor {
         callbacks.remove(callback);
     }
 
-    private void notifyToolStart(ToolCall toolCall, int index, int total) {
+    private void notifyToolStart(ToolCall toolCall, int index, int total, boolean runInBackground) {
         for (ToolExecutionCallback callback : callbacks) {
             try {
-                callback.onToolStart(toolCall, index, total);
+                callback.onToolStart(toolCall, index, total, runInBackground);
             } catch (Exception e) {
                 logger.warn("回调执行异常: {}", e.getMessage());
             }
@@ -126,12 +126,31 @@ public class ConcurrentToolExecutor {
             for (Map.Entry<Future<ToolExecutionResult>, Integer> entry : futureIndexMap.entrySet()) {
                 try {
                     results.add(entry.getKey().get());
-                } catch (Exception e) {
+                } catch (java.util.concurrent.ExecutionException e) {
+                    if (e.getCause() instanceof InterruptedException) {
+                        executor.shutdownNow();
+                        Thread.currentThread().interrupt();
+                        results.add(ToolExecutionResult.builder()
+                                .index(entry.getValue())
+                                .success(false)
+                                .errorMessage("工具执行被中断")
+                                .build());
+                        break;
+                    }
                     results.add(ToolExecutionResult.builder()
                             .index(entry.getValue())
                             .success(false)
                             .errorMessage("执行失败: " + e.getMessage())
                             .build());
+                } catch (InterruptedException e) {
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                    results.add(ToolExecutionResult.builder()
+                            .index(entry.getValue())
+                            .success(false)
+                            .errorMessage("工具执行被中断")
+                            .build());
+                    break;
                 }
             }
         }
@@ -165,9 +184,8 @@ public class ConcurrentToolExecutor {
         }
 
         ToolExecutor executor = toolRegistry.getExecutor(toolName);
-        if (executor != null && executor.shouldRunInBackground()) {
-            notifyToolStart(toolCall, index, total);
-        }
+        boolean runInBackground = executor != null && executor.shouldRunInBackground();
+        notifyToolStart(toolCall, index, total, runInBackground);
         long startTime = System.currentTimeMillis();
         
         ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
@@ -227,9 +245,7 @@ public class ConcurrentToolExecutor {
                     .executionTimeMs(executionTime)
                     .build();
                     
-            if (executor != null && executor.shouldRunInBackground()) {
-                notifyToolComplete(toolCall, execResult, index, total);
-            }
+            notifyToolComplete(toolCall, execResult, index, total);
             return execResult;
                     
         } catch (ToolExecutionException e) {
@@ -243,9 +259,7 @@ public class ConcurrentToolExecutor {
                     .errorMessage(e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
-            if (executor != null && executor.shouldRunInBackground()) {
-                notifyToolComplete(toolCall, execResult, index, total);
-            }
+            notifyToolComplete(toolCall, execResult, index, total);
             return execResult;
         } catch (Exception e) {
             long executionTime = System.currentTimeMillis() - startTime;
@@ -258,9 +272,7 @@ public class ConcurrentToolExecutor {
                     .errorMessage("参数解析失败: " + e.getMessage())
                     .executionTimeMs(executionTime)
                     .build();
-            if (executor != null && executor.shouldRunInBackground()) {
-                notifyToolComplete(toolCall, execResult, index, total);
-            }
+            notifyToolComplete(toolCall, execResult, index, total);
             return execResult;
         } finally {
             Thread.currentThread().setContextClassLoader(contextClassLoader);

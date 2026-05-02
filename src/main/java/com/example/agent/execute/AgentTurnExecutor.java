@@ -132,7 +132,12 @@ public class AgentTurnExecutor {
 
             toolCallProcessor.processToolCallsConcurrently(toolCalls, conversationLogger);
 
-            ui.println(ConsoleStyle.gray("  │"));
+            if (interrupted) {
+                ui.println();
+                ui.println(ConsoleStyle.yellow("  └─ 工具执行已中断"));
+                throw new UserInterruptException("User interrupted");
+            }
+
             context.getToolRegistry().getBlockerChain().onTurnComplete();
             return AgentTurnResult.CONTINUE;
         } else {

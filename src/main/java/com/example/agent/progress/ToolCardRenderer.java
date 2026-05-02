@@ -18,9 +18,9 @@ public class ToolCardRenderer implements ToolExecutionCallback {
     }
 
     @Override
-    public void onToolStart(ToolCall toolCall, int index, int total) {
+    public void onToolStart(ToolCall toolCall, int index, int total, boolean runInBackground) {
         String toolName = toolCall.getFunction() != null ? toolCall.getFunction().getName() : "unknown";
-        ToolCallCard card = new ToolCallCard(toolName, toolCall.getId(), index, total);
+        ToolCallCard card = new ToolCallCard(toolName, toolCall.getId(), index, total, runInBackground);
         cards.put(toolCall.getId(), card);
         card.start();
     }

@@ -83,7 +83,16 @@ public class SearchMemoryTool implements ToolExecutor {
         topK = Math.min(Math.max(topK, 1), 20);
 
         try {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new ToolExecutionException("工具执行被中断");
+            }
+
             float[] queryEmbedding = embeddingService.embed(query);
+
+            if (Thread.currentThread().isInterrupted()) {
+                throw new ToolExecutionException("工具执行被中断");
+            }
+
             List<MemoryEntry> results = memoryStore.searchSimilar(queryEmbedding, topK, DEFAULT_MIN_SCORE);
 
             if (results.isEmpty()) {
@@ -95,6 +104,10 @@ public class SearchMemoryTool implements ToolExecutor {
             sb.append(String.format("Found %d relevant memories for query: \"%s\"\n\n", results.size(), query));
 
             for (int i = 0; i < results.size(); i++) {
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new ToolExecutionException("工具执行被中断");
+                }
+
                 MemoryEntry entry = results.get(i);
                 String title = extractTitle(entry.getContent());
                 String summary = FrontmatterParser.generateHook(entry.getContent());
@@ -108,6 +121,8 @@ public class SearchMemoryTool implements ToolExecutor {
             logger.info("记忆检索：query=\"{}\", 找到 {} 条结果", query, results.size());
             return sb.toString();
 
+        } catch (ToolExecutionException e) {
+            throw e;
         } catch (Exception e) {
             logger.error("记忆检索失败", e);
             return "Error during memory search: " + e.getMessage();

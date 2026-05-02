@@ -8,24 +8,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ToolCallCard {
 
-    private static final int TERMINAL_WIDTH = 80;
-
     private final String toolName;
     private final String toolCallId;
     private final int index;
     private final int total;
+    private final boolean runInBackground;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile String currentStatus = "";
     private volatile long startTime;
-    private final AgentUi ui;
-    private final SpinnerManager spinnerManager = SpinnerManager.getInstance();
+    private volatile String completionMarker = "";
+    private volatile String completionStatus = "";
+    private volatile String completionDetail = "";
+    private volatile boolean completed = false;
 
-    public ToolCallCard(String toolName, String toolCallId, int index, int total) {
+    public ToolCallCard(String toolName, String toolCallId, int index, int total, boolean runInBackground) {
         this.toolName = toolName;
         this.toolCallId = toolCallId;
         this.index = index;
         this.total = total;
-        this.ui = ServiceLocator.get(AgentUi.class);
+        this.runInBackground = runInBackground;
     }
 
     public void start() {
@@ -38,13 +39,9 @@ public class ToolCallCard {
         startTime = System.currentTimeMillis();
         currentStatus = "执行中...";
 
-        spinnerManager.registerCard(this);
-    }
-
-    public void pauseSpinner() {
-    }
-
-    public void resumeSpinner() {
+        if (runInBackground) {
+            SpinnerManager.getInstance().registerCard(this);
+        }
     }
 
     public void updateStatus(String status) {
@@ -52,59 +49,43 @@ public class ToolCallCard {
     }
 
     public void completeSuccess(String resultPreview) {
-        complete("✅", ConsoleStyle::green, "成功", resultPreview);
+        complete("✅", "成功", resultPreview);
     }
 
     public void completeFailure(String errorMessage) {
-        complete("❌", ConsoleStyle::red, "失败", errorMessage);
+        complete("❌", "失败", errorMessage);
     }
 
-    private int getTerminalWidth() {
-        if (ui != null) {
-            try {
-                com.example.agent.core.AgentContext context = ServiceLocator.get(com.example.agent.core.AgentContext.class);
-                if (context != null && context.getTerminal() != null) {
-                    return context.getTerminal().getWidth();
-                }
-            } catch (Exception e) {
-                // 忽略异常，使用默认值
-            }
-        }
-        return TERMINAL_WIDTH;
-    }
-
-    private void complete(String marker, java.util.function.Function<String, String> color, String status, String detail) {
-        spinnerManager.unregisterCard(this);
+    private void complete(String marker, String status, String detail) {
         running.set(false);
+        completed = true;
+        completionMarker = marker;
+        completionStatus = status;
+        completionDetail = truncate(detail, 60);
 
-        if (ui == null) {
-            return;
+        if (runInBackground) {
+            SpinnerManager.getInstance().unregisterCard(this);
         }
+    }
 
-        String prefix = String.format("[%d/%d]", index + 1, total);
-        String displayDetail = truncate(detail, 60);
-        int terminalWidth = getTerminalWidth();
+    public boolean isRunning() {
+        return running.get();
+    }
 
-        StringBuilder line = new StringBuilder();
-        line.append("\r");
-        line.append(" ".repeat(terminalWidth));
-        line.append("\r");
-        line.append("  ");
-        line.append(ConsoleStyle.gray(prefix));
-        line.append(" ");
-        line.append(marker);
-        line.append(" ");
-        line.append(ConsoleStyle.boldYellow(toolName));
-        line.append(" ");
-        line.append(color.apply(status));
-        line.append(" ");
-        line.append(ConsoleStyle.gray(getElapsedTime()));
+    public boolean isCompleted() {
+        return completed;
+    }
 
-        ui.println(line.toString());
+    public String getCompletionMarker() {
+        return completionMarker;
+    }
 
-        if (displayDetail != null && !displayDetail.isEmpty()) {
-            ui.println("       └─ " + ConsoleStyle.dim(displayDetail));
-        }
+    public String getCompletionStatus() {
+        return completionStatus;
+    }
+
+    public String getCompletionDetail() {
+        return completionDetail;
     }
 
     public String getToolName() {
@@ -129,22 +110,6 @@ public class ToolCallCard {
             return elapsed + "ms";
         }
         return String.format("%.1fs", elapsed / 1000.0);
-    }
-
-    public String gray(String text) {
-        return ConsoleStyle.gray(text);
-    }
-
-    public String cyan(String text) {
-        return ConsoleStyle.cyan(text);
-    }
-
-    public String boldYellow(String text) {
-        return ConsoleStyle.boldYellow(text);
-    }
-
-    public String dim(String text) {
-        return ConsoleStyle.dim(text);
     }
 
     private String truncate(String text, int maxLength) {
