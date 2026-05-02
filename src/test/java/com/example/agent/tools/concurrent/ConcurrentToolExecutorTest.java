@@ -458,6 +458,86 @@ class ConcurrentToolExecutorTest {
         }
     }
 
+    @Nested
+    @DisplayName("中断处理测试")
+    class InterruptHandlingTests {
+
+        @Test
+        @DisplayName("工具执行期间响应中断")
+        void testToolExecutionRespondsToInterrupt() throws Exception {
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch interruptLatch = new CountDownLatch(1);
+
+            toolRegistry.register(new MockToolExecutor("slow_tool", (args) -> {
+                startLatch.countDown();
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    interruptLatch.countDown();
+                    throw new ToolExecutionException("工具执行被中断");
+                }
+                return "should not reach here";
+            }));
+
+            toolRegistry.register(new MockToolExecutor("fast_tool", "fast_result"));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "slow_tool", "{}"));
+            toolCalls.add(createToolCall("call-2", "fast_tool", "{}"));
+
+            Thread executorThread = new Thread(() -> {
+                executor.executeConcurrently(toolCalls);
+            });
+            executorThread.start();
+
+            assertTrue(startLatch.await(2, TimeUnit.SECONDS), "工具应该开始执行");
+
+            executorThread.interrupt();
+
+            assertTrue(interruptLatch.await(2, TimeUnit.SECONDS), "工具应该响应中断");
+
+            executorThread.join(2000);
+            assertFalse(executorThread.isAlive(), "执行线程应该已结束");
+        }
+
+        @Test
+        @DisplayName("单个后台工具执行响应中断")
+        void testSingleBackgroundToolInterrupt() throws Exception {
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch interruptLatch = new CountDownLatch(1);
+
+            toolRegistry.register(new MockToolExecutor("slow_tool", (args) -> {
+                startLatch.countDown();
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    interruptLatch.countDown();
+                    throw new ToolExecutionException("工具执行被中断");
+                }
+                return "should not reach here";
+            }));
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            toolCalls.add(createToolCall("call-1", "slow_tool", "{}"));
+
+            Thread executorThread = new Thread(() -> {
+                executor.executeConcurrently(toolCalls);
+            });
+            executorThread.start();
+
+            assertTrue(startLatch.await(2, TimeUnit.SECONDS), "工具应该开始执行");
+
+            executorThread.interrupt();
+
+            assertTrue(interruptLatch.await(2, TimeUnit.SECONDS), "工具应该响应中断");
+
+            executorThread.join(2000);
+            assertFalse(executorThread.isAlive(), "执行线程应该已结束");
+        }
+    }
+
     private interface ToolExecutorFunction {
         String execute(JsonNode args) throws ToolExecutionException;
     }
