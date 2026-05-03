@@ -64,6 +64,12 @@ class AgentModeTest {
         }
 
         @Test
+        @DisplayName("CHAT 模式允许 forget_memory 工具")
+        void testChatAllowsForgetMemory() {
+            assertTrue(AgentMode.CHAT.isToolAllowed("forget_memory"));
+        }
+
+        @Test
         @DisplayName("CHAT 模式不允许 write_file 工具")
         void testChatDeniesWriteFile() {
             assertFalse(AgentMode.CHAT.isToolAllowed("write_file"));
@@ -101,7 +107,7 @@ class AgentModeTest {
         @Test
         @DisplayName("CODING 模式显示名称正确")
         void testCodingDisplayName() {
-            assertEquals("编程模式", AgentMode.CODING.getDisplayName());
+            assertEquals("构建模式", AgentMode.CODING.getDisplayName());
         }
 
         @Test
@@ -147,6 +153,12 @@ class AgentModeTest {
         }
 
         @Test
+        @DisplayName("CODING 模式允许 forget_memory 工具")
+        void testCodingAllowsForgetMemory() {
+            assertTrue(AgentMode.CODING.isToolAllowed("forget_memory"));
+        }
+
+        @Test
         @DisplayName("CODING 模式允许所有 CHAT 模式的工具")
         void testCodingAllowsAllChatTools() {
             Set<String> chatTools = AgentMode.CHAT.getAllowedTools();
@@ -170,19 +182,19 @@ class AgentModeTest {
         @Test
         @DisplayName("CODING 模式完整显示名称正确")
         void testCodingFullDisplayName() {
-            assertEquals("🛠️ 编程模式", AgentMode.CODING.getFullDisplayName());
+            assertEquals("🛠️ 构建模式", AgentMode.CODING.getFullDisplayName());
         }
 
         @Test
         @DisplayName("CHAT 模式允许的工具数量正确")
         void testChatAllowedToolsCount() {
-            assertEquals(6, AgentMode.CHAT.getAllowedTools().size());
+            assertEquals(17, AgentMode.CHAT.getAllowedTools().size());
         }
 
         @Test
         @DisplayName("CODING 模式允许的工具数量正确")
         void testCodingAllowedToolsCount() {
-            assertEquals(9, AgentMode.CODING.getAllowedTools().size());
+            assertEquals(22, AgentMode.CODING.getAllowedTools().size());
         }
 
         @Test

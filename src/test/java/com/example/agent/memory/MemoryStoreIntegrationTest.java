@@ -146,13 +146,12 @@ class MemoryStoreIntegrationTest {
         }
 
         @Test
-        @DisplayName("并发更新同一文件 - 验证版本计数")
+        @DisplayName("并发更新同一文件 - 验证内容更新")
         void testConcurrentUpdatesWithVersionCheck() throws InterruptedException {
             store = new MemoryStore(sandbox);
             
-            // 创建一个带版本计数的条目
+            // 创建一个条目
             MemoryEntry entry = createTestEntry("versioned-entry");
-            entry.setImportance(0.5); // 用 importance 字段模拟版本计数
             store.add(entry);
             
             int threadCount = 10;
@@ -160,13 +159,14 @@ class MemoryStoreIntegrationTest {
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
             java.util.concurrent.atomic.AtomicInteger updateCounter = new java.util.concurrent.atomic.AtomicInteger(0);
             
-            // 并发更新：每个线程增加 importance（模拟版本号）
+            // 并发更新：每个线程追加内容
             for (int i = 0; i < threadCount; i++) {
+                final int threadId = i;
                 executor.submit(() -> {
                     try {
                         store.update("versioned-entry", e -> {
-                            double current = e.getImportance();
-                            e.setImportance(current + 0.1);
+                            String currentContent = e.getContent();
+                            e.setContent(currentContent + "\nUpdate from thread " + threadId);
                             updateCounter.incrementAndGet();
                         });
                         doneLatch.countDown();
@@ -185,10 +185,12 @@ class MemoryStoreIntegrationTest {
             MemoryEntry finalEntry = store.findById("versioned-entry");
             assertNotNull(finalEntry);
             
-            // 由于每次更新都是 +0.1，10 次后应该是 0.5 + 10*0.1 = 1.5
-            // 但因为有锁保护，每次更新都是原子的，所以最终值应该是正确的
-            assertEquals(1.5, finalEntry.getImportance(), 0.001, 
-                "所有更新应该都被正确应用，没有丢失更新");
+            // 验证内容包含所有线程的更新
+            String content = finalEntry.getContent();
+            for (int i = 0; i < threadCount; i++) {
+                assertTrue(content.contains("Update from thread " + i), 
+                    "应该包含线程 " + i + " 的更新");
+            }
         }
     }
 
@@ -284,26 +286,25 @@ class MemoryStoreIntegrationTest {
         }
 
         @Test
-        @DisplayName("更新条目后索引正确更新")
+        @DisplayName("索引一致性在更新后保持一致")
         void testIndexConsistencyAfterUpdate() {
             store = new MemoryStore(sandbox);
             
             // 添加条目
             MemoryEntry entry = createTestEntry("update-index-test");
-            entry.setImportance(0.5);
             store.add(entry);
             
             waitForIndexUpdate();
             
-            // 更新重要性
-            store.update("update-index-test", e -> e.setImportance(0.9));
+            // 更新内容
+            store.update("update-index-test", e -> e.setContent("Updated content"));
             
             waitForIndexUpdate();
             
-            // 验证索引中的重要性已更新
+            // 验证索引中的条目仍然存在
             MemoryStore.MemoryEntryMeta meta = store.findMetaById("update-index-test");
             assertNotNull(meta);
-            assertEquals(0.9, meta.importance, 0.001);
+            assertEquals("update-index-test", meta.id);
         }
 
         @Test
@@ -461,11 +462,9 @@ class MemoryStoreIntegrationTest {
             // 添加多个相关条目
             MemoryEntry entry1 = createTestEntry("spring-core");
             entry1.setTags(Set.of("spring", "java"));
-            entry1.setImportance(0.9);
             
             MemoryEntry entry2 = createTestEntry("spring-mvc");
             entry2.setTags(Set.of("spring", "web"));
-            entry2.setImportance(0.7);
             
             store.add(entry1);
             store.add(entry2);
@@ -476,8 +475,9 @@ class MemoryStoreIntegrationTest {
             List<MemoryEntry> results = store.search("spring");
             
             assertEquals(2, results.size());
-            // 高重要性的应该排在前面
-            assertEquals("spring-core", results.get(0).getId());
+            // 验证两个条目都被找到
+            assertTrue(results.stream().anyMatch(e -> e.getId().equals("spring-core")));
+            assertTrue(results.stream().anyMatch(e -> e.getId().equals("spring-mvc")));
         }
     }
 
@@ -490,9 +490,8 @@ class MemoryStoreIntegrationTest {
         return new MemoryEntry(
             id,
             "# Test content\n\nThis is test content for " + id,
-            MemoryEntry.MemoryType.FACT,
-            tags,
-            0.8
+            MemoryEntry.MemoryType.USER_PREFERENCE,
+            tags
         );
     }
 

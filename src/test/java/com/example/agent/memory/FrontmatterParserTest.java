@@ -27,8 +27,6 @@ class FrontmatterParserTest {
             ---
             id: 550e8400-e29b-41d4-a716-446655440000
             type: USER_PREFERENCE
-            confidence: 0.9
-            importance: 0.8
             scope: project
             tags: java, yaml, configuration
             created_at: 2024-01-15T10:30:00Z
@@ -45,8 +43,6 @@ class FrontmatterParserTest {
 
         assertEquals("550e8400-e29b-41d4-a716-446655440000", frontmatter.get("id"));
         assertEquals("USER_PREFERENCE", frontmatter.get("type"));
-        assertEquals(0.9, (Double) frontmatter.get("confidence"), 0.001);
-        assertEquals(0.8, (Double) frontmatter.get("importance"), 0.001);
         assertEquals("project", frontmatter.get("scope"));
         assertEquals(5, ((Number) frontmatter.get("access_count")).intValue());
     }
@@ -81,9 +77,7 @@ class FrontmatterParserTest {
             "550e8400-e29b-41d4-a716-446655440000",
             "# Test Content",
             MemoryEntry.MemoryType.USER_PREFERENCE,
-            tags,
-            0.8,
-            0.9
+            tags
         );
 
         String frontmatter = FrontmatterParser.generate(entry);
@@ -91,8 +85,6 @@ class FrontmatterParserTest {
         assertTrue(frontmatter.startsWith("---"));
         assertTrue(frontmatter.contains("id: 550e8400-e29b-41d4-a716-446655440000"));
         assertTrue(frontmatter.contains("type: USER_PREFERENCE"));
-        assertTrue(frontmatter.contains("confidence: 0.9"));
-        assertTrue(frontmatter.contains("importance: 0.8"));
         assertTrue(frontmatter.contains("scope: project"));
         assertTrue(frontmatter.contains("tags: java, yaml") || frontmatter.contains("tags: yaml, java"));
     }
@@ -102,9 +94,8 @@ class FrontmatterParserTest {
         MemoryEntry entry = new MemoryEntry(
             "550e8400-e29b-41d4-a716-446655440000",
             "# Spring Security Configuration\n\nUse JWT with 24h expiry",
-            MemoryEntry.MemoryType.DECISION,
-            new HashSet<>(),
-            0.9
+            MemoryEntry.MemoryType.PROJECT_CONTEXT,
+            new HashSet<>()
         );
 
         String indexLine = FrontmatterParser.generateIndexLine(entry);
@@ -156,9 +147,7 @@ class FrontmatterParserTest {
         String content = """
             ---
             id: 550e8400-e29b-41d4-a716-446655440000
-            type: DECISION
-            confidence: 0.9
-            importance: 0.8
+            type: PROJECT_CONTEXT
             scope: project
             tags: spring, security
             ---
@@ -174,9 +163,7 @@ class FrontmatterParserTest {
         MemoryEntry entry = FrontmatterParser.parseEntry(file);
 
         assertEquals("550e8400-e29b-41d4-a716-446655440000", entry.getId());
-        assertEquals(MemoryEntry.MemoryType.DECISION, entry.getType());
-        assertEquals(0.9, entry.getConfidence(), 0.001);
-        assertEquals(0.8, entry.getImportance(), 0.001);
+        assertEquals(MemoryEntry.MemoryType.PROJECT_CONTEXT, entry.getType());
         assertEquals("project", entry.getScope());
         assertTrue(entry.getContent().contains("JWT"));
     }

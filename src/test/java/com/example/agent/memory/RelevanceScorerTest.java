@@ -23,9 +23,8 @@ class RelevanceScorerTest {
         MemoryEntry entry = new MemoryEntry(
             UUID.randomUUID().toString(),
             "Spring Security JWT configuration with 24h token expiry",
-            MemoryEntry.MemoryType.DECISION,
-            tags,
-            0.8
+            MemoryEntry.MemoryType.PROJECT_CONTEXT,
+            tags
         );
 
         double relevance = RelevanceScorer.calculateRelevance(entry, "spring security");
@@ -46,9 +45,8 @@ class RelevanceScorerTest {
         MemoryEntry entry = new MemoryEntry(
             UUID.randomUUID().toString(),
             "Content",
-            MemoryEntry.MemoryType.FACT,
-            new HashSet<>(),
-            0.5
+            MemoryEntry.MemoryType.USER_PREFERENCE,
+            new HashSet<>()
         );
 
         double decay = RelevanceScorer.calculateTimeDecay(entry);
@@ -59,26 +57,24 @@ class RelevanceScorerTest {
     void testCalculateRelevanceScore() {
         MemoryEntry entry1 = new MemoryEntry(
             UUID.randomUUID().toString(),
-            "Content 1",
-            MemoryEntry.MemoryType.FACT,
-            new HashSet<>(),
-            0.9,
-            0.9
+            "Spring Security JWT configuration",
+            MemoryEntry.MemoryType.USER_PREFERENCE,
+            Set.of("spring", "security")
         );
 
         MemoryEntry entry2 = new MemoryEntry(
             UUID.randomUUID().toString(),
-            "Content 2",
-            MemoryEntry.MemoryType.FACT,
-            new HashSet<>(),
-            0.3,
-            0.3
+            "Python tips",
+            MemoryEntry.MemoryType.USER_PREFERENCE,
+            Set.of("python")
         );
 
         double score1 = RelevanceScorer.calculateRelevanceScore(entry1);
         double score2 = RelevanceScorer.calculateRelevanceScore(entry2);
 
-        assertTrue(score1 > score2, "高重要性/高置信度的条目应该有更高的综合评分");
+        // 两个条目都应该有分数，因为都是刚创建的
+        assertTrue(score1 > 0, "条目1应该有分数");
+        assertTrue(score2 > 0, "条目2应该有分数");
     }
 
     @Test
@@ -88,9 +84,8 @@ class RelevanceScorerTest {
         MemoryEntry entry1 = new MemoryEntry(
             UUID.randomUUID().toString(),
             "Java best practices",
-            MemoryEntry.MemoryType.LESSON_LEARNED,
-            tags1,
-            0.9
+            MemoryEntry.MemoryType.FEEDBACK,
+            tags1
         );
 
         Set<String> tags2 = new HashSet<>();
@@ -98,9 +93,8 @@ class RelevanceScorerTest {
         MemoryEntry entry2 = new MemoryEntry(
             UUID.randomUUID().toString(),
             "Python tips",
-            MemoryEntry.MemoryType.LESSON_LEARNED,
-            tags2,
-            0.8
+            MemoryEntry.MemoryType.FEEDBACK,
+            tags2
         );
 
         List<MemoryEntry> entries = List.of(entry1, entry2);
