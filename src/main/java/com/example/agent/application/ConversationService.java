@@ -208,6 +208,9 @@ public class ConversationService {
         
         // 注册新会话到整合器
         memoryConsolidator.registerSession(sessionId);
+        
+        // 将 consolidator 注入到 MemoryStore，打通 AutoDream 触发链路
+        globalMemoryStore.setConsolidator(memoryConsolidator);
 
         autoCompactTrigger.setCompactionCompleteHook(messages -> {
             logger.debug("✅ 压缩完成钩子触发，调度低优先级记忆提取");
@@ -257,6 +260,14 @@ public class ConversationService {
                 logger.debug("会话结束，触发最终长期记忆提取: sessionId={}", sessionId);
             } catch (Exception e) {
                 logger.warn("会话结束时触发记忆提取失败: sessionId={}", sessionId, e);
+            }
+            
+            // 触发 AutoDream（三重门会自动判断是否真正执行整合）
+            try {
+                components.memoryConsolidator.checkAndConsolidate(sessionId);
+                logger.debug("会话结束，触发 AutoDream 记忆整合: sessionId={}", sessionId);
+            } catch (Exception e) {
+                logger.warn("会话结束时触发 AutoDream 失败: sessionId={}", sessionId, e);
             }
         }
         

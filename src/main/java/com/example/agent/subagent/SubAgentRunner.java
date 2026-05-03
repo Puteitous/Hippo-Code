@@ -157,10 +157,14 @@ public class SubAgentRunner implements Runnable {
                 Usage usage = response.getUsage();
                 int promptTokens = 0;
                 int completionTokens = 0;
+                int cacheReadTokens = 0;
+                int cacheCreationTokens = 0;
                 
                 if (usage != null) {
                     promptTokens = usage.getPromptTokens();
                     completionTokens = usage.getCompletionTokens();
+                    cacheReadTokens = usage.getCacheReadInputTokens();
+                    cacheCreationTokens = usage.getCacheCreationInputTokens();
                 }
                 
                 if (promptTokens == 0 && completionTokens == 0) {
@@ -173,9 +177,17 @@ public class SubAgentRunner implements Runnable {
                 
                 totalPromptTokens += promptTokens;
                 totalCompletionTokens += completionTokens;
-                String tokenLog = String.format("LLM 调用完成 | Prompt: %,d | Completion: %,d | 累计: %,d tokens",
+                
+                String cacheInfo = "";
+                if (cacheReadTokens > 0 || cacheCreationTokens > 0) {
+                    double hitRate = usage != null ? usage.getCacheHitRate() : 0.0;
+                    cacheInfo = String.format(" | Cache: read=%,d create=%,d (%.1f%%)", 
+                        cacheReadTokens, cacheCreationTokens, hitRate);
+                }
+                
+                String tokenLog = String.format("LLM 调用完成 | Prompt: %,d | Completion: %,d | 累计: %,d tokens%s",
                     promptTokens, completionTokens,
-                    totalPromptTokens + totalCompletionTokens);
+                    totalPromptTokens + totalCompletionTokens, cacheInfo);
                 task.addLog(tokenLog);
                 subAgentLogger.log(tokenLog + (llmRetryCount > 0 ? " (重试 " + llmRetryCount + " 次)" : ""));
 

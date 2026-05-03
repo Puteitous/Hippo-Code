@@ -78,7 +78,6 @@ public class RecallMemoryTool implements ToolExecutor {
         sb.append(String.format("## Memory: %s\n", extractTitle(content)));
         sb.append(String.format("ID: %s\n", entry.getId()));
         sb.append(String.format("Type: %s\n", entry.getType().getDisplayName()));
-        sb.append(String.format("Importance: %.2f\n", entry.getImportance()));
         sb.append(String.format("Tags: %s\n", String.join(", ", entry.getTags())));
         sb.append(String.format("Created: %s\n", entry.getCreatedAt()));
         sb.append(String.format("Last Updated: %s\n", entry.getLastUpdated()));
