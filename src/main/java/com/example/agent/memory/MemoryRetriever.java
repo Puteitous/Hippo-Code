@@ -2,7 +2,6 @@ package com.example.agent.memory;
 
 import com.example.agent.llm.model.Message;
 import com.example.agent.domain.rule.HippoRulesParser;
-import com.example.agent.memory.embedding.EmbeddingService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,13 +12,14 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 记忆检索器（第三阶段：LLM 自主决定）
+ * 记忆检索器（文件即记忆设计）
  * 
- * 核心变化：
+ * 核心设计：
  * 1. 删除自动向量检索 + 全文注入逻辑
  * 2. 新增 injectPersistentContext()：仅注入持久上下文（偏好和项目约束）
  * 3. 提供 memoize 缓存，基于持久记忆的 lastUpdated 时间戳总和失效
  * 4. 不再自动注入可检索知识，改为提供 search_memory 和 recall_memory 工具
+ * 5. 移除 EmbeddingService 依赖，文件系统就是存储
  */
 public class MemoryRetriever {
 
@@ -34,7 +34,6 @@ public class MemoryRetriever {
 
     private final MemoryStore memoryStore;
     private final HippoRulesParser rulesParser;
-    private final EmbeddingService embeddingService;
     private final MemoryMetricsCollector metricsCollector;
     private boolean injectionEnabled = true;
 
@@ -42,24 +41,18 @@ public class MemoryRetriever {
     private volatile String persistentContextCache = null;
     private volatile long persistentContextCache_key = 0L;
 
-    public MemoryRetriever(MemoryStore memoryStore, HippoRulesParser rulesParser, EmbeddingService embeddingService) {
-        this(memoryStore, rulesParser, embeddingService, null);
+    public MemoryRetriever(MemoryStore memoryStore, HippoRulesParser rulesParser) {
+        this(memoryStore, rulesParser, null);
     }
 
-    public MemoryRetriever(MemoryStore memoryStore, HippoRulesParser rulesParser, EmbeddingService embeddingService, MemoryMetricsCollector metricsCollector) {
+    public MemoryRetriever(MemoryStore memoryStore, HippoRulesParser rulesParser, MemoryMetricsCollector metricsCollector) {
         this.memoryStore = memoryStore;
         this.rulesParser = rulesParser;
-        this.embeddingService = embeddingService;
         this.metricsCollector = metricsCollector;
-        
-        // 初始化时设置 MemoryStore 的期望向量维度
-        if (embeddingService != null && embeddingService.isAvailable()) {
-            memoryStore.setExpectedEmbeddingDimension(embeddingService.getDimension());
-        }
     }
 
     public MemoryRetriever(MemoryStore memoryStore) {
-        this(memoryStore, new HippoRulesParser(), null, null);
+        this(memoryStore, new HippoRulesParser(), null);
     }
 
     /**
@@ -113,7 +106,7 @@ public class MemoryRetriever {
         // 筛选持久类型记忆
         List<MemoryEntry> persistentMemories = memoryStore.getAllMetas().stream()
             .filter(meta -> PERSISTENT_TYPES.contains(meta.getType()))
-            .sorted(Comparator.comparingDouble(MemoryStore.MemoryEntryMeta::getImportance).reversed())
+            .sorted(Comparator.comparing(MemoryStore.MemoryEntryMeta::getLastUpdated).reversed())
             .limit(MAX_PERSISTENT_CONTEXTS)
             .map(meta -> {
                 MemoryEntry entry = memoryStore.findById(meta.getId());
@@ -130,8 +123,8 @@ public class MemoryRetriever {
 
         // 构建持久上下文块
         StringBuilder sb = new StringBuilder();
-        sb.append("## � Persistent Context\n\n");
-        sb.append("The following are your long-term preferences and project constraints that are always relevant.\n\n");
+        sb.append("## 持久上下文\n\n");
+        sb.append("以下是你的长期记忆，包括用户偏好和项目约束，始终相关。\n\n");
 
         for (MemoryEntry memory : persistentMemories) {
             String title = extractTitle(memory.getContent());
@@ -140,10 +133,6 @@ public class MemoryRetriever {
             sb.append(String.format("### %s [%s]\n", title, memory.getType().getDisplayName()));
             sb.append(content).append("\n\n");
         }
-
-        // 引导 LLM 使用 search_memory 工具
-        sb.append("---\n\n");
-        sb.append("If you need information beyond what is listed above, call `search_memory` with a natural language query.\n");
 
         String result = sb.toString();
         persistentContextCache = result;
@@ -247,9 +236,5 @@ public class MemoryRetriever {
 
     public HippoRulesParser getRulesParser() {
         return rulesParser;
-    }
-
-    public EmbeddingService getEmbeddingService() {
-        return embeddingService;
     }
 }

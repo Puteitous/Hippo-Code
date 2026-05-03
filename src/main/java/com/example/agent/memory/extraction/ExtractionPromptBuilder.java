@@ -7,157 +7,166 @@ import java.util.List;
 /**
  * 记忆提取 Prompt 构建器
  * 
- * 职责：
- * 1. 构建长期记忆提取的 Prompt
- * 2. 包含提取原则、记忆类型、写入规则
+ * 设计哲学（参考 Claude Code prompts.ts）：
+ * - 触发是强制的（定期创建 SubAgent）
+ * - 写入是自主的（LLM 根据指导判断是否值得保存）
+ * - 用户明确要求记住时立即保存
+ * - 不写入是正常情况，不报错，不重试
+ * 
+ * Prompt 结构：
+ * 1. opener：角色、工具、轮次预算、现有记忆
+ * 2. 明确指令：用户要求记住/忘记时立即行动
+ * 3. 记忆类型定义（来自 MemoryTypeDefinitions）
+ * 4. 排除规则（来自 MemoryTypeDefinitions）
+ * 5. 如何保存记忆：两步流程（写文件 + 更新索引）
  */
 public class ExtractionPromptBuilder {
 
-    private static final String BASE_PROMPT = """
-        # 长期记忆提取任务
-
-        你是 Hippo Code 的长期记忆提取专家。你的任务是从对话中提取有价值的信息，
-        写入到长期记忆系统中，以便在未来的会话中使用。
-
-        ## 🎯 核心原则
-        - **自主性**：你自主完成整个提取周期，无需人工干预
-        - **安全性**：所有写操作必须在 MemoryToolSandbox 内完成
-        - **可靠性**：即使部分步骤失败，状态仍保持一致
-        - **质量优先**：只保留真正有价值的洞察，不要记录临时调试信息
-
-        ---
-
-        ## Phase 1 — Analyze
-
-        分析对话历史，识别有价值的信息。
-
-        **关注点**：
-        - 用户偏好：代码风格、工具偏好、沟通偏好
-        - 项目约束：架构决策、技术栈、关键配置
-        - 反馈：用户对代码的反馈、修正建议
-        - 经验教训：有效/无效的方法、避坑指南
-
-        输出：候选记忆列表（每条包含类型、重要性、置信度）
-
-        ---
-
-        ## Phase 2 — Filter
-
-        过滤候选记忆，只保留高质量的。
-
-        **过滤标准**：
-        - 重要性 ≥ 0.7
-        - 置信度 ≥ 0.8
-        - 跨会话有价值（不是临时状态）
-
-        输出：过滤后的记忆列表
-
-        ---
-
-        ## Phase 3 — Write
-
-        使用 MemoryStore API 写入记忆。
-
-        **写入规则**：
-        - 每条记忆一个文件（UUID.md）
-        - 包含 frontmatter 元数据
-        - 内容简洁精准
-
-        输出：写入操作日志
-
-        ---
-
-        ## Phase 4 — Verify
-
-        验证写入的记忆。
-
-        - 检查记忆文件是否存在
-        - 验证 frontmatter 元数据
-        - 确保内容质量
-
-        输出：验证报告
-
-        ---
-
-        ⚡ **立即开始执行 Phase 1**
-        """;
-
     /**
-     * 构建完整的提取 Prompt
-     *
-     * @param conversation 对话历史
-     * @param memoryCount 当前记忆数量
-     * @return 完整的 Prompt 文本
+     * 构建完整的提取 Prompt（参考 Claude Code buildExtractAutoOnlyPrompt）
+     * 
+     * 注意：对话历史通过 API 的 messages 参数传递（由 SubAgentManager 处理）
+     * Prompt 中只包含提取指令，不包含对话历史文本，以保证缓存前缀一致
+     * 
+     * @param newMessages 新消息数量（用于限定分析范围）
+     * @param existingMemories 现有记忆文件列表（MEMORY.md 内容）
      */
-    public static String buildExtractionPrompt(List<Message> conversation, int memoryCount) {
+    public static String buildExtractionPrompt(
+            int newMessages,
+            String existingMemories) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append(BASE_PROMPT);
+        // 1. Opener（角色、工具、轮次预算、现有记忆）
+        sb.append(buildOpener(newMessages, existingMemories));
+        
+        // 2. 明确指令（Claude Code 核心设计）
+        sb.append("\n\n如果用户明确要求记住某些内容，立即保存为最合适的记忆类型。");
+        sb.append("如果用户要求忘记某些内容，找到并删除相关的记忆条目。");
+        
+        // 3. 记忆类型定义（参考 Claude Code memoryTypes.ts）
+        sb.append("\n\n");
+        sb.append(MemoryTypeDefinitions.getTypesSection());
+        
+        // 4. 排除规则（参考 Claude Code WHAT_NOT_TO_SAVE_SECTION）
+        sb.append(MemoryTypeDefinitions.getWhatNotToSaveSection());
+        
+        // 5. 如何保存记忆（两步流程）
+        sb.append("\n");
+        sb.append(buildHowToSaveSection());
+        
+        // 注意：不再包含对话历史，对话历史通过 API messages 参数传递
         sb.append("\n\n---\n\n");
-        sb.append("## 📊 当前状态\n\n");
-        sb.append("- 对话消息数: ").append(conversation.size()).append("\n");
-        sb.append("- 当前记忆数: ").append(memoryCount).append("\n");
-        sb.append("\n---\n\n");
-        sb.append("请立即开始执行提取任务。\n");
+        sb.append("对话历史已在上方提供，请分析最近约 ").append(newMessages).append(" 条消息。");
         
         return sb.toString();
     }
 
     /**
-     * 构建简化的提取 Prompt（用于快速提取）
-     *
-     * @param conversation 对话历史
-     * @return 简化的 Prompt 文本
+     * 构建 Opener 部分（参考 Claude Code opener 函数）
      */
-    public static String buildSimpleExtractionPrompt(List<Message> conversation) {
+    private static String buildOpener(int newMessages, String existingMemories) {
         StringBuilder sb = new StringBuilder();
         
-        sb.append("# 长期记忆提取任务\n\n");
-        sb.append("请从以下对话中提取有价值的长期记忆。\n\n");
-        sb.append("## 提取原则\n");
-        sb.append("- 只提取跨会话有价值的信息\n");
-        sb.append("- 用户偏好、项目约束、重要决策、经验教训\n");
-        sb.append("- 不要提取临时调试信息或一次性操作\n\n");
-        sb.append("## 记忆类型\n");
-        sb.append("1. **用户偏好** (user_preference)\n");
-        sb.append("2. **项目约束** (project_context)\n");
-        sb.append("3. **反馈** (feedback)\n");
-        sb.append("4. **参考资料** (reference)\n\n");
-        sb.append("## 写入规则\n");
-        sb.append("- 使用 MemoryStore API 进行所有写操作\n");
-        sb.append("- 每条记忆一个文件（UUID.md）\n");
-        sb.append("- 包含 frontmatter 元数据\n\n");
-        sb.append("## 对话历史\n\n");
-        sb.append(formatConversation(conversation));
-        sb.append("\n\n---\n\n");
-        sb.append("请立即开始执行提取任务。\n");
+        sb.append("你现在作为记忆提取子代理运行。分析最近约 ")
+          .append(newMessages)
+          .append(" 条消息，用它们来更新你的持久记忆系统。");
+        sb.append("\n\n");
+        
+        sb.append("可用工具：read_file、grep、glob、只读 bash（ls/find/cat/stat/wc/head/tail 等）、以及仅限记忆目录内的 write_file/edit_file。bash rm 不被允许。所有其他工具 — MCP、Agent、可写 bash 等 — 将被拒绝。");
+        sb.append("\n\n");
+        
+        sb.append("你有有限的轮次预算。edit_file 需要先 read_file 同一文件，所以高效的策略是：")
+          .append("第 1 轮 — 并行调用 read_file 读取所有可能需要更新的文件；")
+          .append("第 2 轮 — 并行调用 write_file/edit_file 写入所有更改。")
+          .append("不要跨多轮交替执行读取和写入。");
+        sb.append("\n\n");
+        
+        sb.append("你必须只使用最近约 ")
+          .append(newMessages)
+          .append(" 条消息中的内容来更新持久记忆。")
+          .append("不要浪费任何轮次去尝试调查或验证这些内容 — ")
+          .append("不要 grep 源代码、不要读取代码来确认模式是否存在、不要执行 git 命令。");
+        
+        // 现有记忆列表
+        if (existingMemories != null && !existingMemories.isEmpty()) {
+            sb.append("\n\n## 现有记忆文件\n\n")
+              .append(existingMemories)
+              .append("\n\n在写入之前检查这个列表 — 更新现有文件而不是创建重复的记忆。");
+        }
         
         return sb.toString();
     }
 
     /**
-     * 格式化对话历史
+     * 构建如何保存记忆部分（参考 Claude Code howToSave）
      */
-    private static String formatConversation(List<Message> conversation) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < conversation.size(); i++) {
-            Message msg = conversation.get(i);
-            sb.append("### 消息 ").append(i + 1).append(" [").append(msg.getRole()).append("]\n\n");
-            sb.append(truncate(msg.getContent(), 500)).append("\n\n");
-        }
-        return sb.toString();
+    private static String buildHowToSaveSection() {
+        return """
+            
+            ## 如何保存记忆
+            
+            保存记忆是一个两步过程：
+            
+            **步骤 1** — 将记忆写入独立文件（例如 `user_role.md`、`feedback_testing.md`）
+            
+            文件路径格式：`.hippo/memory/{type}_{topic}.md`
+            
+            使用以下 frontmatter 格式：
+            ```markdown
+            ---
+            id: 550e8400-e29b-41d4-a716-446655440000
+            type: feedback
+            tags: [测试, 数据库]
+            ---
+            
+            # 测试必须使用真实数据库，不用 mock
+            
+            **Why:** 上个季度 mock 测试通过了但生产迁移失败，团队被坑了。
+            
+            **How to apply:** 编写集成测试时，使用真实数据库连接，不要 mock 数据库层。
+            ```
+            
+            **步骤 2** — 在 `MEMORY.md` 中添加指向该文件的指针
+            
+            `MEMORY.md` 是一个索引，不是记忆本身 — 每行一个条目，约 150 字符以内：
+            `- [标题](file.md) — one-line hook`
+            
+            它没有 frontmatter。永远不要将记忆内容直接写入 `MEMORY.md`。
+            
+            MEMORY.md 示例：
+            ```markdown
+            - [测试不用 mock 数据库](feedback_no-db-mocks.md) — 曾有 mock/生产差异事故
+            - [用户角色：数据科学家](user_data-scientist-role.md) — 用户是数据科学家，关注可观测性
+            - [合并冻结 2026-03-05](project_merge-freeze.md) — 移动版本发布
+            ```
+            
+            - `MEMORY.md` 总是被加载到系统提示中 — 超过 200 行将被截断，所以保持索引简洁
+            - 按主题语义组织记忆，而不是按时间顺序
+            - 更新或删除发现错误或过时的记忆
+            - 不要写入重复的记忆。写入新记忆之前先检查是否有可以更新的现有记忆。
+            
+            """;
     }
 
     /**
-     * 截断文本
+     * 构建简化的提取 Prompt
      */
-    private static String truncate(String text, int maxLength) {
-        if (text == null) {
-            return "";
-        }
-        if (text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "... [已截断]";
+    public static String buildSimpleExtractionPrompt(int newMessages) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append("你现在作为记忆提取子代理运行。分析最近约 ")
+          .append(newMessages)
+          .append(" 条消息，用它们来更新你的持久记忆系统。");
+        sb.append("\n\n");
+        
+        sb.append("可用工具：read_file、grep、glob、只读 bash（ls/find/cat/stat/wc/head/tail 等）、以及仅限记忆目录内的 write_file/edit_file。");
+        sb.append("\n\n");
+        
+        sb.append(MemoryTypeDefinitions.getTypesSection());
+        sb.append(MemoryTypeDefinitions.getWhatNotToSaveSection());
+        sb.append("\n");
+        sb.append(buildHowToSaveSection());
+        
+        return sb.toString();
     }
 }

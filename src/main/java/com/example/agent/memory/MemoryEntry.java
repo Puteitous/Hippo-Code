@@ -8,6 +8,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 记忆条目
  * 
  * 支持 frontmatter 元数据，包含可变字段用于激活策略追踪
+ * 
+ * 设计哲学：
+ * - 不保留 importance 和 confidence 字段
+ * - 不让 LLM 给自己的输出打分（不稳定且无意义）
+ * - 相关性靠内容匹配，不靠 LLM 编的数字
  */
 public class MemoryEntry {
 
@@ -19,26 +24,16 @@ public class MemoryEntry {
     private String content;
     private MemoryType type;
     private Set<String> tags;
-    private double confidence;
-    private double importance;
     private volatile Instant lastAccessed;
     private volatile Instant lastUpdated;
     private AtomicInteger accessCount;
     private String scope;
-    private float[] embedding;
 
-    public MemoryEntry(String id, String content, MemoryType type, Set<String> tags, double importance) {
-        this(id, content, type, tags, importance, 0.8);
-    }
-
-    public MemoryEntry(String id, String content, MemoryType type, Set<String> tags, 
-                       double importance, double confidence) {
+    public MemoryEntry(String id, String content, MemoryType type, Set<String> tags) {
         this.id = id;
         this.content = content;
         this.type = type;
         this.tags = tags;
-        this.importance = importance;
-        this.confidence = confidence;
         this.createdAt = Instant.now();
         this.lastAccessed = Instant.now();
         this.lastUpdated = Instant.now();
@@ -47,12 +42,10 @@ public class MemoryEntry {
     }
 
     public enum MemoryType {
-        FACT("Fact"),
         USER_PREFERENCE("User Preference"),
-        TECHNICAL_CONTEXT("Technical Context"),
-        DECISION("Decision"),
-        LESSON_LEARNED("Lesson Learned"),
-        PROJECT_CONTEXT("Project Context");
+        FEEDBACK("Feedback"),
+        PROJECT_CONTEXT("Project Context"),
+        REFERENCE("Reference");
 
         private final String displayName;
 
@@ -70,8 +63,6 @@ public class MemoryEntry {
     public String getContent() { return content; }
     public MemoryType getType() { return type; }
     public Set<String> getTags() { return tags; }
-    public double getConfidence() { return confidence; }
-    public double getImportance() { return importance; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getLastAccessed() { return lastAccessed; }
     public Instant getLastUpdated() { return lastUpdated; }
@@ -94,30 +85,9 @@ public class MemoryEntry {
         this.lastUpdated = Instant.now();
     }
 
-    public void setConfidence(double confidence) {
-        this.confidence = confidence;
-        this.lastUpdated = Instant.now();
-    }
-
-    public void setImportance(double importance) {
-        this.importance = importance;
-        this.lastUpdated = Instant.now();
-    }
-
     public void setScope(String scope) {
         this.scope = scope;
         this.lastUpdated = Instant.now();
-    }
-
-    public float[] getEmbedding() { return embedding; }
-
-    public void setEmbedding(float[] embedding) {
-        this.embedding = embedding;
-        this.lastUpdated = Instant.now();
-    }
-
-    public boolean hasEmbedding() {
-        return embedding != null && embedding.length > 0;
     }
 
     /**

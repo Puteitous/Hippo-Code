@@ -20,8 +20,6 @@ import java.util.Set;
  * ---
  * id: 550e8400-e29b-41d4-a716-446655440000
  * type: USER_PREFERENCE
- * confidence: 0.9
- * importance: 0.8
  * scope: project
  * tags: java, yaml, configuration
  * created_at: 2024-01-15T10:30:00Z
@@ -168,17 +166,10 @@ public class FrontmatterParser {
         sb.append(FRONTMATTER_SEPARATOR).append("\n");
         sb.append("id: ").append(entry.getId()).append("\n");
         sb.append("type: ").append(entry.getType().name()).append("\n");
-        sb.append("confidence: ").append(entry.getConfidence()).append("\n");
-        sb.append("importance: ").append(entry.getImportance()).append("\n");
         sb.append("scope: ").append(entry.getScope()).append("\n");
         
         if (entry.getTags() != null && !entry.getTags().isEmpty()) {
             sb.append("tags: ").append(String.join(", ", entry.getTags())).append("\n");
-        }
-        
-        // 序列化 embedding 向量
-        if (entry.hasEmbedding()) {
-            sb.append("embedding: ").append(encodeEmbedding(entry.getEmbedding())).append("\n");
         }
         
         sb.append("created_at: ").append(entry.getCreatedAt()).append("\n");
@@ -187,37 +178,6 @@ public class FrontmatterParser {
         sb.append(FRONTMATTER_SEPARATOR).append("\n\n");
         
         return sb.toString();
-    }
-
-    /**
-     * 将 float 数组编码为逗号分隔的字符串
-     */
-    private static String encodeEmbedding(float[] embedding) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < embedding.length; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(String.format("%.6f", embedding[i]));
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 从逗号分隔的字符串解码为 float 数组
-     */
-    private static float[] decodeEmbedding(String value) {
-        if (value == null || value.isEmpty()) {
-            return new float[0];
-        }
-        String[] parts = value.split(",");
-        float[] embedding = new float[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            try {
-                embedding[i] = Float.parseFloat(parts[i].trim());
-            } catch (NumberFormatException e) {
-                embedding[i] = 0.0f;
-            }
-        }
-        return embedding;
     }
 
     /**
@@ -326,17 +286,15 @@ public class FrontmatterParser {
         
         // 从 frontmatter 构建 MemoryEntry
         String id = (String) frontmatter.getOrDefault("id", java.util.UUID.randomUUID().toString());
-        String typeStr = (String) frontmatter.getOrDefault("type", "FACT");
-        MemoryEntry.MemoryType type = MemoryEntry.MemoryType.valueOf(typeStr);
-        double confidence = frontmatter.containsKey("confidence") ? 
-            ((Number) frontmatter.get("confidence")).doubleValue() : 0.8;
-        double importance = frontmatter.containsKey("importance") ? 
-            ((Number) frontmatter.get("importance")).doubleValue() : 0.5;
+        String typeStr = (String) frontmatter.getOrDefault("type", "USER_PREFERENCE");
+        
+        // 兼容旧类型：映射到新类型
+        MemoryEntry.MemoryType type = mapToCurrentMemoryType(typeStr);
         
         @SuppressWarnings("unchecked")
         Set<String> tags = (Set<String>) frontmatter.getOrDefault("tags", new HashSet<>());
         
-        MemoryEntry entry = new MemoryEntry(id, body, type, tags, importance, confidence);
+        MemoryEntry entry = new MemoryEntry(id, body, type, tags);
         
         // 设置其他字段
         if (frontmatter.containsKey("scope")) {
@@ -349,16 +307,23 @@ public class FrontmatterParser {
             entry.recordAccess(); // 简化处理
         }
         
-        // 解析 embedding 向量
-        if (frontmatter.containsKey("embedding")) {
-            String embeddingStr = (String) frontmatter.get("embedding");
-            float[] embedding = decodeEmbedding(embeddingStr);
-            if (embedding.length > 0) {
-                entry.setEmbedding(embedding);
-            }
-        }
-        
         return entry;
+    }
+
+    /**
+     * 将旧类型映射到新类型（兼容性处理）
+     */
+    private static MemoryEntry.MemoryType mapToCurrentMemoryType(String typeStr) {
+        try {
+            return MemoryEntry.MemoryType.valueOf(typeStr);
+        } catch (IllegalArgumentException e) {
+            // 旧类型映射
+            return switch (typeStr) {
+                case "TECHNICAL_CONTEXT", "DECISION", "LESSON_LEARNED" -> MemoryEntry.MemoryType.PROJECT_CONTEXT;
+                case "FACT" -> MemoryEntry.MemoryType.REFERENCE;
+                default -> MemoryEntry.MemoryType.USER_PREFERENCE; // 默认
+            };
+        }
     }
 
     /**

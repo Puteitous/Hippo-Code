@@ -222,6 +222,23 @@ public class MemoryConsolidator {
                         logger.warn("读取会话记忆失败: {}", path, e);
                     }
                 });
+            
+            // 同时收集 logs/ 目录下的日志文件
+            Path logsDir = Paths.get(".hippo/logs");
+            if (Files.exists(logsDir)) {
+                Files.walk(logsDir, 2)
+                    .filter(path -> path.toString().endsWith(".log") || path.toString().endsWith(".md"))
+                    .forEach(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            if (content != null && !content.isBlank()) {
+                                sessions.add("[日志文件: " + path.getFileName() + "]\n" + content);
+                            }
+                        } catch (IOException e) {
+                            logger.warn("读取日志文件失败: {}", path, e);
+                        }
+                    });
+            }
         } catch (IOException e) {
             logger.error("扫描会话记忆失败", e);
         }

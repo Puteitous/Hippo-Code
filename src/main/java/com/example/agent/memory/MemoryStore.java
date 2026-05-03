@@ -1,5 +1,6 @@
 package com.example.agent.memory;
 
+import com.example.agent.memory.consolidation.MemoryConsolidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +44,9 @@ public class MemoryStore {
     // 沙箱
     private final MemoryToolSandbox sandbox;
     
+    // 记忆整合器（用于触发 AutoDream）
+    private MemoryConsolidator consolidator;
+    
     // 存储目录
     private final Path memoryDir;
     
@@ -51,9 +55,6 @@ public class MemoryStore {
     
     // 后台刷新线程（低负载时全量重建索引）
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
-    
-    // 期望的向量维度（用于维度一致性检查）
-    private Integer expectedEmbeddingDimension = null;
 
     /**
      * 记忆条目元数据（轻量级，用于索引）
@@ -62,8 +63,6 @@ public class MemoryStore {
         public final String id;
         public String title;
         public MemoryEntry.MemoryType type;
-        public double importance;
-        public double confidence;
         public Set<String> tags;
         public Instant lastUpdated;
         public Instant lastAccessed;
@@ -72,20 +71,15 @@ public class MemoryStore {
             this.id = entry.getId();
             this.title = extractTitle(entry.getContent());
             this.type = entry.getType();
-            this.importance = entry.getImportance();
-            this.confidence = entry.getConfidence();
             this.tags = new HashSet<>(entry.getTags());
             this.lastUpdated = entry.getLastUpdated();
             this.lastAccessed = entry.getLastAccessed();
         }
 
-        public MemoryEntryMeta(String id, String title, MemoryEntry.MemoryType type, 
-                               double importance, double confidence) {
+        public MemoryEntryMeta(String id, String title, MemoryEntry.MemoryType type) {
             this.id = id;
             this.title = title;
             this.type = type;
-            this.importance = importance;
-            this.confidence = confidence;
             this.tags = new HashSet<>();
             this.lastUpdated = Instant.now();
             this.lastAccessed = Instant.now();
@@ -116,10 +110,6 @@ public class MemoryStore {
             return id;
         }
 
-        public double getImportance() {
-            return importance;
-        }
-
         public Instant getLastUpdated() {
             return lastUpdated;
         }
@@ -135,10 +125,6 @@ public class MemoryStore {
         public String getTitle() {
             return title;
         }
-
-        public double getConfidence() {
-            return confidence;
-        }
     }
 
     public MemoryStore(MemoryToolSandbox sandbox) {
@@ -147,24 +133,6 @@ public class MemoryStore {
         this.indexPath = memoryDir.resolve(INDEX_FILE);
         ensureDirectory();
         loadIndex();
-    }
-
-    /**
-     * 设置期望的向量维度
-     * 
-     * 在初始化时从 EmbeddingService.getDimension() 获取
-     * 用于在 searchSimilar 时做维度断言
-     */
-    public void setExpectedEmbeddingDimension(int dimension) {
-        this.expectedEmbeddingDimension = dimension;
-        logger.info("设置期望向量维度：{}", dimension);
-    }
-
-    /**
-     * 获取当前期望的向量维度
-     */
-    public Integer getExpectedEmbeddingDimension() {
-        return expectedEmbeddingDimension;
     }
 
     /**
@@ -251,7 +219,7 @@ public class MemoryStore {
                 continue;
             }
             
-            // 解析索引行：| UUID | Title | Type | Importance | Confidence | Tags | LastUpdated |
+            // 解析索引行：| UUID | Title | Type | Tags | LastUpdated |
             if (line.startsWith("|") && line.endsWith("|")) {
                 MemoryEntryMeta meta = parseIndexLine(line);
                 if (meta != null) {
@@ -314,7 +282,7 @@ public class MemoryStore {
         if (line.endsWith("|")) line = line.substring(0, line.length() - 1);
         
         String[] parts = line.split("\\|");
-        if (parts.length < 6) {
+        if (parts.length < 4) {
             return null;
         }
         
@@ -322,13 +290,11 @@ public class MemoryStore {
             String id = parts[0].trim();
             String title = parts[1].trim();
             MemoryEntry.MemoryType type = MemoryEntry.MemoryType.valueOf(parts[2].trim());
-            double importance = Double.parseDouble(parts[3].trim());
-            double confidence = Double.parseDouble(parts[4].trim());
             
-            MemoryEntryMeta meta = new MemoryEntryMeta(id, title, type, importance, confidence);
+            MemoryEntryMeta meta = new MemoryEntryMeta(id, title, type);
             
             // 解析 tags
-            String[] tagParts = parts[5].trim().split(",");
+            String[] tagParts = parts[3].trim().split(",");
             for (String tag : tagParts) {
                 meta.tags.add(tag.trim());
             }
@@ -484,86 +450,14 @@ public class MemoryStore {
     }
 
     /**
-     * 基于向量相似度搜索记忆
+     * 向量检索（已废弃，保留用于向后兼容）
      * 
-     * @param queryEmbedding 查询向量
-     * @param topK 返回最相似的 K 条记忆
-     * @param minScore 最低相似度阈值（0.0-1.0）
-     * @return 按相似度降序排列的记忆列表
+     * @deprecated 文件系统即记忆，不再使用向量检索
      */
+    @Deprecated
     public List<MemoryEntry> searchSimilar(float[] queryEmbedding, int topK, double minScore) {
-        if (queryEmbedding == null || index.isEmpty()) {
-            return List.of();
-        }
-
-        // 维度一致性检查
-        if (expectedEmbeddingDimension != null && queryEmbedding.length != expectedEmbeddingDimension) {
-            logger.warn("向量维度不匹配：期望 {} 维，实际 {} 维。可能发生了模型切换，建议触发全量重新向量化。",
-                expectedEmbeddingDimension, queryEmbedding.length);
-            // 返回空列表，让上层触发降级或重新向量化
-            return List.of();
-        }
-
-        List<ScoredEntry> scoredEntries = new ArrayList<>();
-
-        for (MemoryEntryMeta meta : index.values()) {
-            MemoryEntry entry = findById(meta.id);
-            if (entry != null && entry.hasEmbedding()) {
-                // 检查记忆向量维度是否匹配
-                if (expectedEmbeddingDimension != null && entry.getEmbedding().length != expectedEmbeddingDimension) {
-                    logger.debug("记忆 {} 的向量维度 ({}) 与期望维度 ({}) 不匹配，跳过",
-                        entry.getId(), entry.getEmbedding().length, expectedEmbeddingDimension);
-                    continue;
-                }
-                
-                double similarity = cosineSimilarity(queryEmbedding, entry.getEmbedding());
-                if (similarity >= minScore) {
-                    scoredEntries.add(new ScoredEntry(entry, similarity));
-                }
-            }
-        }
-
-        // 按相似度降序排序，取 topK
-        return scoredEntries.stream()
-            .sorted((a, b) -> Double.compare(b.score, a.score))
-            .limit(topK)
-            .map(se -> se.entry)
-            .toList();
-    }
-
-    /**
-     * 计算余弦相似度
-     */
-    private double cosineSimilarity(float[] vec1, float[] vec2) {
-        if (vec1.length != vec2.length) {
-            return 0.0;
-        }
-
-        double dotProduct = 0.0;
-        double norm1 = 0.0;
-        double norm2 = 0.0;
-
-        for (int i = 0; i < vec1.length; i++) {
-            dotProduct += vec1[i] * vec2[i];
-            norm1 += vec1[i] * vec1[i];
-            norm2 += vec2[i] * vec2[i];
-        }
-
-        if (norm1 == 0.0 || norm2 == 0.0) {
-            return 0.0;
-        }
-
-        return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
-    }
-
-    private static class ScoredEntry {
-        final MemoryEntry entry;
-        final double score;
-
-        ScoredEntry(MemoryEntry entry, double score) {
-            this.entry = entry;
-            this.score = score;
-        }
+        logger.debug("searchSimilar 已废弃，返回空列表");
+        return List.of();
     }
 
     /**
@@ -646,23 +540,22 @@ public class MemoryStore {
             return "";
         }
 
-        // 按重要性排序，取前 N 条
+        // 按最后更新时间排序，取前 N 条
         List<MemoryEntryMeta> sortedEntries = index.values().stream()
-            .sorted((a, b) -> Double.compare(b.importance, a.importance))
+            .sorted((a, b) -> b.lastUpdated.compareTo(a.lastUpdated))
             .limit(maxEntries)
             .toList();
 
         StringBuilder sb = new StringBuilder();
         sb.append("# 🧠 长期记忆索引\n\n");
-        sb.append("> 共 ").append(index.size()).append(" 条记忆，以下展示最重要的 ").append(sortedEntries.size()).append(" 条\n\n");
+        sb.append("> 共 ").append(index.size()).append(" 条记忆，以下展示最近的 ").append(sortedEntries.size()).append(" 条\n\n");
 
         for (MemoryEntryMeta meta : sortedEntries) {
             String title = meta.title != null ? meta.title : "Untitled";
             String typeIcon = getTypeIcon(meta.type);
-            String importanceStars = getImportanceStars(meta.importance);
             
-            sb.append(String.format("- %s [%s](%s.md) — 重要性 %s | 置信度 %.0f%%\n",
-                typeIcon, title, meta.id, importanceStars, meta.confidence * 100));
+            sb.append(String.format("- %s [%s](%s.md)\n",
+                typeIcon, title, meta.id));
         }
 
         return sb.toString();
@@ -670,19 +563,12 @@ public class MemoryStore {
 
     private String getTypeIcon(MemoryEntry.MemoryType type) {
         return switch (type) {
-            case FACT -> "📌";
             case USER_PREFERENCE -> "👤";
-            case TECHNICAL_CONTEXT -> "🔧";
-            case DECISION -> "✅";
-            case LESSON_LEARNED -> "💡";
-            case PROJECT_CONTEXT -> "📋";
+            case FEEDBACK -> "✅";
+            case PROJECT_CONTEXT -> "📝";
+            case REFERENCE -> "🔗";
             default -> "📝";
         };
-    }
-
-    private String getImportanceStars(double importance) {
-        int stars = (int) Math.round(importance * 5);
-        return "⭐".repeat(Math.max(1, Math.min(5, stars)));
     }
 
     /**
@@ -815,28 +701,56 @@ public class MemoryStore {
         });
     }
 
+    // 索引文件限制
+    private static final int MAX_INDEX_LINES = 200;
+    private static final int MAX_INDEX_SIZE_BYTES = 25 * 1024; // 25KB
+    
     /**
      * 更新索引文件（增量或全量）
+     * 
+     * 格式遵循 Claude Code 规范：
+     * - [标题](文件名.md) — 一句话描述
+     * 每行 ≤ 150 字符，总共 ≤ 200 行，总大小 ≤ 25KB
      */
     private void updateIndexFile() throws IOException {
         // 简单实现：全量重写索引文件
         // 优化：可以只更新变化的行
         
         StringBuilder sb = new StringBuilder();
-        sb.append("# MEMORY Index\n\n");
-        sb.append("| ID | Title | Type | Importance | Confidence | Tags | Last Updated |\n");
-        sb.append("|----|-------|------|------------|------------|------|--------------|\n");
+        int lineCount = 0;
         
         for (MemoryEntryMeta meta : index.values()) {
-            sb.append(String.format("| %s | %s | %s | %.1f | %.1f | %s | %s |\n",
-                meta.id,
+            // 检查行数限制
+            if (lineCount >= MAX_INDEX_LINES) {
+                logger.warn("索引文件达到行数限制 ({} 行)，跳过剩余 {} 条记忆", 
+                    MAX_INDEX_LINES, index.size() - lineCount);
+                break;
+            }
+            
+            // 格式：- [标题](文件名.md) — 一句话描述
+            String fileName = meta.id + ".md";
+            String description = generateDescription(meta);
+            
+            // 截断描述到 150 字符以内
+            if (description.length() > 150) {
+                description = description.substring(0, 147) + "...";
+            }
+            
+            String line = String.format("- [%s](%s) — %s\n",
                 meta.title,
-                meta.type.name(),
-                meta.importance,
-                meta.confidence,
-                String.join(", ", meta.tags),
-                meta.lastUpdated != null ? meta.lastUpdated.toString().substring(0, 10) : "N/A"
-            ));
+                fileName,
+                description
+            );
+            
+            // 检查大小限制
+            if (sb.length() + line.length() > MAX_INDEX_SIZE_BYTES) {
+                logger.warn("索引文件达到大小限制 ({} KB)，跳过剩余 {} 条记忆", 
+                    MAX_INDEX_SIZE_BYTES / 1024, index.size() - lineCount);
+                break;
+            }
+            
+            sb.append(line);
+            lineCount++;
         }
         
         // 原子写入索引文件
@@ -844,7 +758,26 @@ public class MemoryStore {
         Files.writeString(tempIndex, sb.toString());
         Files.move(tempIndex, indexPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         
-        logger.trace("更新索引文件，共 {} 条", index.size());
+        logger.trace("更新索引文件，共 {} 条 ({} 行, {} 字节)", 
+            index.size(), lineCount, sb.length());
+    }
+    
+    /**
+     * 为记忆条目生成一句话描述
+     */
+    private String generateDescription(MemoryEntryMeta meta) {
+        // 从内容中提取第一句作为描述
+        String content = meta.title; // 使用标题作为基础描述
+        
+        // 如果有标签，可以附加到描述中
+        if (!meta.tags.isEmpty()) {
+            String tags = String.join(", ", meta.tags);
+            if (tags.length() < 50) {
+                content += " [" + tags + "]";
+            }
+        }
+        
+        return content;
     }
 
     /**
@@ -937,7 +870,7 @@ public class MemoryStore {
             String titleLower = meta.title.toLowerCase();
             for (String keyword : keywords) {
                 if (titleLower.contains(keyword)) {
-                    score += 0.3;
+                    score += 0.4;
                 }
             }
         }
@@ -947,13 +880,10 @@ public class MemoryStore {
             String tagLower = tag.toLowerCase();
             for (String keyword : keywords) {
                 if (tagLower.contains(keyword) || keyword.contains(tagLower)) {
-                    score += 0.4;
+                    score += 0.5;
                 }
             }
         }
-
-        // 类型权重
-        score += meta.importance * 0.2;
 
         // 最近访问权重
         long daysSinceAccess = java.time.Duration.between(meta.lastAccessed, Instant.now()).toDays();
@@ -976,10 +906,19 @@ public class MemoryStore {
 
     /**
      * 触发自动梦境（Phase 2 实现）
-     * 当前为空操作
+     * 调用 MemoryConsolidator 检查并执行整合（三重门会自动判断）
      */
     public void triggerAutoDream() {
-        // TODO: Phase 2 实现后台记忆巩固
+        if (consolidator != null) {
+            consolidator.checkAndConsolidate(null);
+        }
+    }
+
+    /**
+     * 设置记忆整合器
+     */
+    public void setConsolidator(MemoryConsolidator consolidator) {
+        this.consolidator = consolidator;
     }
 
     /**

@@ -16,18 +16,24 @@ import java.util.List;
  * 
  * 触发条件：
  * - 主 Agent 未直接写记忆
- * - 达到触发轮次（默认每 N 轮）
+ * - 达到触发轮次（默认每 3 轮完整对话）
+ * 
+ * 轮次定义：一轮 = 用户消息 + AI 回复（一个完整的对话回合）
  */
 public class ExtractionTrigger {
 
     private static final Logger logger = LoggerFactory.getLogger(ExtractionTrigger.class);
     
-    // 默认每 N 轮触发一次提取
-    private static final int DEFAULT_EXTRACTION_INTERVAL = 1;
+    // 默认每 N 轮完整对话触发一次提取
+    private static final int DEFAULT_EXTRACTION_INTERVAL = 3;
     
     private int extractionInterval;
-    private int turnsSinceLastExtraction = 0;
+    private int completedRoundsSinceLastExtraction = 0;
+    private boolean expectingAssistantResponse = false;
     private String lastMemoryMessageUuid;
+    
+    // 游标推进回调
+    private Runnable onCursorAdvanceCallback;
 
     public ExtractionTrigger() {
         this(DEFAULT_EXTRACTION_INTERVAL);
@@ -47,20 +53,45 @@ public class ExtractionTrigger {
         // 1. 检查主 Agent 是否已直接写记忆
         if (hasMemoryWritesSince(conversation)) {
             logger.debug("跳过提取：主 Agent 已直接写记忆");
-            resetTurnsCounter();
+            resetRoundCounter();
             return false;
         }
 
-        // 2. 检查触发轮次
-        turnsSinceLastExtraction++;
-        if (turnsSinceLastExtraction < extractionInterval) {
-            logger.debug("跳过提取：未达到触发轮次 ({}/{})", turnsSinceLastExtraction, extractionInterval);
+        // 2. 计算完整的对话轮次
+        int completedRounds = countCompletedRounds(conversation);
+        
+        // 3. 检查是否达到触发轮次
+        int newRoundsSinceLastExtraction = completedRounds - completedRoundsSinceLastExtraction;
+        if (newRoundsSinceLastExtraction < extractionInterval) {
+            logger.debug("跳过提取：未达到触发轮次 ({}/{})", 
+                newRoundsSinceLastExtraction, extractionInterval);
             return false;
         }
 
-        logger.debug("触发提取：达到触发轮次 ({})", turnsSinceLastExtraction);
-        resetTurnsCounter();
+        logger.debug("触发提取：达到触发轮次 ({})", newRoundsSinceLastExtraction);
+        completedRoundsSinceLastExtraction = completedRounds;
         return true;
+    }
+
+    /**
+     * 计算已完成的对话轮次
+     * 一轮 = 用户消息 + AI 回复
+     */
+    private int countCompletedRounds(List<Message> conversation) {
+        int rounds = 0;
+        boolean hasUserMessage = false;
+        
+        for (Message message : conversation) {
+            if (message.isUser()) {
+                hasUserMessage = true;
+            } else if (message.isAssistant() && hasUserMessage) {
+                // 完成了一个完整的对话轮次
+                rounds++;
+                hasUserMessage = false;
+            }
+        }
+        
+        return rounds;
     }
 
     /**
@@ -91,6 +122,10 @@ public class ExtractionTrigger {
             if (message.isAssistant() && message.getToolCalls() != null) {
                 for (var toolCall : message.getToolCalls()) {
                     if (isMemoryWriteTool(toolCall)) {
+                        // 互斥检查：当主 Agent 写了记忆，跳过提取并推进游标
+                        if (onCursorAdvanceCallback != null) {
+                            onCursorAdvanceCallback.run();
+                        }
                         return true;
                     }
                 }
@@ -126,15 +161,15 @@ public class ExtractionTrigger {
     /**
      * 重置轮次计数器
      */
-    public void resetTurnsCounter() {
-        turnsSinceLastExtraction = 0;
+    public void resetRoundCounter() {
+        completedRoundsSinceLastExtraction = 0;
     }
 
     /**
      * 获取当前轮次计数
      */
-    public int getTurnsSinceLastExtraction() {
-        return turnsSinceLastExtraction;
+    public int getCompletedRoundsSinceLastExtraction() {
+        return completedRoundsSinceLastExtraction;
     }
 
     /**
@@ -142,5 +177,13 @@ public class ExtractionTrigger {
      */
     public void setExtractionInterval(int interval) {
         this.extractionInterval = interval;
+    }
+
+    /**
+     * 设置游标推进回调
+     * 当检测到主 Agent 已写记忆时调用，用于推进游标
+     */
+    public void setOnCursorAdvanceCallback(Runnable callback) {
+        this.onCursorAdvanceCallback = callback;
     }
 }

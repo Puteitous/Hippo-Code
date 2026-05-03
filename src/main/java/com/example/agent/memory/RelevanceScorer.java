@@ -5,12 +5,15 @@ package com.example.agent.memory;
  * 
  * 负责计算记忆条目与查询的相关性评分
  * 将评分逻辑与数据模型分离，便于后续切换检索算法
+ * 
+ * 设计哲学：
+ * - 不依赖 LLM 打分（importance/confidence）
+ * - 相关性完全基于内容匹配和时间衰减
  */
 public class RelevanceScorer {
 
-    private static final double TAG_MATCH_WEIGHT = 0.3;
+    private static final double TAG_MATCH_WEIGHT = 0.4;
     private static final double CONTENT_MATCH_WEIGHT = 0.1;
-    private static final double IMPORTANCE_WEIGHT = 0.5;
     private static final double TIME_DECAY_FACTOR = 1.0;
 
     /**
@@ -44,9 +47,6 @@ public class RelevanceScorer {
             }
         }
 
-        // 重要性加权
-        relevance += entry.getImportance() * IMPORTANCE_WEIGHT;
-
         return Math.min(relevance, 1.0);
     }
 
@@ -73,7 +73,7 @@ public class RelevanceScorer {
     /**
      * 计算记忆条目的综合相关性评分
      * 
-     * 综合考虑重要性、置信度和时间衰减
+     * 综合考虑内容匹配和时间衰减
      * 
      * @param entry 记忆条目
      * @return 综合评分（0.0 - 1.0）
@@ -84,7 +84,9 @@ public class RelevanceScorer {
         }
 
         double timeDecay = calculateTimeDecay(entry);
-        return entry.getImportance() * entry.getConfidence() * timeDecay;
+        // 基础相关性 + 时间衰减
+        double baseRelevance = calculateRelevance(entry, entry.getContent());
+        return baseRelevance * timeDecay;
     }
 
     /**

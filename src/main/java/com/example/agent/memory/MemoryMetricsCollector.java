@@ -14,20 +14,14 @@ import java.util.concurrent.atomic.DoubleAdder;
  * 记忆系统监控指标收集器
  * 
  * 收集以下指标：
- * 1. EmbeddingService 调用耗时
- * 2. searchSimilar 命中率
- * 3. 降级次数（向量 → 关键词）
- * 4. 注入成功率
+ * 1. 检索命中率
+ * 2. 降级次数（向量 → 关键词）
+ * 3. 注入成功率
  */
 public class MemoryMetricsCollector {
     
     private static final Logger logger = LoggerFactory.getLogger(MemoryMetricsCollector.class);
     private static final int REPORT_INTERVAL_MS = 60000; // 每分钟报告一次
-    
-    // Embedding 指标
-    private final AtomicLong embeddingTotalTime = new AtomicLong(0);
-    private final AtomicInteger embeddingCallCount = new AtomicInteger(0);
-    private final AtomicLong embeddingMaxTime = new AtomicLong(0);
     
     // 检索指标
     private final AtomicInteger vectorSearchCount = new AtomicInteger(0);
@@ -44,24 +38,6 @@ public class MemoryMetricsCollector {
     
     public MemoryMetricsCollector() {
         logger.info("📊 记忆系统监控指标收集器已初始化");
-    }
-    
-    /**
-     * 记录 Embedding 调用
-     */
-    public void recordEmbedding(long durationMs) {
-        embeddingTotalTime.addAndGet(durationMs);
-        embeddingCallCount.incrementAndGet();
-        
-        long currentMax = embeddingMaxTime.get();
-        while (durationMs > currentMax) {
-            if (embeddingMaxTime.compareAndSet(currentMax, durationMs)) {
-                break;
-            }
-            currentMax = embeddingMaxTime.get();
-        }
-        
-        maybeReport();
     }
     
     /**
@@ -107,17 +83,17 @@ public class MemoryMetricsCollector {
     }
     
     /**
-     * 获取平均 Embedding 耗时
+     * 获取平均检索耗时
      */
-    public double getAverageEmbeddingTime() {
-        int count = embeddingCallCount.get();
-        return count > 0 ? (double) embeddingTotalTime.get() / count : 0.0;
+    public double getAverageSearchTime() {
+        int count = vectorSearchCount.get();
+        return count > 0 ? (double) vectorSearchHitCount.get() / count : 0.0;
     }
     
     /**
-     * 获取向量检索命中率
+     * 获取检索命中率
      */
-    public double getVectorSearchHitRate() {
+    public double getSearchHitRate() {
         int count = vectorSearchCount.get();
         return count > 0 ? (double) vectorSearchHitCount.get() / count : 0.0;
     }
@@ -145,20 +121,14 @@ public class MemoryMetricsCollector {
         return String.format("""
             
             === 🧠 记忆系统指标 ===
-            Embedding 调用: %d 次
-              - 平均耗时: %.2f ms
-              - 最大耗时: %d ms
-            向量检索: %d 次
+            检索: %d 次
               - 命中率: %.1f%%
               - 降级次数: %d
             关键词检索: %d 次命中
             记忆注入: %d 次成功, %d 次为空
             """,
-            embeddingCallCount.get(),
-            getAverageEmbeddingTime(),
-            embeddingMaxTime.get(),
             vectorSearchCount.get(),
-            getVectorSearchHitRate() * 100,
+            getSearchHitRate() * 100,
             keywordFallbackCount.get(),
             keywordSearchHitCount.get(),
             injectionSuccessCount.get(),
@@ -181,9 +151,6 @@ public class MemoryMetricsCollector {
      * 重置所有指标
      */
     public void reset() {
-        embeddingTotalTime.set(0);
-        embeddingCallCount.set(0);
-        embeddingMaxTime.set(0);
         vectorSearchCount.set(0);
         vectorSearchHitCount.set(0);
         keywordFallbackCount.set(0);

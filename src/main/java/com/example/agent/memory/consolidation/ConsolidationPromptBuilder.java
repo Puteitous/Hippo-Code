@@ -38,7 +38,7 @@ public class ConsolidationPromptBuilder {
 
         ## Phase 2 — Gather
 
-        读取所有未处理的 session-memory.md 文件。
+        读取项目 logs/ 目录和 grep 关键 transcripts，提取有价值的信息。
 
         **未处理会话记忆**（共 %d 个）：
         %s
@@ -62,11 +62,11 @@ public class ConsolidationPromptBuilder {
         - **MERGE**：如果新信息与多个旧条目重叠，合并它们并删除过时记录
         - **DISCARD**：如果是噪音或临时状态，不做处理
 
-        **决策指南**：
-        - 重要性 ≥ 0.7 且置信度 ≥ 0.8 → CREATE
+        **决策指南（基于语义匹配，非数字打分）**：
+        - 发现跨会话有价值的信息 → CREATE
         - 与现有记忆相关但提供新视角 → UPDATE
-        - 多个记忆讨论同一主题 → MERGE
-        - 临时状态、调试信息、已解决的问题 → DISCARD
+        - 多个文件讨论同一主题 → MERGE
+        - 临时调试信息、已解决的问题 → DISCARD
 
         输出：操作日志（每个操作一行）
 
