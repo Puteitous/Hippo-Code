@@ -79,7 +79,7 @@ public class AgentContext {
         
         this.reader = LineReaderBuilder.builder()
                 .terminal(terminal)
-                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/coding", "/mode", "/mode chat", "/mode coding"))
+                .completer(new StringsCompleter("help", "exit", "quit", "clear", "reset", "retry", "config", "showlog", "tokens", "/mcp", "/mcp list", "/mcp connect", "/mcp disconnect", "/mcp tools", "/chat", "/coding", "/builder", "/mode", "/mode chat", "/mode coding", "/mode builder"))
                 .variable(LineReader.HISTORY_FILE, 
                     WorkspaceManager.getCurrentProjectDir().resolve("cli-history"))
                 .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)

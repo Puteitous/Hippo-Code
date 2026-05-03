@@ -40,7 +40,8 @@ public class AgentUi {
         println();
         println(ConsoleStyle.bold("快捷命令:"));
         println(ConsoleStyle.green("  /chat    ") + ConsoleStyle.gray(" - 切换到聊天模式（只读探索）"));
-        println(ConsoleStyle.cyan("  /coding ") + ConsoleStyle.gray(" - 切换到编程模式（全权限执行）"));
+        println(ConsoleStyle.cyan("  /builder ") + ConsoleStyle.gray(" - 切换到构建模式（全权限执行）"));
+        println(ConsoleStyle.gray("  /coding  ") + ConsoleStyle.gray(" - 同上，兼容旧命令"));
         println(ConsoleStyle.yellow("  Ctrl+B    ") + ConsoleStyle.gray(" - 快速切换两种模式✨"));
         println(ConsoleStyle.gray("  /mode    ") + ConsoleStyle.gray(" - 查看当前模式"));
         println(ConsoleStyle.green("  help     ") + ConsoleStyle.gray(" - 显示帮助"));

@@ -211,7 +211,8 @@ public class CommandDispatcher {
             return CommandResult.continueExecution();
         }
 
-        if ("/coding".equalsIgnoreCase(line) || "/mode coding".equalsIgnoreCase(line)) {
+        if ("/coding".equalsIgnoreCase(line) || "/mode coding".equalsIgnoreCase(line)
+                || "/builder".equalsIgnoreCase(line) || "/mode builder".equalsIgnoreCase(line)) {
             context.switchMode(com.example.agent.core.AgentMode.CODING);
             ui.printModeInfo(context.getCurrentMode());
             return CommandResult.continueExecution();
@@ -219,7 +220,7 @@ public class CommandDispatcher {
 
         if ("/mode".equalsIgnoreCase(line)) {
             ui.printModeInfo(context.getCurrentMode());
-            ui.println(ConsoleStyle.gray("  使用 /chat 切换到聊天模式， /coding 切换到编程模式"));
+            ui.println(ConsoleStyle.gray("  使用 /chat 切换到聊天模式， /builder 切换到构建模式"));
             ui.println();
             return CommandResult.continueExecution();
         }

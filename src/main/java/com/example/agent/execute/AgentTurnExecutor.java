@@ -166,7 +166,7 @@ public class AgentTurnExecutor {
             ui.println();
 
             if (context.getCurrentMode() == AgentMode.CHAT) {
-                ui.println(ConsoleStyle.gray("💡 需要直接修改文件？输入 /coding 开启全权限模式"));
+                ui.println(ConsoleStyle.gray("💡 需要直接修改文件？输入 /builder 开启全权限模式"));
                 ui.println();
             }
 

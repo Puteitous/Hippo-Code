@@ -66,7 +66,7 @@ public class ToolCallProcessor {
                 String toolName = toolCall.getFunction().getName();
                 if (!mode.isToolAllowed(toolName)) {
                     String msg = String.format(
-                        "[%s] 模式下不允许使用工具 '%s'，请输入 /coding 切换到编程模式",
+                        "[%s] 模式下不允许使用工具 '%s'，请输入 /builder 切换到构建模式",
                         mode.getDisplayName(), toolName
                     );
                     ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.yellow(msg));
