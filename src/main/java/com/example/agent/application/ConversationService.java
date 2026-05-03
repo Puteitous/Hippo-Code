@@ -54,6 +54,7 @@ public class ConversationService {
         final AutoCompactTrigger autoCompactTrigger;
         final MemoryRetriever memoryRetriever;
         final SessionMemoryExtractor sessionMemoryExtractor;
+        final MemoryExtractor memoryExtractor;
         final MemoryConsolidator memoryConsolidator;
         final SessionTranscript transcript;
         final SessionCompactionState compactionState;
@@ -62,6 +63,7 @@ public class ConversationService {
                                 AutoCompactTrigger autoCompactTrigger,
                                 MemoryRetriever memoryRetriever,
                                 SessionMemoryExtractor sessionMemoryExtractor,
+                                MemoryExtractor memoryExtractor,
                                 MemoryConsolidator memoryConsolidator,
                                 SessionTranscript transcript,
                                 SessionCompactionState compactionState) {
@@ -69,6 +71,7 @@ public class ConversationService {
             this.autoCompactTrigger = autoCompactTrigger;
             this.memoryRetriever = memoryRetriever;
             this.sessionMemoryExtractor = sessionMemoryExtractor;
+            this.memoryExtractor = memoryExtractor;
             this.memoryConsolidator = memoryConsolidator;
             this.transcript = transcript;
             this.compactionState = compactionState;
@@ -193,6 +196,13 @@ public class ConversationService {
             compactionState
         );
 
+        // 创建长期记忆提取器
+        MemoryExtractor memoryExtractor = new MemoryExtractor(
+            sessionId,
+            tokenEstimator,
+            llmClient
+        );
+
         // 创建后台记忆整合器
         MemoryConsolidator memoryConsolidator = new MemoryConsolidator(llmClient);
         
@@ -209,6 +219,7 @@ public class ConversationService {
             autoCompactTrigger,
             memoryRetriever,
             sessionMemoryExtractor,
+            memoryExtractor,
             memoryConsolidator,
             transcript,
             compactionState
@@ -237,6 +248,18 @@ public class ConversationService {
 
     public void destroy(Conversation conversation) {
         String sessionId = conversation.getSessionId();
+        ConversationComponents components = componentRegistry.get(sessionId);
+        
+        // 会话结束时触发最终提取
+        if (components != null) {
+            try {
+                components.memoryExtractor.checkAndExtract(conversation.getMessages());
+                logger.debug("会话结束，触发最终长期记忆提取: sessionId={}", sessionId);
+            } catch (Exception e) {
+                logger.warn("会话结束时触发记忆提取失败: sessionId={}", sessionId, e);
+            }
+        }
+        
         componentRegistry.remove(sessionId);
         sessionLastAccessTime.remove(sessionId);
         conversation.clear();
@@ -332,6 +355,7 @@ public class ConversationService {
 
         if (components != null) {
             components.sessionMemoryExtractor.onMessageAdded(message, conversation.getMessages());
+            components.memoryExtractor.onMessageAdded(message, conversation.getMessages());
             
             if (message.getContent() != null && conversation.shouldMarkForMemory(message)) {
                 components.memoryRetriever.markForMemory(message.getContent());
@@ -364,6 +388,10 @@ public class ConversationService {
         }
         
         return ToolArgumentSanitizer.sanitizeContext(effectiveMessages);
+    }
+
+    public List<Message> getMessagesForUI(Conversation conversation) {
+        return conversation.getAllMessages();
     }
 
     public String getCompactionStats(Conversation conversation) {

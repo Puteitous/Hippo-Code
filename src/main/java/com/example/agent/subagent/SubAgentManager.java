@@ -14,6 +14,7 @@ import com.example.agent.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -476,31 +477,46 @@ public class SubAgentManager {
         try {
             com.example.agent.core.AgentContext ctx = ServiceLocator.getOrNull(com.example.agent.core.AgentContext.class);
             if (ctx != null && ctx.getConversation() != null) {
-                String status = error != null ? "失败" : "成功";
-                String marker = error != null ? "❌" : "✅";
-                String messageContent = String.format("""
-                    
-                    %s === Sub-Agent 任务执行%s ===
-                    任务 ID: %s
-                    任务描述: %s
-                    %s
-                    
-                    """,
-                    marker, status,
-                    task.getTaskId(),
-                    task.getDescription(),
-                    error != null ? "错误信息: " + error : "执行结果: " + result
-                );
+                if (error != null) {
+                    logger.debug("Sub-Agent 任务失败，不注入通知: taskId={}", task.getTaskId());
+                    return;
+                }
 
-                ctx.getConversation().addMessage(
-                    com.example.agent.llm.model.Message.system(messageContent)
-                );
+                List<String> writtenPaths = extractWrittenPaths(result);
+                if (writtenPaths.isEmpty()) {
+                    logger.debug("Sub-Agent 无记忆文件写入，不注入通知: taskId={}", task.getTaskId());
+                    return;
+                }
 
-                logger.debug("Sub-Agent 结果已注入父会话: taskId={}", task.getTaskId());
+                com.example.agent.llm.model.Message notification = 
+                    com.example.agent.llm.model.Message.memorySaved(writtenPaths);
+                
+                ctx.getConversation().addMessage(notification);
+                logger.debug("Sub-Agent memory_saved 通知已注入父会话: taskId={}, paths={}", 
+                    task.getTaskId(), writtenPaths);
             }
         } catch (Exception e) {
             logger.warn("注入 Sub-Agent 结果到父会话失败: {}", e.getMessage());
         }
+    }
+
+    private List<String> extractWrittenPaths(String result) {
+        List<String> paths = new ArrayList<>();
+        if (result == null || result.isBlank()) {
+            return paths;
+        }
+
+        String[] lines = result.split("\n");
+        for (String line : lines) {
+            line = line.trim();
+            if (line.startsWith("- ") && (line.contains(".md") || line.contains(".txt") || line.contains(".memory"))) {
+                String path = line.substring(2).trim();
+                if (!path.isEmpty()) {
+                    paths.add(path);
+                }
+            }
+        }
+        return paths;
     }
 
     private String getParentSessionId() {

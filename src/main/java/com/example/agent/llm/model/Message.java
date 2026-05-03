@@ -25,6 +25,9 @@ public class Message {
     private String toolCallId;
     
     private String name;
+    
+    @JsonProperty("message_type")
+    private String messageType;
 
     public Message() {
         this.id = java.util.UUID.randomUUID().toString();
@@ -70,6 +73,13 @@ public class Message {
         return message;
     }
 
+    public static Message memorySaved(List<String> paths) {
+        String content = "💾 Memory saved: " + String.join(", ", paths);
+        Message msg = new Message("system", content);
+        msg.messageType = "memory_saved";
+        return msg;
+    }
+
     public boolean isSystem() {
         return "system".equals(role);
     }
@@ -84,6 +94,22 @@ public class Message {
 
     public boolean isTool() {
         return "tool".equals(role);
+    }
+
+    public boolean isMemorySaved() {
+        return "memory_saved".equals(messageType);
+    }
+
+    public boolean isApiVisible() {
+        return messageType == null || "normal".equals(messageType);
+    }
+
+    public String getMessageType() {
+        return messageType;
+    }
+
+    public void setMessageType(String messageType) {
+        this.messageType = messageType;
     }
 
     public String getRole() {

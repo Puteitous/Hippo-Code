@@ -83,6 +83,15 @@ public class Conversation {
         }
     }
 
+    public List<Message> getAllMessages() {
+        lock.readLock().lock();
+        try {
+            return contextWindow.getAllMessagesForUI();
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public TokenBudget getBudget() {
         lock.readLock().lock();
         try {

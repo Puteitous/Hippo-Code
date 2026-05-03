@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 public class ContextWindow {
 
@@ -82,6 +83,15 @@ public class ContextWindow {
     }
 
     public List<Message> getEffectiveMessages() {
+        List<Message> result = new ArrayList<>(messages);
+        result.addAll(injectedWarnings);
+        
+        return result.stream()
+            .filter(m -> !m.isMemorySaved())
+            .collect(Collectors.toList());
+    }
+
+    public List<Message> getAllMessagesForUI() {
         List<Message> result = new ArrayList<>(messages);
         result.addAll(injectedWarnings);
         return Collections.unmodifiableList(result);
