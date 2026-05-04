@@ -54,7 +54,7 @@ public class Config {
 
     private void loadFromEnvironment() {
         String envApiKey = System.getenv("DASHSCOPE_API_KEY");
-        if (envApiKey != null && !envApiKey.isEmpty()) {
+        if (envApiKey != null && !envApiKey.isEmpty() && (llm.getApiKey() == null || llm.getApiKey().isEmpty())) {
             llm.setApiKey(envApiKey);
             logger.info("API Key loaded from environment variable: DASHSCOPE_API_KEY");
         }

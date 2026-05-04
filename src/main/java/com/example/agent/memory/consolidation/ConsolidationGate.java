@@ -1,6 +1,7 @@
 package com.example.agent.memory.consolidation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,10 +45,12 @@ public class ConsolidationGate {
 
     private final Path stateFilePath;
     private final ObjectMapper objectMapper = new ObjectMapper()
-        .registerModule(new JavaTimeModule());
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     // 状态字段（从 stateFilePath 反序列化）
-    private volatile Instant lastConsolidatedAt = Instant.MIN;
+    // 使用 Instant.EPOCH 代替 Instant.MIN，避免 Jackson 序列化时数值溢出
+    private volatile Instant lastConsolidatedAt = Instant.EPOCH;
     private final LinkedBlockingDeque<String> recentSessionIds = new LinkedBlockingDeque<>(MAX_RECENT_SESSIONS);
     private final AtomicInteger newSessionCountSinceLast = new AtomicInteger(0);
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
@@ -226,7 +229,7 @@ public class ConsolidationGate {
      * 手动重置状态（用于测试或管理员操作）
      */
     public void reset() {
-        lastConsolidatedAt = Instant.MIN;
+        lastConsolidatedAt = Instant.EPOCH;
         newSessionCountSinceLast.set(0);
         recentSessionIds.clear();
         consecutiveFailures.set(0);
@@ -277,7 +280,7 @@ public class ConsolidationGate {
             String json = Files.readString(stateFilePath);
             ConsolidationState state = objectMapper.readValue(json, ConsolidationState.class);
 
-            lastConsolidatedAt = state.lastConsolidatedAt != null ? state.lastConsolidatedAt : Instant.MIN;
+            lastConsolidatedAt = state.lastConsolidatedAt != null ? state.lastConsolidatedAt : Instant.EPOCH;
             newSessionCountSinceLast.set(state.newSessionCountSinceLast);
             consecutiveFailures.set(state.consecutiveFailures);
 

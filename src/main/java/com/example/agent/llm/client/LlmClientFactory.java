@@ -95,6 +95,7 @@ public class LlmClientFactory {
                 return Provider.DASHSCOPE;
             case "OPENAI":
             case "GPT":
+            case "SILICONFLOW":
                 return Provider.OPENAI;
             case "OLLAMA":
             case "LOCAL":

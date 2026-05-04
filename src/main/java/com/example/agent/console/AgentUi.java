@@ -34,7 +34,7 @@ public class AgentUi {
         println(ConsoleStyle.boldCyan("║       Hippo Code - AI 编程助手               ║"));
         println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
-        printModeInfo(AgentMode.CHAT);
+        printModeInfo(AgentMode.CODING);
         println(ConsoleStyle.info("模型: " + config.getLlm().getModel()));
         println(ConsoleStyle.info("API: " + config.getLlm().getBaseUrl()));
         println();

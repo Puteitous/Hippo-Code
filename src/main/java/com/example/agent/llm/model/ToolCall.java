@@ -36,7 +36,9 @@ public class ToolCall {
     }
 
     public void setType(String type) {
-        this.type = type;
+        if (type != null) {
+            this.type = type;
+        }
     }
 
     public FunctionCall getFunction() {

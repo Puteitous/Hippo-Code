@@ -64,7 +64,7 @@ public class AgentContext {
     private McpServiceManager mcpServiceManager;
     private LspServiceManager lspServiceManager;
     private com.example.agent.memory.MemoryRetriever memoryRetriever;
-    private AgentMode currentMode = AgentMode.CHAT;
+    private AgentMode currentMode = AgentMode.CODING;
     private final java.util.List<java.util.function.Consumer<AgentMode>> modeChangeListeners = new java.util.ArrayList<>();
 
     public AgentContext() throws IOException {
@@ -83,18 +83,39 @@ public class AgentContext {
                 .variable(LineReader.HISTORY_FILE, 
                     WorkspaceManager.getCurrentProjectDir().resolve("cli-history"))
                 .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
+                .variable("escape-time", 50)
                 .build();
 
         // ✅ 注册快捷键: Shift+Tab 一键切换 Coding/Chat 模式
         registerModeSwitchShortcut();
+        
+        // ✅ 注册快捷键: ESC 清空当前输入
+        registerEscClearShortcut();
+    }
+
+    private void registerEscClearShortcut() {
+        final String WIDGET_NAME = "clear-input";
+        reader.getWidgets().put(WIDGET_NAME, () -> {
+            org.jline.reader.Buffer buffer = reader.getBuffer();
+            if (buffer.length() > 0) {
+                buffer.clear();
+                reader.callWidget(LineReader.REDRAW_LINE);
+            }
+            return true;
+        });
+
+        org.jline.keymap.KeyMap<org.jline.reader.Binding> keyMap = reader.getKeyMaps().get(LineReader.MAIN);
+        keyMap.bind(new Reference(WIDGET_NAME), "\033");
+
+        logger.info("ESC 清空输入快捷键已注册");
     }
 
     private void registerModeSwitchShortcut() {
         final String WIDGET_NAME = "toggle-mode";
         reader.getWidgets().put(WIDGET_NAME, () -> {
-            AgentMode newMode = (currentMode == AgentMode.CHAT) 
-                ? AgentMode.CODING 
-                : AgentMode.CHAT;
+            AgentMode newMode = (currentMode == AgentMode.CODING) 
+                ? AgentMode.CHAT 
+                : AgentMode.CODING;
             
             switchMode(newMode);
             

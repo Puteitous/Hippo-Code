@@ -111,6 +111,13 @@ public class ConfigLoader {
             llm.setApiKey(EnvVariableResolver.resolve(llm.getApiKey()));
             llm.setBaseUrl(EnvVariableResolver.resolve(llm.getBaseUrl()));
             llm.setModel(EnvVariableResolver.resolve(llm.getModel()));
+            
+            logger.info("=== 配置调试信息 ===");
+            logger.info("Provider: {}", config.getLlm().getProvider());
+            logger.info("API Key: {}...", llm.getApiKey() != null && llm.getApiKey().length() > 10 ? llm.getApiKey().substring(0, 10) : "null");
+            logger.info("Model: {}", llm.getModel());
+            logger.info("Base URL: {}", llm.getBaseUrl());
+            logger.info("====================");
         }
     }
 
