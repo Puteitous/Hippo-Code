@@ -64,9 +64,9 @@ class AgentModeTest {
         }
 
         @Test
-        @DisplayName("CHAT 模式允许 forget_memory 工具")
-        void testChatAllowsForgetMemory() {
-            assertTrue(AgentMode.CHAT.isToolAllowed("forget_memory"));
+        @DisplayName("CHAT 模式允许 recall_memory 工具")
+        void testChatAllowsRecallMemory() {
+            assertTrue(AgentMode.CHAT.isToolAllowed("recall_memory"));
         }
 
         @Test
@@ -153,9 +153,9 @@ class AgentModeTest {
         }
 
         @Test
-        @DisplayName("CODING 模式允许 forget_memory 工具")
-        void testCodingAllowsForgetMemory() {
-            assertTrue(AgentMode.CODING.isToolAllowed("forget_memory"));
+        @DisplayName("CODING 模式允许 recall_memory 工具")
+        void testCodingAllowsRecallMemory() {
+            assertTrue(AgentMode.CODING.isToolAllowed("recall_memory"));
         }
 
         @Test
@@ -194,7 +194,7 @@ class AgentModeTest {
         @Test
         @DisplayName("CODING 模式允许的工具数量正确")
         void testCodingAllowedToolsCount() {
-            assertEquals(22, AgentMode.CODING.getAllowedTools().size());
+            assertEquals(21, AgentMode.CODING.getAllowedTools().size());
         }
 
         @Test
