@@ -157,14 +157,20 @@ public class SseParser {
             }
 
             if (node.has("id")) {
-                String id = node.get("id").asText();
-                if (id != null && !id.isEmpty()) {
-                    delta.setId(id);
+                JsonNode idNode = node.get("id");
+                if (!idNode.isNull()) {
+                    String id = idNode.asText();
+                    if (id != null && !id.isEmpty()) {
+                        delta.setId(id);
+                    }
                 }
             }
 
             if (node.has("type")) {
-                delta.setType(node.get("type").asText());
+                JsonNode typeNode = node.get("type");
+                if (!typeNode.isNull()) {
+                    delta.setType(typeNode.asText());
+                }
             }
 
             JsonNode function = node.get("function");

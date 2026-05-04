@@ -58,13 +58,33 @@ public class MemoryModule {
         // 5. 注册记忆工具到 ToolRegistry
         registerMemoryTools();
         
+        // 6. 启动 SSE 看板服务器
+        startDashboardServer();
+        
         logger.info("========== 记忆模块初始化完成 ==========");
         
         return memoryRetriever;
     }
     
     /**
+     * 启动 SSE 看板服务器（默认端口 9090）
+     */
+    private static void startDashboardServer() {
+        try {
+            int port = 9090;
+            MemoryDashboardServer.start(port);
+            logger.info("✅ SSE 看板服务器已启动，端口：{}，访问：http://localhost:{}/sse/memory-events", port, port);
+        } catch (Exception e) {
+            logger.warn("SSE 看板服务器启动失败（不影响核心功能）：{}", e.getMessage(), e);
+        }
+    }
+    
+    /**
      * 注册记忆工具到 ToolRegistry
+     * 
+     * 设计哲学：不注册 forget_memory 工具
+     * LLM 应使用标准文件操作（read_file + edit_file + rm）管理记忆
+     * 这样 LLM 能看到每一步操作，失败后可以自主重试
      */
     private static void registerMemoryTools() {
         try {
@@ -72,9 +92,9 @@ public class MemoryModule {
                 com.example.agent.core.di.ServiceLocator.get(com.example.agent.tools.ToolRegistry.class);
             
             toolRegistry.register(new com.example.agent.tools.RecallMemoryTool(memoryStore));
-            toolRegistry.register(new com.example.agent.tools.ForgetMemoryTool(memoryStore));
             
-            logger.info("✅ 记忆工具已注册：recall_memory, forget_memory");
+            logger.info("✅ 记忆工具已注册：recall_memory");
+            logger.info("ℹ️  记忆删除：LLM 使用 read_file + edit_file + rm 自主操作");
         } catch (Exception e) {
             logger.warn("注册记忆工具失败（ToolRegistry 可能未初始化）：{}", e.getMessage());
         }

@@ -327,6 +327,10 @@ public class MemoryStore {
         // 4. 异步更新索引文件
         scheduleIndexUpdate();
         
+        // 5. 广播 SSE 事件
+        MemoryDashboardServer.broadcast("memory_saved",
+            "{\"id\":\"" + entry.getId() + "\",\"type\":\"" + entry.getType() + "\",\"tags\":" + tagsToJson(entry.getTags()) + "}");
+        
         logger.debug("添加记忆：{}", entry.getId());
     }
 
@@ -928,5 +932,23 @@ public class MemoryStore {
     public void addPendingMemory(String candidate) {
         // TODO: Phase 2 实现待处理记忆队列
         logger.debug("待处理记忆：{}", candidate);
+    }
+
+    /**
+     * 将 tags 集合转换为 JSON 数组字符串
+     */
+    private String tagsToJson(Set<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return "[]";
+        }
+        StringBuilder sb = new StringBuilder("[");
+        boolean first = true;
+        for (String tag : tags) {
+            if (!first) sb.append(",");
+            sb.append("\"").append(tag.replace("\"", "\\\"")).append("\"");
+            first = false;
+        }
+        sb.append("]");
+        return sb.toString();
     }
 }

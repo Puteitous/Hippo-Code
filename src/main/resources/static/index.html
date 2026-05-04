@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hippo Memory</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 10px;
+    }
+    #notifications {
+      margin-top: 20px;
+    }
+    .memory-card {
+      border: 1px solid #ddd;
+      margin: 12px 0;
+      padding: 16px;
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .memory-card strong {
+      color: #4CAF50;
+    }
+    .memory-card small {
+      color: #999;
+    }
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+    .status.connected {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status.disconnected {
+      background: #ffebee;
+      color: #c62828;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧠 Hippo Memory Dashboard</h1>
+  <div id="status" class="status disconnected">连接中...</div>
+  <div id="notifications"></div>
+  <script>
+    const statusDiv = document.getElementById('status');
+    const notificationsDiv = document.getElementById('notifications');
+    let es = null;
+    let reconnectAttempts = 0;
+
+    function connect() {
+      es = new EventSource('/sse/memory-events');
+
+      es.onopen = () => {
+        statusDiv.className = 'status connected';
+        statusDiv.textContent = '✅ 已连接到 SSE 服务器';
+        reconnectAttempts = 0;
+        console.log('SSE 连接成功');
+      };
+
+      es.addEventListener('memory_saved', (e) => {
+        console.log('收到记忆事件:', e.data);
+        try {
+          const data = JSON.parse(e.data);
+          const card = document.createElement('div');
+          card.className = 'memory-card';
+          card.innerHTML = `
+            <strong>💾 Memory Saved</strong><br>
+            ID: ${data.id}<br>
+            Type: ${data.type}<br>
+            Tags: ${data.tags?.join(', ') || '无'}<br>
+            <small>${new Date().toLocaleTimeString()}</small>
+          `;
+          notificationsDiv.insertBefore(card, notificationsDiv.firstChild);
+        } catch (err) {
+          console.error('解析事件数据失败:', err);
+        }
+      });
+
+      es.onerror = (err) => {
+        statusDiv.className = 'status disconnected';
+        statusDiv.textContent = '❌ 连接断开，正在重连...';
+        console.error('SSE 连接错误:', err);
+        
+        es.close();
+        reconnectAttempts++;
+        
+        if (reconnectAttempts < 10) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+          console.log(`将在 ${delay}ms 后重连 (第 ${reconnectAttempts} 次)`);
+          setTimeout(connect, delay);
+        } else {
+          statusDiv.textContent = '❌ 连接失败次数过多，请刷新页面';
+        }
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>
