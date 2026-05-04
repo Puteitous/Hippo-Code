@@ -80,6 +80,11 @@ public class TruncationService {
         if (content == null || content.isEmpty()) {
             return content;
         }
+
+        if ("read_file".equals(toolName)) {
+            return content;
+        }
+
         int effectiveMax = Math.max(1, Math.min(maxTokens, GLOBAL_HARD_LIMIT));
         int originalTokens = tokenEstimator.estimateTextTokens(content);
         if (originalTokens <= effectiveMax) {

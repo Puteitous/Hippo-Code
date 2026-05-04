@@ -159,4 +159,17 @@ public class TruncateCompressor implements Compressor {
         Message result = compress(temp, maxTokens);
         return result.getContent();
     }
+
+    @Override
+    public String compress(String content, String toolName) {
+        if (content == null || content.isEmpty()) {
+            return content;
+        }
+        if ("read_file".equals(toolName)) {
+            return content;
+        }
+        Message temp = Message.toolResult("temp", toolName, content);
+        Message result = compress(temp, maxTokens);
+        return result.getContent();
+    }
 }

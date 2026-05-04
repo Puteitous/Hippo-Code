@@ -345,7 +345,7 @@ public class ConversationService {
     }
 
     public void addToolResult(Conversation conversation, String toolCallId, String toolName, String content) {
-        String compressed = toolResultCompressor.compress(content);
+        String compressed = toolResultCompressor.compress(content, toolName);
         addMessage(conversation, Message.toolResult(toolCallId, toolName, compressed));
     }
 

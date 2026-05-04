@@ -14,6 +14,10 @@ public interface Compressor {
         return result.getContent();
     }
     
+    default String compress(String content, String toolName) {
+        return compress(content);
+    }
+    
     default String getName() {
         return this.getClass().getSimpleName();
     }

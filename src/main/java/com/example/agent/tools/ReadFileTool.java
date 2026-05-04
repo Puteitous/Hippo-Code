@@ -11,11 +11,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 public class ReadFileTool implements ToolExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(ReadFileTool.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+    private static final int MAX_LINES_TO_READ = 2000;
 
     private final Map<String, FileCacheEntry> fileCache = new ConcurrentHashMap<>();
 
@@ -60,12 +62,16 @@ public class ReadFileTool implements ToolExecutor {
                 "<system-reminder>\n" +
                 "文件 %s 内容未改变。\n" +
                 "你已在 %s 读取过此文件（第 %d 次访问），文件大小 %d 字符。\n" +
-                "请直接使用上下文中的内容，无需重复读取。\n" +
+                "内容已在上下文中，无需重复读取。\n" +
+                "如需读取其他部分，请使用 offset/limit 参数。\n" +
+                "示例: offset=%d, limit=%d 读取后续内容\n" +
                 "</system-reminder>",
                 filePath,
                 timeDesc,
                 accessCount,
-                contentLength
+                contentLength,
+                MAX_LINES_TO_READ,
+                MAX_LINES_TO_READ
             );
         }
     }
@@ -90,9 +96,13 @@ public class ReadFileTool implements ToolExecutor {
                         "type": "string",
                         "description": "要读取的文件路径（绝对路径或相对路径，只能访问项目目录内）"
                     },
-                    "max_tokens": {
+                    "offset": {
                         "type": "integer",
-                        "description": "最大 token 数（可选，默认 4000），超过时会智能截断"
+                        "description": "起始行号（默认 0，从第 1 行开始）"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "读取行数（默认 2000，最大 2000）"
                     }
                 },
                 "required": ["path"]
@@ -145,25 +155,69 @@ public class ReadFileTool implements ToolExecutor {
                         String.format("文件过大（%d 字节），最大支持 %d 字节（10MB）", fileSize, MAX_FILE_SIZE));
             }
 
+            int offset = 0;
+            if (arguments.has("offset") && !arguments.get("offset").isNull()) {
+                offset = Math.max(0, arguments.get("offset").asInt());
+            }
+
+            int limit = MAX_LINES_TO_READ;
+            if (arguments.has("limit") && !arguments.get("limit").isNull()) {
+                limit = Math.min(MAX_LINES_TO_READ, Math.max(1, arguments.get("limit").asInt()));
+            }
+
             FileCacheEntry cached = fileCache.get(filePath);
-            if (cached != null && !cached.isFileModified(path)) {
+            if (cached != null && !cached.isFileModified(path) && offset == 0 && limit == MAX_LINES_TO_READ) {
                 logger.debug("缓存命中: {} (访问次数: {})", filePath, cached.accessCount + 1);
                 return cached.generateCacheHitMessage(filePath);
             }
 
-            String content = Files.readString(path);
+            List<String> allLines = Files.readAllLines(path);
+            int totalLines = allLines.size();
+
+            if (totalLines > MAX_LINES_TO_READ && offset == 0 && !arguments.has("limit")) {
+                throw new ToolExecutionException(
+                    String.format("文件过大（%d 行），超过最大读取限制（%d 行）。\n" +
+                    "请使用 offset 和 limit 参数分段读取。\n" +
+                    "示例: offset=0, limit=%d 读取前 %d 行",
+                    totalLines, MAX_LINES_TO_READ, MAX_LINES_TO_READ, MAX_LINES_TO_READ)
+                );
+            }
+
+            int actualOffset = Math.min(offset, totalLines);
+            int actualLimit = Math.min(limit, totalLines - actualOffset);
+            
+            String content;
+            boolean isPartialRead = actualLimit < totalLines;
+
+            if (isPartialRead) {
+                int end = Math.min(actualOffset + actualLimit, totalLines);
+                content = String.join("\n", allLines.subList(actualOffset, end));
+            } else {
+                content = String.join("\n", allLines);
+            }
+
             long lastModified = Files.getLastModifiedTime(path).toMillis();
-            fileCache.put(filePath, new FileCacheEntry(content, lastModified, System.currentTimeMillis()));
+            if (offset == 0 && limit == MAX_LINES_TO_READ) {
+                fileCache.put(filePath, new FileCacheEntry(content, lastModified, System.currentTimeMillis()));
+            }
             
             String relativePath = PathSecurityUtils.getRelativePath(path);
 
             StringBuilder result = new StringBuilder();
             result.append("文件内容 (").append(relativePath);
+            if (isPartialRead) {
+                result.append(", 行 ").append(actualOffset + 1).append("-").append(actualOffset + actualLimit);
+            }
             result.append("):\n");
             result.append("<file_content>\n");
             result.append(content);
             result.append("\n</file_content>\n");
             result.append("(").append(content.length()).append(" 字符");
+            if (isPartialRead) {
+                result.append(", 文件共 ").append(totalLines).append(" 行");
+                result.append(", 已读取 ").append(actualOffset + 1).append("-").append(actualOffset + actualLimit).append(" 行");
+                result.append("\n提示: 使用 offset/limit 参数继续读取其他部分");
+            }
             if (!content.endsWith("\n")) {
                 result.append(", 文件末尾无换行符");
             }

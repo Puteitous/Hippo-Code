@@ -380,6 +380,36 @@ public class SubAgentRunner implements Runnable {
                 continue;
             }
 
+            if (permission == SubAgentPermission.MEMORY_EXTRACTOR || permission == SubAgentPermission.MEMORY_CONSOLIDATOR) {
+                try {
+                    String fixedArguments = ToolArgumentSanitizer.fixJsonArguments(toolName, arguments);
+                    JsonNode args = objectMapper.readTree(fixedArguments);
+                    String filePath = null;
+                    if (args.has("path")) {
+                        filePath = args.get("path").asText();
+                    } else if (args.has("file_path")) {
+                        filePath = args.get("file_path").asText();
+                    }
+                    
+                    if (filePath == null || !filePath.endsWith("session-memory.md")) {
+                        String errorMsg = String.format("权限拒绝: %s 只能操作 session-memory.md 文件，不允许: %s", 
+                            permission.getName(), filePath);
+                        task.addLog(errorMsg);
+                        subAgentLogger.log(errorMsg);
+                        addToolResult(toolCall.getId(), toolName, errorMsg);
+                        failedCount++;
+                        continue;
+                    }
+                } catch (Exception e) {
+                    String errorMsg = "权限拒绝: 无法解析文件路径参数";
+                    task.addLog(errorMsg);
+                    subAgentLogger.log(errorMsg);
+                    addToolResult(toolCall.getId(), toolName, errorMsg);
+                    failedCount++;
+                    continue;
+                }
+            }
+
             String result = null;
             int toolRetryCount = 0;
             boolean toolSucceeded = false;
