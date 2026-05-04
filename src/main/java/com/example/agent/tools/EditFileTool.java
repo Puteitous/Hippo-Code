@@ -136,6 +136,7 @@ public class EditFileTool implements ToolExecutor {
             
             if (firstIndex == -1) {
                 String diagnosis = diagnoseMismatch(content, oldText);
+                ReadFileTool.markRecentEditFailure(filePath);
                 throw new ToolExecutionException(
                     "未找到要替换的文本。\n" +
                     diagnosis +
@@ -146,6 +147,7 @@ public class EditFileTool implements ToolExecutor {
             int lastIndex = content.lastIndexOf(oldText);
             if (firstIndex != lastIndex) {
                 int count = countOccurrences(content, oldText);
+                ReadFileTool.markRecentEditFailure(filePath);
                 throw new ToolExecutionException(
                     String.format(
                         "要替换的文本在文件中出现 %d 次，必须唯一匹配才能替换。\n" +

@@ -38,7 +38,6 @@
 - grep: 文本搜索
 - search_code: 代码语义检索
 - recall_memory: 根据记忆 ID 获取完整记忆内容
-- forget_memory: 根据用户要求删除指定的记忆条目（支持按 ID 或关键词删除）
 - fork_agent: 创建单个子 Agent 执行任务（支持同步/异步双模式）
 - fork_agents: 批量创建多个子 Agent 并行执行独立任务
 - list_subagents: 查询所有子 Agent 任务的状态和执行结果
@@ -86,7 +85,11 @@
 
 **核心指令：**
 - **如果用户明确要求记住某些内容，立即保存为最合适的记忆类型。**
-- **如果用户要求忘记某些内容，找到并删除相关的记忆条目。**
+- **如果用户要求忘记某些内容，通过文件操作删除相关记忆：**
+  1. 使用 `read_file` 读取 `.hippo/memory/MEMORY.md` 找到相关条目
+  2. 使用 `read_file` 读取对应的记忆文件确认内容
+  3. 使用 `edit_file` 从 MEMORY.md 中删除该索引行
+  4. 使用 `bash rm` 删除对应的记忆文件
 
 **记忆类型：**
 1. **user_preference** - 用户偏好（工具偏好、代码风格、沟通方式）

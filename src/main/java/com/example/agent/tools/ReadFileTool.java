@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,9 @@ public class ReadFileTool implements ToolExecutor {
     private static final Logger logger = LoggerFactory.getLogger(ReadFileTool.class);
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
     private static final int MAX_LINES_TO_READ = 2000;
+    private static final long EDIT_FAILURE_WINDOW_MS = 30000;
+
+    private static final Map<String, Instant> recentEditFailures = new ConcurrentHashMap<>();
 
     private final Map<String, FileCacheEntry> fileCache = new ConcurrentHashMap<>();
 
@@ -46,7 +50,7 @@ public class ReadFileTool implements ToolExecutor {
             }
         }
 
-        String generateCacheHitMessage(String filePath) {
+        String generateCacheHitMessage(String filePath, String content) {
             this.accessCount++;
             long timeSinceRead = System.currentTimeMillis() - readTime;
             String timeDesc;
@@ -60,18 +64,18 @@ public class ReadFileTool implements ToolExecutor {
 
             return String.format(
                 "<system-reminder>\n" +
-                "文件 %s 内容未改变。\n" +
-                "你已在 %s 读取过此文件（第 %d 次访问），文件大小 %d 字符。\n" +
-                "内容已在上下文中，无需重复读取。\n" +
-                "如需读取其他部分，请使用 offset/limit 参数。\n" +
-                "示例: offset=%d, limit=%d 读取后续内容\n" +
-                "</system-reminder>",
+                "文件 %s 内容未改变（%s 读取，第 %d 次访问）。\n" +
+                "如果你之前使用 edit_file 失败，请根据以下内容修正你的 old_text 参数。\n" +
+                "</system-reminder>\n" +
+                "<file_content>\n" +
+                "%s\n" +
+                "</file_content>\n" +
+                "(%d 字符)",
                 filePath,
                 timeDesc,
                 accessCount,
-                contentLength,
-                MAX_LINES_TO_READ,
-                MAX_LINES_TO_READ
+                content,
+                contentLength
             );
         }
     }
@@ -168,7 +172,14 @@ public class ReadFileTool implements ToolExecutor {
             FileCacheEntry cached = fileCache.get(filePath);
             if (cached != null && !cached.isFileModified(path) && offset == 0 && limit == MAX_LINES_TO_READ) {
                 logger.debug("缓存命中: {} (访问次数: {})", filePath, cached.accessCount + 1);
-                return cached.generateCacheHitMessage(filePath);
+                
+                if (hasRecentEditFailure(filePath)) {
+                    recentEditFailures.remove(filePath);
+                    logger.info("编辑失败后重新读取: {} (返回完整内容)", filePath);
+                    return cached.content;
+                }
+                
+                return cached.generateCacheHitMessage(filePath, cached.content);
             }
 
             List<String> allLines = Files.readAllLines(path);
@@ -243,5 +254,25 @@ public class ReadFileTool implements ToolExecutor {
 
     public int getCacheSize() {
         return fileCache.size();
+    }
+
+    public static void markRecentEditFailure(String filePath) {
+        recentEditFailures.put(filePath, Instant.now());
+        logger.info("记录编辑失败: {} (30秒内读取将返回完整内容)", filePath);
+    }
+
+    public static boolean hasRecentEditFailure(String filePath) {
+        Instant failureTime = recentEditFailures.get(filePath);
+        if (failureTime == null) {
+            return false;
+        }
+
+        long elapsed = Instant.now().toEpochMilli() - failureTime.toEpochMilli();
+        if (elapsed > EDIT_FAILURE_WINDOW_MS) {
+            recentEditFailures.remove(filePath);
+            return false;
+        }
+
+        return true;
     }
 }

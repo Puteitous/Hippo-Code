@@ -11,7 +11,6 @@
 - grep: 在文件内容中搜索文本（支持正则表达式）
 - search_code: 语义检索代码库，查找相关代码文件
 - recall_memory: 根据记忆 ID 获取完整记忆内容
-- forget_memory: 根据用户要求删除指定的记忆条目（支持按 ID 或关键词删除）
 - ask_user: 向用户提问并等待回答（用于确认或获取信息）
 - bash: 执行终端命令（如 git, mvn, npm 等，有安全限制）
 - todo_write: 管理任务清单，跟踪执行进度
