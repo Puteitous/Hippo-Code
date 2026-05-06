@@ -1,0 +1,55 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-light);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+button:disabled {
+  background: #ccc !important;
+  cursor: not-allowed !important;
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.typing-indicator {
+  display: inline-block;
+  animation: blink 1s infinite;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  margin: auto;
+  font-size: var(--font-size-2xl);
+}

@@ -4,27 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hippo Chat</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/common.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
             height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
         .header {
-            background: #1a1a2e;
+            background: var(--primary-dark);
             color: white;
             padding: 12px 20px;
-            font-size: 18px;
+            font-size: var(--font-size-3xl);
             font-weight: 600;
         }
 
@@ -40,35 +33,35 @@
         .message {
             max-width: 80%;
             padding: 12px 16px;
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             line-height: 1.6;
         }
 
         .message.user {
             align-self: flex-end;
-            background: #1a1a2e;
+            background: var(--primary-dark);
             color: white;
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: var(--radius-sm);
         }
 
         .message.assistant {
             align-self: flex-start;
-            background: white;
-            color: #333;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: var(--bg-white);
+            color: var(--text-primary);
+            border-bottom-left-radius: var(--radius-sm);
+            box-shadow: var(--shadow-sm);
         }
 
         .message.assistant pre {
-            background: #f0f0f0;
+            background: var(--bg-code);
             padding: 12px;
-            border-radius: 6px;
+            border-radius: var(--radius-sm);
             overflow-x: auto;
             margin: 8px 0;
         }
 
         .message.assistant code {
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: var(--font-mono);
             font-size: 14px;
         }
 
@@ -82,9 +75,9 @@
         }
 
         .input-container {
-            background: white;
+            background: var(--bg-white);
             padding: 16px 20px;
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid var(--border-color);
             display: flex;
             gap: 12px;
         }
@@ -92,52 +85,26 @@
         .input-container input {
             flex: 1;
             padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 15px;
-            outline: none;
-            transition: border-color 0.2s;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-xl);
         }
 
         .input-container input:focus {
-            border-color: #1a1a2e;
+            border-color: var(--primary-dark);
         }
 
         .input-container button {
             padding: 12px 24px;
-            background: #1a1a2e;
+            background: var(--primary-dark);
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            cursor: pointer;
-            transition: background 0.2s;
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-xl);
         }
 
-        .input-container button:hover {
-            background: #16213e;
-        }
-
-        .input-container button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .typing-indicator {
-            display: inline-block;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #999;
-            margin: auto;
-            font-size: 16px;
+        .input-container button:hover:not(:disabled) {
+            background: var(--primary-dark-hover);
         }
     </style>
 </head>
@@ -150,15 +117,20 @@
 
     <div class="input-container">
         <input type="text" id="messageInput" placeholder="输入消息..." autocomplete="off">
-        <button id="sendBtn" onclick="sendMessage()">发送</button>
+        <button id="sendBtn">发送</button>
     </div>
 
-    <script>
+    <script type="module">
+        import { ChatService } from './js/chat-service.js';
+        import { renderMarkdown } from './js/markdown-renderer.js';
+        import { generateSessionId } from './js/utils.js';
+
         const chatContainer = document.getElementById('chatContainer');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
 
-        let currentSessionId = 'web-' + Date.now();
+        const chatService = new ChatService();
+        let currentSessionId = generateSessionId();
 
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -166,6 +138,8 @@
                 sendMessage();
             }
         });
+
+        sendBtn.addEventListener('click', sendMessage);
 
         function appendMessage(role, content) {
             const emptyState = chatContainer.querySelector('.empty-state');
@@ -175,7 +149,9 @@
             msgDiv.className = `message ${role}`;
             
             if (role === 'assistant') {
-                msgDiv.innerHTML = marked.parse(content);
+                renderMarkdown(content).then(html => {
+                    msgDiv.innerHTML = html;
+                });
             } else {
                 msgDiv.textContent = content;
             }
@@ -195,52 +171,30 @@
             sendBtn.disabled = true;
             messageInput.disabled = true;
 
-            const assistantMsg = appendMessage('assistant', '<span class="typing-indicator">...</span>');
+            const assistantMsg = document.createElement('div');
+            assistantMsg.className = 'message assistant';
+            assistantMsg.innerHTML = '<span class="typing-indicator">...</span>';
+            chatContainer.appendChild(assistantMsg);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
             let fullContent = '';
 
             try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session: currentSessionId,
-                        message: content
-                    })
-                });
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.substring(6);
-                            if (data === '[DONE]') continue;
-                            
-                            try {
-                                const parsed = JSON.parse(data);
-                                if (parsed.content) {
-                                    fullContent += parsed.content;
-                                    assistantMsg.innerHTML = marked.parse(fullContent);
-                                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                                }
-                                if (parsed.done) {
-                                    break;
-                                }
-                            } catch (e) {
-                                // 忽略解析错误
-                            }
+                await chatService.sendMessage(
+                    currentSessionId,
+                    content,
+                    (parsed) => {
+                        if (parsed.content) {
+                            fullContent += parsed.content;
+                            renderMarkdown(fullContent).then(html => {
+                                assistantMsg.innerHTML = html;
+                                chatContainer.scrollTop = chatContainer.scrollHeight;
+                            });
                         }
                     }
-                }
+                );
             } catch (error) {
-                assistantMsg.innerHTML = `<span style="color: red;">错误: ${error.message}</span>`;
+                assistantMsg.innerHTML = `<span style="color: var(--error-color);">错误: ${error.message}</span>`;
             } finally {
                 sendBtn.disabled = false;
                 messageInput.disabled = false;
