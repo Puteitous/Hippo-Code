@@ -344,8 +344,10 @@ public class ConversationService {
         }
     }
 
-    public void addUserMessage(Conversation conversation, String content) {
-        addMessage(conversation, Message.user(content));
+    public Message addUserMessage(Conversation conversation, String content) {
+        Message message = Message.user(content);
+        addMessage(conversation, message);
+        return message;
     }
 
     public int truncateMessagesAfter(Conversation conversation, String messageId) {
@@ -371,7 +373,7 @@ public class ConversationService {
         return removed;
     }
 
-    public String editUserMessage(Conversation conversation, String messageId, String newContent) {
+    public Message editUserMessage(Conversation conversation, String messageId, String newContent) {
         if (conversation == null || messageId == null || newContent == null) {
             return null;
         }
@@ -379,8 +381,7 @@ public class ConversationService {
         if (removed == 0) {
             return null;
         }
-        addUserMessage(conversation, newContent);
-        return newContent;
+        return addUserMessage(conversation, newContent);
     }
 
     public void addAssistantMessage(Conversation conversation, String content) {
@@ -389,14 +390,32 @@ public class ConversationService {
 
     public void addAssistantMessage(Conversation conversation, Message message, Usage usage) {
         addMessage(conversation, message);
+        
+        // 保存 LLM 返回的 usage 数据，用于 Token 统计
+        if (usage != null) {
+            conversation.updateLastKnownUsage(usage);
+            logger.debug("已保存 usage: prompt={}, completion={}, total={}", 
+                usage.getPromptTokens(), usage.getCompletionTokens(), usage.getTotalTokens());
+        } else {
+            logger.warn("LLM 返回的 usage 为 null");
+        }
     }
 
     public void addToolResult(Conversation conversation, String toolCallId, String toolName, String content) {
+        addToolResult(conversation, toolCallId, toolName, content, true);
+    }
+
+    public void addToolResult(Conversation conversation, String toolCallId, String toolName, String content, boolean success) {
         String compressed = toolResultCompressor.compress(content, toolName);
-        addMessage(conversation, Message.toolResult(toolCallId, toolName, compressed));
+        Message message = Message.toolResult(toolCallId, toolName, compressed);
+        addMessage(conversation, message, success);
     }
 
     public void addMessage(Conversation conversation, Message message) {
+        addMessage(conversation, message, true);
+    }
+
+    private void addMessage(Conversation conversation, Message message, boolean toolSuccess) {
         if (conversation == null) {
             logger.warn("conversation 为 null，跳过添加消息");
             return;
@@ -424,7 +443,7 @@ public class ConversationService {
             } else if (message.isAssistant()) {
                 components.transcript.appendAssistantMessage(message, null);
             } else if (message.isTool()) {
-                components.transcript.appendToolResult(message, message.getName(), 0, true);
+                components.transcript.appendToolResult(message, message.getName(), 0, toolSuccess);
             } else if (message.isSystem()) {
                 components.transcript.appendSystemMessage(message.getContent());
             }

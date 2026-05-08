@@ -172,19 +172,21 @@ public class SessionTranscript {
     private void startFlushThread() {
         if (running.compareAndSet(false, true)) {
             lastFlushTime = System.currentTimeMillis();
-            flushThread = new Thread(this::flushLoop, "transcript-flush-" + sessionId.substring(0, 8));
+            String shortId = sessionId.length() > 8 ? sessionId.substring(0, 8) : sessionId;
+            flushThread = new Thread(this::flushLoop, "transcript-flush-" + shortId);
             flushThread.setDaemon(true);
             flushThread.start();
         }
     }
 
     private void registerShutdownHook() {
+        String shortId = sessionId.length() > 8 ? sessionId.substring(0, 8) : sessionId;
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (running.get()) {
                 forceFlush();
                 closeWriter();
             }
-        }, "transcript-shutdown-" + sessionId.substring(0, 8)));
+        }, "transcript-shutdown-" + shortId));
     }
 
     private void flushLoop() {

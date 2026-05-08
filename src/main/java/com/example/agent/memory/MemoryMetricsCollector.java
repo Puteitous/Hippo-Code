@@ -113,7 +113,14 @@ public class MemoryMetricsCollector {
         int total = injectionSuccessCount.get() + injectionEmptyCount.get();
         return total > 0 ? (double) injectionSuccessCount.get() / total : 0.0;
     }
-    
+
+    public int getVectorSearchCount() { return vectorSearchCount.get(); }
+    public int getVectorSearchHitCount() { return vectorSearchHitCount.get(); }
+    public int getKeywordFallbackCount() { return keywordFallbackCount.get(); }
+    public int getKeywordSearchHitCount() { return keywordSearchHitCount.get(); }
+    public int getInjectionSuccessCount() { return injectionSuccessCount.get(); }
+    public int getInjectionEmptyCount() { return injectionEmptyCount.get(); }
+
     /**
      * 生成指标摘要
      */

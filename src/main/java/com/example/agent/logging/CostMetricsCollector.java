@@ -33,6 +33,11 @@ public class CostMetricsCollector {
     private final Map<String, AtomicLong> modelTokenUsage = new ConcurrentHashMap<>();
     private final Map<String, AtomicReference<BigDecimal>> modelCosts = new ConcurrentHashMap<>();
 
+    // 延迟追踪
+    private final AtomicLong totalLatencyMs = new AtomicLong(0);
+    private final AtomicLong minLatencyMs = new AtomicLong(Long.MAX_VALUE);
+    private final AtomicLong maxLatencyMs = new AtomicLong(0);
+
     public CostMetricsCollector(LocalDate date) {
         this.date = date;
         registerSubscribers();
@@ -58,6 +63,12 @@ public class CostMetricsCollector {
 
         totalPromptTokens.addAndGet(event.promptTokens());
         totalCompletionTokens.addAndGet(event.completionTokens());
+
+        // 追踪延迟
+        long latency = event.latencyMs();
+        totalLatencyMs.addAndGet(latency);
+        updateMinLatency(latency);
+        updateMaxLatency(latency);
 
         LlmPricing.Cost cost = LlmPricing.calculateCost(
                 event.model(),
@@ -87,6 +98,48 @@ public class CostMetricsCollector {
                 event.promptTokens(),
                 event.completionTokens(),
                 cost.format());
+    }
+
+    private void updateMinLatency(long latency) {
+        while (true) {
+            long current = minLatencyMs.get();
+            if (latency >= current) break;
+            if (minLatencyMs.compareAndSet(current, latency)) break;
+        }
+    }
+
+    private void updateMaxLatency(long latency) {
+        while (true) {
+            long current = maxLatencyMs.get();
+            if (latency <= current) break;
+            if (maxLatencyMs.compareAndSet(current, latency)) break;
+        }
+    }
+
+    public long getTotalRequests() {
+        return totalRequests.get();
+    }
+
+    public long getSuccessfulRequests() {
+        return successfulRequests.get();
+    }
+
+    public long getFailedRequests() {
+        return failedRequests.get();
+    }
+
+    public double getAvgLatencyMs() {
+        long total = totalRequests.get();
+        return total > 0 ? (double) totalLatencyMs.get() / total : 0;
+    }
+
+    public long getMinLatencyMs() {
+        long v = minLatencyMs.get();
+        return v == Long.MAX_VALUE ? 0 : v;
+    }
+
+    public long getMaxLatencyMs() {
+        return maxLatencyMs.get();
     }
 
     public String getSummary() {

@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
 import java.util.LongSummaryStatistics;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -88,6 +89,13 @@ public class EventMetricsCollector {
                 totalCompletionTokens.get()
         );
     }
+
+    public int getTotalToolCalls() { return totalToolCalls.get(); }
+    public int getSuccessfulToolCalls() { return successfulToolCalls.get(); }
+    public int getFailedToolCalls() { return failedToolCalls.get(); }
+    public Map<String, AtomicInteger> getToolUsage() { return toolUsage; }
+    public Map<String, LongSummaryStatistics> getToolLatency() { return toolLatency; }
+    public int getTotalLlmRequests() { return totalLlmRequests.get(); }
 
     private String getMostUsedTool() {
         return toolUsage.entrySet().stream()

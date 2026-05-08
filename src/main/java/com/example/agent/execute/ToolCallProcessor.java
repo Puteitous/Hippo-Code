@@ -71,7 +71,7 @@ public class ToolCallProcessor {
                     );
                     ui.println(ConsoleStyle.gray("  ├─ ") + ConsoleStyle.yellow(msg));
                     logger.warn("模式权限拦截: {} - {}", mode, toolName);
-                    conversationService.addToolResult(conversation, toolCall.getId(), toolName, "权限受限: " + msg);
+                    conversationService.addToolResult(conversation, toolCall.getId(), toolName, "权限受限: " + msg, false);
                     continue;
                 }
                 
@@ -124,7 +124,7 @@ public class ToolCallProcessor {
                     );
                 }
 
-                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), truncatedResult);
+                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), truncatedResult, true);
             } else {
                 String errorMsg = result.getErrorMessage() != null ? result.getErrorMessage() : "未知错误";
 
@@ -139,7 +139,7 @@ public class ToolCallProcessor {
                 }
 
                 String errorResult = "Error: " + errorMsg + "\nPlease try a different approach or check if the path is correct.";
-                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), errorResult);
+                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), errorResult, false);
             }
         }
     }
