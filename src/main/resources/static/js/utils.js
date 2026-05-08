@@ -1,7 +1,21 @@
-export function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+export function escapeHtml(text, forAttribute = false) {
+  // 处理 null 和 undefined
+  if (text == null) {
+    return '';
+  }
+  
+  const html = String(text).replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  
+  // 如果用于 HTML 属性，额外处理单引号
+  if (forAttribute) {
+    return html.replace(/'/g, '&#39;');
+  }
+  
+  return html;
 }
 
 export function safeParseJSON(data, fallback = null) {

@@ -240,10 +240,10 @@ export class MemoryPanel {
         if (res.ok) {
           this.viewMemory(data.id);
         } else {
-          alert('保存失败');
+          showToast('保存失败', 'error');
         }
       } catch (e) {
-        alert('保存失败: ' + e.message);
+        showToast('保存失败: ' + e.message, 'error');
       }
     });
   }
@@ -263,10 +263,10 @@ export class MemoryPanel {
           this.loadMemories();
         }
       } else {
-        alert('删除失败');
+        showToast('删除失败', 'error');
       }
     } catch (e) {
-      alert('删除失败: ' + e.message);
+      showToast('删除失败: ' + e.message, 'error');
     }
   }
 
