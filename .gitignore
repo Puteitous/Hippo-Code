@@ -38,12 +38,15 @@ MEMORY.md
 dependency-reduced-pom.xml
 
 # Hippo 配置与记忆文件
-.hipporules
-MEMORY.md
-
-# LSP 配置
 .classpath
 .project
 .settings/
 
 .trae/
+
+node_modules/
+
+# 测试产物
+test-results/
+playwright-report/
+coverage/
