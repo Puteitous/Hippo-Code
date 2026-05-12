@@ -16,13 +16,16 @@ public class BashTool implements ToolExecutor {
 
     private static final int DEFAULT_TIMEOUT = 30;
     private static final int MAX_TIMEOUT = 300;
+    private static final int MAX_OUTPUT_CHARS = 5000;
+    private static final int MAX_OUTPUT_CHARS_WARN = 3000;
+    private static final String OUTPUT_TRUNCATE_MARKER = "\n... [输出过长，已截断 %d 字符，共 %d 字符] ...\n";
     
     private static final Set<String> ALLOWED_COMMANDS = new HashSet<>(Arrays.asList(
         "git", "mvn", "gradle", "npm", "yarn", "pnpm",
         "javac", "java", "jar", "javadoc",
-        "ls", "dir", "cat", "pwd", "echo", "mkdir", "touch",
-        "grep", "find", "wc", "head", "tail", "sort", "uniq",
-        "curl", "wget"
+        "ls", "dir", "cat", "type", "more", "pwd", "echo", "mkdir", "touch",
+        "grep", "findstr", "find", "wc", "head", "tail", "sort", "uniq",
+        "curl", "wget", "where"
     ));
     
     private static final Set<String> BLOCKED_COMMANDS = new HashSet<>(Arrays.asList(
@@ -46,6 +49,7 @@ public class BashTool implements ToolExecutor {
     @Override
     public String getDescription() {
         return "执行终端命令。支持构建工具（mvn, gradle, npm）、版本控制、文件操作等。" +
+               "支持管道（|）和重定向（>）操作。" +
                "出于安全考虑，只允许执行白名单内的命令，禁止危险操作。" +
                "执行前会进行安全检查，危险命令需要用户确认。";
     }
@@ -142,13 +146,12 @@ public class BashTool implements ToolExecutor {
     private void validateCommand(String command) throws ToolExecutionException {
         String lowerCommand = command.toLowerCase();
         
-        if (command.contains(">") || command.contains("|") || 
-            command.contains(";") || command.contains("&&") || 
+        if (command.contains(";") || command.contains("&&") || 
             command.contains("||") || command.contains("`") || 
             command.contains("$(")) {
             throw new ToolExecutionException(
                 "安全限制: 检测到危险的 shell 操作符。\n" +
-                "为了系统安全，重定向、管道、多命令等操作被禁止。"
+                "禁止使用命令链接（;、&&、||）和命令替换（`、$()）。"
             );
         }
         
@@ -170,14 +173,35 @@ public class BashTool implements ToolExecutor {
             }
         }
         
-        String baseCommand = extractBaseCommand(command);
-        if (!ALLOWED_COMMANDS.contains(baseCommand)) {
-            throw new ToolExecutionException(
-                "安全限制: 命令 '" + baseCommand + "' 不在允许列表中。\n" +
-                "允许的命令: " + String.join(", ", ALLOWED_COMMANDS) + "\n" +
-                "如需执行其他命令，请联系管理员添加到白名单。"
-            );
+        for (String segment : splitCommandSegments(command)) {
+            String baseCommand = extractBaseCommand(segment);
+            if (!baseCommand.isEmpty() && !ALLOWED_COMMANDS.contains(baseCommand)) {
+                throw new ToolExecutionException(
+                    "安全限制: 命令 '" + baseCommand + "' 不在允许列表中。\n" +
+                    "允许的命令: " + String.join(", ", ALLOWED_COMMANDS) + "\n" +
+                    "如需执行其他命令，请联系管理员添加到白名单。"
+                );
+            }
         }
+    }
+
+    private static List<String> splitCommandSegments(String command) {
+        List<String> segments = new ArrayList<>();
+        String[] pipeParts = command.split("\\|");
+        for (String pipePart : pipeParts) {
+            String part = pipePart.trim();
+            if (part.isEmpty()) {
+                continue;
+            }
+            int redirectIdx = part.indexOf(">");
+            if (redirectIdx >= 0) {
+                part = part.substring(0, redirectIdx).trim();
+            }
+            if (!part.isEmpty()) {
+                segments.add(part);
+            }
+        }
+        return segments;
     }
 
     private String extractBaseCommand(String command) {
@@ -185,7 +209,11 @@ public class BashTool implements ToolExecutor {
         if (parts.length == 0) {
             return "";
         }
-        return parts[0].toLowerCase();
+        String first = parts[0].toLowerCase();
+        if (first.equals("|") || first.equals(">") || first.equals(">>")) {
+            return parts.length > 1 ? parts[1].toLowerCase() : "";
+        }
+        return first;
     }
 
     private String executeCommand(String command, Path workPath, int timeout) 
@@ -223,31 +251,48 @@ public class BashTool implements ToolExecutor {
         
         if (!finished) {
             process.destroyForcibly();
-            throw new ToolExecutionException(
-                "命令执行超时（超过 " + timeout + " 秒）。\n" +
-                "已执行的输出:\n" + output.toString()
-            );
+            return formatResult(command, truncateOutput(output.toString()), 124, duration, workPath, true);
         }
         
         int exitCode = process.exitValue();
         
-        return formatResult(command, output.toString(), exitCode, duration, workPath);
+        String rawOutput = truncateOutput(output.toString());
+        
+        return formatResult(command, rawOutput, exitCode, duration, workPath, false);
     }
 
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
     }
 
+    private String truncateOutput(String output) {
+        if (output == null || output.length() <= MAX_OUTPUT_CHARS) {
+            return output;
+        }
+        int headLen = MAX_OUTPUT_CHARS_WARN;
+        int tailLen = MAX_OUTPUT_CHARS - MAX_OUTPUT_CHARS_WARN;
+        String head = output.substring(0, headLen);
+        String tail = output.substring(output.length() - tailLen);
+        String marker = String.format(OUTPUT_TRUNCATE_MARKER, output.length() - MAX_OUTPUT_CHARS, output.length());
+        return head + marker + tail;
+    }
+
     private String formatResult(String command, String output, int exitCode, 
-                               long duration, Path workPath) {
+                               long duration, Path workPath, boolean isTimeout) {
         StringBuilder result = new StringBuilder();
         
         result.append("命令执行结果\n");
         result.append("─────────────────────────────────────────────────────────────\n");
         result.append("命令: ").append(command).append("\n");
         result.append("工作目录: ").append(PathSecurityUtils.getRelativePath(workPath)).append("\n");
-        result.append("退出码: ").append(exitCode).append(" ");
-        result.append(exitCode == 0 ? "✅ 成功" : "❌ 失败").append("\n");
+        
+        if (isTimeout) {
+            result.append("退出码: 124 ⏱️ 执行超时（超过 ").append(duration / 1000).append(" 秒）\n");
+        } else {
+            result.append("退出码: ").append(exitCode).append(" ");
+            result.append(exitCode == 0 ? "✅ 成功" : "❌ 失败").append("\n");
+        }
+        
         result.append("执行时间: ").append(duration).append(" ms\n");
         result.append("─────────────────────────────────────────────────────────────\n");
         
@@ -262,6 +307,11 @@ public class BashTool implements ToolExecutor {
         }
         
         result.append("─────────────────────────────────────────────────────────────\n");
+        
+        if (isTimeout) {
+            result.append("\n💡 提示: 该命令执行超过 ").append(duration / 1000).append(" 秒未完成，已被自动终止。\n");
+            result.append("建议你在终端手动执行该命令，将完整结果贴回来。\n");
+        }
         
         return result.toString();
     }

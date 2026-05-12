@@ -85,14 +85,21 @@ public class TruncationService {
             return content;
         }
 
+        boolean alreadyTruncated = content.contains("输出过长，已截断");
+
         int effectiveMax = Math.max(1, Math.min(maxTokens, GLOBAL_HARD_LIMIT));
         int originalTokens = tokenEstimator.estimateTextTokens(content);
         if (originalTokens <= effectiveMax) {
             return content;
         }
         ContentType type = ContentClassifier.detect(toolName, content);
-        logger.warn("工具输出超限，自动截断: tool={}, 类型={}, 原={}tokens, 限制={}",
-                toolName, type, originalTokens, effectiveMax);
+        if (alreadyTruncated) {
+            logger.warn("工具输出已被上游截断，但 token 仍超限，继续下游截断: tool={}, 类型={}, 原={}tokens, 限制={}",
+                    toolName, type, originalTokens, effectiveMax);
+        } else {
+            logger.warn("工具输出超限，自动截断: tool={}, 类型={}, 原={}tokens, 限制={}",
+                    toolName, type, originalTokens, effectiveMax);
+        }
         return forceTruncate(content, type, effectiveMax);
     }
 

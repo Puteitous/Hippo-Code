@@ -101,6 +101,11 @@ public class ToolRegistry {
             }
             
             String result = executor.execute(arguments);
+
+            if (hookResult.isWarning()) {
+                String warning = hookResult.formatWarningMessage();
+                result = warning + "\n\n" + result;
+            }
             
             EventBus.publish(new ToolExecutedEvent(
                     toolName,

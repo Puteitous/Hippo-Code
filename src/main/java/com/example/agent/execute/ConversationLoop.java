@@ -10,6 +10,7 @@ import com.example.agent.llm.exception.LlmApiException;
 import com.example.agent.llm.exception.LlmConnectionException;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.exception.LlmTimeoutException;
+import com.example.agent.tools.ToolRegistry;
 import com.example.agent.logging.ConversationLogger;
 import com.example.agent.logging.WorkspaceManager;
 import com.example.agent.llm.model.Message;
@@ -158,6 +159,8 @@ public class ConversationLoop {
 
                 try {
                     AgentTurnResult result = turnExecutor.execute(conversationLogger, currentSessionId);
+
+                    context.getToolRegistry().getBlockerChain().onTurnComplete();
 
                     if (result == AgentTurnResult.EMPTY_RESPONSE) {
                         emptyResponseRetries++;

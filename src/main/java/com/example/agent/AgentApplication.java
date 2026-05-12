@@ -6,13 +6,11 @@ import com.example.agent.console.InputHandler;
 import com.example.agent.console.ConsoleStyle;
 import com.example.agent.core.AgentContext;
 import com.example.agent.core.di.ServiceLocator;
-import com.example.agent.core.blocker.EditConfirmationBlocker;
 import com.example.agent.execute.AgentTurnExecutor;
 import com.example.agent.execute.ConversationLoop;
 import com.example.agent.execute.ToolCallProcessor;
 import com.example.agent.logging.WorkspaceManager;
 
-import com.example.agent.progress.EditConfirmationHandler;
 import com.example.agent.service.TokenEstimator;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionStorage;
@@ -82,8 +80,6 @@ public class AgentApplication {
                     context.getConversation(),
                     ui
             );
-
-            setupEditConfirmation(context, ui, context.getReader());
 
             AgentTurnExecutor turnExecutor = new AgentTurnExecutor(context, toolCallProcessor, ui);
 
@@ -258,18 +254,6 @@ public class AgentApplication {
         }, "agent-shutdown-hook"));
 
         logger.debug("ShutdownHook 已注册");
-    }
-
-    private void setupEditConfirmation(AgentContext context, AgentUi ui, LineReader reader) {
-        EditConfirmationHandler confirmationHandler = new EditConfirmationHandler(ui, reader);
-
-        context.getToolRegistry().getBlockerChain().getBlockers().stream()
-                .filter(blocker -> blocker instanceof EditConfirmationBlocker)
-                .findFirst()
-                .ifPresent(blocker -> {
-                    ((EditConfirmationBlocker) blocker).setConfirmationHandler(confirmationHandler);
-                    logger.info("✅ Diff 预览确认机制已激活");
-                });
     }
 
     private static void runTranscriptHealthCheck() {

@@ -20,6 +20,8 @@ public class ReadFileTool implements ToolExecutor {
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
     private static final int MAX_LINES_TO_READ = 2000;
     private static final long EDIT_FAILURE_WINDOW_MS = 30000;
+    private static final int MAX_CACHE_SIZE = 100;
+    private static final long CACHE_TTL_MS = 300_000;
 
     private static final Map<String, Instant> recentEditFailures = new ConcurrentHashMap<>();
 
@@ -38,6 +40,10 @@ public class ReadFileTool implements ToolExecutor {
             this.readTime = readTime;
             this.contentLength = content.length();
             this.accessCount = 1;
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - readTime > CACHE_TTL_MS;
         }
 
         boolean isFileModified(Path path) {
@@ -65,18 +71,38 @@ public class ReadFileTool implements ToolExecutor {
             return String.format(
                 "<system-reminder>\n" +
                 "文件 %s 内容未改变（%s 读取，第 %d 次访问）。\n" +
-                "如果你之前使用 edit_file 失败，请根据以下内容修正你的 old_text 参数。\n" +
+                "请直接使用上下文中的内容进行后续操作，无需重复读取。\n" +
                 "</system-reminder>\n" +
-                "<file_content>\n" +
-                "%s\n" +
-                "</file_content>\n" +
                 "(%d 字符)",
                 filePath,
                 timeDesc,
                 accessCount,
-                content,
                 contentLength
             );
+        }
+    }
+
+    private static String normalizeCacheKey(String filePath) {
+        return java.nio.file.Paths.get(filePath).normalize().toString();
+    }
+
+    private void evictIfNeeded() {
+        if (fileCache.size() < MAX_CACHE_SIZE) {
+            return;
+        }
+        Map.Entry<String, FileCacheEntry> oldest = null;
+        for (Map.Entry<String, FileCacheEntry> entry : fileCache.entrySet()) {
+            if (entry.getValue().isExpired()) {
+                fileCache.remove(entry.getKey());
+                continue;
+            }
+            if (oldest == null || entry.getValue().readTime < oldest.getValue().readTime) {
+                oldest = entry;
+            }
+        }
+        if (oldest != null && fileCache.size() >= MAX_CACHE_SIZE) {
+            fileCache.remove(oldest.getKey());
+            logger.debug("缓存淘汰: {}（超过最大容量 {}）", oldest.getKey(), MAX_CACHE_SIZE);
         }
     }
 
@@ -139,6 +165,7 @@ public class ReadFileTool implements ToolExecutor {
         }
 
         Path path = PathSecurityUtils.validateAndResolve(filePath);
+        String cacheKey = normalizeCacheKey(path.toString());
 
         if (!Files.exists(path)) {
             throw new ToolExecutionException("文件不存在: " + filePath);
@@ -169,17 +196,19 @@ public class ReadFileTool implements ToolExecutor {
                 limit = Math.min(MAX_LINES_TO_READ, Math.max(1, arguments.get("limit").asInt()));
             }
 
-            FileCacheEntry cached = fileCache.get(filePath);
-            if (cached != null && !cached.isFileModified(path) && offset == 0 && limit == MAX_LINES_TO_READ) {
-                logger.debug("缓存命中: {} (访问次数: {})", filePath, cached.accessCount + 1);
+            FileCacheEntry cached = fileCache.get(cacheKey);
+            if (cached != null && !cached.isExpired() && !cached.isFileModified(path) && offset == 0 && limit == MAX_LINES_TO_READ) {
+                logger.debug("缓存命中: {} (访问次数: {}, 缓存key: {})", filePath, cached.accessCount + 1, cacheKey);
                 
-                if (hasRecentEditFailure(filePath)) {
-                    recentEditFailures.remove(filePath);
+                if (hasRecentEditFailure(cacheKey)) {
+                    recentEditFailures.remove(cacheKey);
                     logger.info("编辑失败后重新读取: {} (返回完整内容)", filePath);
                     return cached.content;
                 }
                 
                 return cached.generateCacheHitMessage(filePath, cached.content);
+            } else if (cached != null) {
+                fileCache.remove(cacheKey);
             }
 
             List<String> allLines = Files.readAllLines(path);
@@ -209,7 +238,8 @@ public class ReadFileTool implements ToolExecutor {
 
             long lastModified = Files.getLastModifiedTime(path).toMillis();
             if (offset == 0 && limit == MAX_LINES_TO_READ) {
-                fileCache.put(filePath, new FileCacheEntry(content, lastModified, System.currentTimeMillis()));
+                evictIfNeeded();
+                fileCache.put(cacheKey, new FileCacheEntry(content, lastModified, System.currentTimeMillis()));
             }
             
             String relativePath = PathSecurityUtils.getRelativePath(path);
@@ -242,7 +272,8 @@ public class ReadFileTool implements ToolExecutor {
     }
 
     public void invalidateCache(String filePath) {
-        fileCache.remove(filePath);
+        String cacheKey = normalizeCacheKey(filePath);
+        fileCache.remove(cacheKey);
         logger.debug("缓存失效: {}", filePath);
     }
 
@@ -257,19 +288,21 @@ public class ReadFileTool implements ToolExecutor {
     }
 
     public static void markRecentEditFailure(String filePath) {
-        recentEditFailures.put(filePath, Instant.now());
+        String cacheKey = normalizeCacheKey(filePath);
+        recentEditFailures.put(cacheKey, Instant.now());
         logger.info("记录编辑失败: {} (30秒内读取将返回完整内容)", filePath);
     }
 
     public static boolean hasRecentEditFailure(String filePath) {
-        Instant failureTime = recentEditFailures.get(filePath);
+        String cacheKey = normalizeCacheKey(filePath);
+        Instant failureTime = recentEditFailures.get(cacheKey);
         if (failureTime == null) {
             return false;
         }
 
         long elapsed = Instant.now().toEpochMilli() - failureTime.toEpochMilli();
         if (elapsed > EDIT_FAILURE_WINDOW_MS) {
-            recentEditFailures.remove(filePath);
+            recentEditFailures.remove(cacheKey);
             return false;
         }
 
