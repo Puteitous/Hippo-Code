@@ -1,6 +1,5 @@
 package com.example.agent.tools;
 
-import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.subagent.SubAgentManager;
 import com.example.agent.subagent.SubAgentTask;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -9,16 +8,10 @@ import java.util.Collections;
 import java.util.List;
 
 public class CancelSubAgentTool implements ToolExecutor {
-    private SubAgentManager subAgentManager;
+    private final SubAgentManager subAgentManager;
 
-    public CancelSubAgentTool() {
-    }
-
-    private SubAgentManager getManager() {
-        if (subAgentManager == null) {
-            subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
-        }
-        return subAgentManager;
+    public CancelSubAgentTool(SubAgentManager subAgentManager) {
+        this.subAgentManager = subAgentManager;
     }
 
     @Override
@@ -65,15 +58,10 @@ public class CancelSubAgentTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        SubAgentManager manager = getManager();
-        if (manager == null) {
-            return "⚠️ SubAgentManager 未初始化，暂无子任务";
-        }
-
         boolean cancelAll = arguments.has("cancel_all") && arguments.get("cancel_all").asBoolean();
         
         if (cancelAll) {
-            List<SubAgentTask> runningTasks = manager.getAllTasks().stream()
+            List<SubAgentTask> runningTasks = subAgentManager.getAllTasks().stream()
                 .filter(t -> t.getStatus().name().equals("RUNNING"))
                 .toList();
             
@@ -99,7 +87,7 @@ public class CancelSubAgentTool implements ToolExecutor {
             return "❌ 请提供 task_id 参数指定要取消的任务，或设置 cancel_all=true 取消全部";
         }
 
-        SubAgentTask task = manager.getTask(taskId);
+        SubAgentTask task = subAgentManager.getTask(taskId);
         if (task == null) {
             return "❌ 未找到任务 ID: " + taskId;
         }

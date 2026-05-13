@@ -85,11 +85,17 @@ public final class CoreModule {
 
         ToolRegistry toolRegistry = createConfiguredToolRegistry(objectMapper, codeIndex);
         ServiceLocator.registerSingleton(ToolRegistry.class, toolRegistry);
-        logger.info("✅ [Level 3] 工具层: ToolRegistry (11 个内置工具, 11 个 Blocker)");
+        logger.info("✅ [Level 3] 工具层: ToolRegistry");
 
-        ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class,
-            new com.example.agent.subagent.SubAgentManager());
+        com.example.agent.subagent.SubAgentManager subAgentManager = new com.example.agent.subagent.SubAgentManager();
+        ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class, subAgentManager);
         logger.info("✅ [Level 3] 工具层: SubAgentManager");
+
+        toolRegistry.register(new ForkAgentTool(subAgentManager));
+        toolRegistry.register(new ForkAgentsTool(subAgentManager));
+        toolRegistry.register(new ListSubAgentsTool(subAgentManager));
+        toolRegistry.register(new CancelSubAgentTool(subAgentManager));
+        logger.info("✅ [Level 3] 工具层: 4 个 SubAgent 工具");
 
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);
@@ -116,10 +122,6 @@ public final class CoreModule {
         registry.register(new AskUserTool());
         registry.register(new BashTool());
         registry.register(new TodoWriteTool(ServiceLocator.get(TodoManager.class)));
-        registry.register(new com.example.agent.tools.ForkAgentTool());
-        registry.register(new ForkAgentsTool());
-        registry.register(new ListSubAgentsTool());
-        registry.register(new com.example.agent.tools.CancelSubAgentTool());
 
         FileOperationStateMachine stateMachine = new FileOperationStateMachine();
         EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();

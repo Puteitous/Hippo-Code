@@ -1,6 +1,5 @@
 package com.example.agent.tools;
 
-import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.subagent.SubAgentManager;
 import com.example.agent.subagent.SubAgentTask;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,16 +9,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class ListSubAgentsTool implements ToolExecutor {
-    private SubAgentManager subAgentManager;
+    private final SubAgentManager subAgentManager;
 
-    public ListSubAgentsTool() {
-    }
-
-    private SubAgentManager getManager() {
-        if (subAgentManager == null) {
-            subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
-        }
-        return subAgentManager;
+    public ListSubAgentsTool(SubAgentManager subAgentManager) {
+        this.subAgentManager = subAgentManager;
     }
 
     @Override
@@ -66,11 +59,6 @@ public class ListSubAgentsTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        SubAgentManager manager = getManager();
-        if (manager == null) {
-            return "⚠️ SubAgentManager 未初始化，暂无子任务";
-        }
-
         String taskId = arguments.has("task_id") && !arguments.get("task_id").isNull()
             ? arguments.get("task_id").asText()
             : null;
@@ -79,14 +67,14 @@ public class ListSubAgentsTool implements ToolExecutor {
             : "ALL";
 
         if (taskId != null) {
-            SubAgentTask task = manager.getTask(taskId);
+            SubAgentTask task = subAgentManager.getTask(taskId);
             if (task == null) {
                 return "❌ 未找到任务 ID: " + taskId;
             }
             return formatTaskDetail(task);
         }
 
-        List<SubAgentTask> tasks = manager.getAllTasks();
+        List<SubAgentTask> tasks = subAgentManager.getAllTasks();
         List<SubAgentTask> filtered = filterByStatus(tasks, statusFilter);
 
         if (filtered.isEmpty()) {

@@ -42,6 +42,10 @@ public class DashboardServer {
     private DashboardServer() {}
 
     public static void start(int port) {
+        start(port, true);
+    }
+
+    public static void start(int port, boolean initializeServices) {
         if (server != null) {
             logger.warn("DashboardServer 已在运行，端口：{}", port);
             return;
@@ -65,12 +69,11 @@ public class DashboardServer {
             server.setExecutor(executor);
             server.start();
 
-            // 启动时初始化 Memory 模块和 Token 缓存（而非等到第一个请求）
-            WebInitializer.ensureMemoryInitialized();
-            WebInitializer.initializeTokenCache(WebSessionManager.getInstance());
-
-            // 启动会话清理定时器（参照 CLI 的 cleanupIdleSessions）
-            startSessionCleanup();
+            if (initializeServices) {
+                WebInitializer.ensureMemoryInitialized();
+                WebInitializer.initializeTokenCache(WebSessionManager.getInstance());
+                startSessionCleanup();
+            }
 
             logger.info("DashboardServer 已启动，端口：{}", port);
             logger.info("Hippo Cockpit: http://localhost:{}/cockpit", port);
@@ -146,6 +149,16 @@ public class DashboardServer {
 
     public static int getClientCount() {
         return clients.size();
+    }
+
+    public static void disconnectAllClients() {
+        for (PrintWriter writer : clients) {
+            try {
+                writer.close();
+            } catch (Exception ignored) {
+            }
+        }
+        clients.clear();
     }
 
     private static class SseHandler implements HttpHandler {

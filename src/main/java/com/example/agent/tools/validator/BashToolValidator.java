@@ -10,61 +10,64 @@ import java.util.Set;
  * 实现命令白名单和危险模式检查
  */
 public class BashToolValidator implements ToolParamValidator {
-    
+
     private static final Set<String> ALLOWED_COMMANDS = Set.of(
         "git", "mvn", "gradle", "npm", "yarn", "pnpm",
         "javac", "java", "jar", "javadoc",
-        "ls", "dir", "cat", "pwd", "echo", "mkdir", "touch",
-        "grep", "find", "wc", "head", "tail", "sort", "uniq",
-        "curl", "wget"
+        "ls", "dir", "cat", "type", "more", "pwd", "echo", "mkdir", "touch",
+        "grep", "find", "findstr", "wc", "head", "tail", "sort", "uniq",
+        "curl", "wget", "where"
     );
-    
+
     private static final Set<String> BLOCKED_COMMANDS = Set.of(
         "rm", "del", "rmdir", "rd", "format", "fdisk",
         "sudo", "su", "chmod", "chown",
         "shutdown", "reboot", "halt", "poweroff",
         "dd", "mkfs", "fsck"
     );
-    
+
     private static final Set<String> DANGEROUS_PATTERNS = Set.of(
         "rm -rf", "del /s", "format", "fdisk",
         "sudo", "chmod 777", "chown",
         "> /dev/", "dd if=", ":(){ :|:& };:"
     );
-    
+
     @Override
     public void validateParameters(JsonNode arguments) throws ToolExecutionException {
         if (!arguments.has("command") || arguments.get("command").isNull()) {
             throw new ToolExecutionException("缺少必需参数: command");
         }
-        
+
         String command = arguments.get("command").asText();
         if (command == null || command.trim().isEmpty()) {
             throw new ToolExecutionException("command 参数不能为空");
         }
-        
-        // 提取命令名称
-        String commandName = extractCommandName(command);
-        
-        // 检查是否在黑名单中
-        if (BLOCKED_COMMANDS.contains(commandName)) {
-            throw new ToolExecutionException("命令被禁止: " + commandName);
+
+        if (command.contains(";") || command.contains("&&") ||
+            command.contains("||") || command.contains("`") ||
+            command.contains("$(")) {
+            throw new ToolExecutionException(
+                "安全限制: 检测到危险的 shell 操作符。\n" +
+                "禁止使用命令链接（;、&&、||）和命令替换（`、$()）。"
+            );
         }
-        
-        // 检查危险模式
+
         for (String pattern : DANGEROUS_PATTERNS) {
             if (command.contains(pattern)) {
-                throw new ToolExecutionException("命令包含危险模式: " + pattern);
+                throw new ToolExecutionException("安全限制: 检测到危险命令模式 '" + pattern + "'。\n为了系统安全，此类命令被禁止执行。");
             }
         }
-        
-        // 检查是否在白名单中
-        if (!ALLOWED_COMMANDS.contains(commandName)) {
-            throw new ToolExecutionException("命令不在白名单中: " + commandName + 
-                "。允许的命令: " + String.join(", ", ALLOWED_COMMANDS));
+
+        String commandName = extractCommandName(command);
+
+        if (BLOCKED_COMMANDS.contains(commandName)) {
+            throw new ToolExecutionException("安全限制: 命令 '" + commandName + "' 被禁止执行。\n为了系统安全，此类操作被禁止。");
         }
-        
-        // 验证超时参数
+
+        if (!ALLOWED_COMMANDS.contains(commandName)) {
+            throw new ToolExecutionException("安全限制: 命令 '" + commandName + "' 不在允许列表中。\n允许的命令: " + String.join(", ", ALLOWED_COMMANDS));
+        }
+
         if (arguments.has("timeout")) {
             int timeout = arguments.get("timeout").asInt();
             if (timeout < 1 || timeout > 300) {
@@ -72,27 +75,20 @@ public class BashToolValidator implements ToolParamValidator {
             }
         }
     }
-    
-    /**
-     * 从命令字符串中提取命令名称
-     */
+
     private String extractCommandName(String command) {
-        // 处理管道符
         String firstPart = command.split("\\|")[0].trim();
-        // 处理重定向
         firstPart = firstPart.split(">")[0].trim();
         firstPart = firstPart.split(">>")[0].trim();
-        // 获取第一个单词
         String[] parts = firstPart.split("\\s+");
         if (parts.length > 0) {
-            // 处理路径前缀（如 /usr/bin/git -> git）
             String cmd = parts[0];
             int lastSlash = cmd.lastIndexOf('/');
             if (lastSlash >= 0 && lastSlash < cmd.length() - 1) {
-                return cmd.substring(lastSlash + 1);
+                return cmd.substring(lastSlash + 1).toLowerCase();
             }
-            return cmd;
+            return cmd.toLowerCase();
         }
-        return command;
+        return command.toLowerCase();
     }
 }

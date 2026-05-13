@@ -1,7 +1,5 @@
 package com.example.agent.tools;
 
-import com.example.agent.core.di.ServiceLocator;
-import com.example.agent.subagent.BuiltInAgent;
 import com.example.agent.subagent.SubAgentManager;
 import com.example.agent.subagent.SubAgentResultFormatter;
 import com.example.agent.subagent.SubAgentTask;
@@ -12,16 +10,10 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class ForkAgentTool implements ToolExecutor {
-    private SubAgentManager subAgentManager;
+    private final SubAgentManager subAgentManager;
 
-    public ForkAgentTool() {
-    }
-
-    private SubAgentManager getManager() {
-        if (subAgentManager == null) {
-            subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
-        }
-        return subAgentManager;
+    public ForkAgentTool(SubAgentManager subAgentManager) {
+        this.subAgentManager = subAgentManager;
     }
 
     @Override
@@ -31,8 +23,7 @@ public class ForkAgentTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        SubAgentManager manager = getManager();
-        String agentMenu = manager != null ? manager.getFullAgentMenu() : BuiltInAgent.getAgentMenu();
+        String agentMenu = subAgentManager.getFullAgentMenu();
         
         return "创建一个专家子 Agent 来执行独立的后台任务。这是降低 Token 成本的关键优化。\n\n" +
                agentMenu + "\n" +
@@ -89,11 +80,6 @@ public class ForkAgentTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        SubAgentManager manager = getManager();
-        if (manager == null) {
-            throw new ToolExecutionException("SubAgentManager 未初始化");
-        }
-
         if (!arguments.has("task") || arguments.get("task").isNull()) {
             throw new ToolExecutionException("缺少必需参数: task");
         }
@@ -111,8 +97,7 @@ public class ForkAgentTool implements ToolExecutor {
             timeoutSeconds = Math.max(30, Math.min(3600, timeoutSeconds));
         }
 
-        SubAgentTask subTask = manager.createSubAgent(task, subagentType, timeoutSeconds, null, null);
-        String agentTypeDisplay = subagentType != null ? subagentType : "Fork 优化模式";
+        SubAgentTask subTask = subAgentManager.createSubAgent(task, subagentType, timeoutSeconds, null, null);
 
         if (!waitForResult) {
             return SubAgentResultFormatter.formatSingleResult(subTask);

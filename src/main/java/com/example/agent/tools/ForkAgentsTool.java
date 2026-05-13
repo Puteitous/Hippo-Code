@@ -1,10 +1,7 @@
 package com.example.agent.tools;
 
-import com.example.agent.core.di.ServiceLocator;
-import com.example.agent.subagent.BuiltInAgent;
 import com.example.agent.subagent.SubAgentManager;
 import com.example.agent.subagent.SubAgentResultFormatter;
-import com.example.agent.subagent.SubAgentStatus;
 import com.example.agent.subagent.SubAgentTask;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -20,16 +17,10 @@ import java.util.concurrent.TimeUnit;
 public class ForkAgentsTool implements ToolExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(ForkAgentsTool.class);
-    private SubAgentManager subAgentManager;
+    private final SubAgentManager subAgentManager;
 
-    public ForkAgentsTool() {
-    }
-
-    private SubAgentManager getManager() {
-        if (subAgentManager == null) {
-            subAgentManager = ServiceLocator.getOrNull(SubAgentManager.class);
-        }
-        return subAgentManager;
+    public ForkAgentsTool(SubAgentManager subAgentManager) {
+        this.subAgentManager = subAgentManager;
     }
 
     @Override
@@ -39,8 +30,7 @@ public class ForkAgentsTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        SubAgentManager manager = getManager();
-        String agentMenu = manager != null ? manager.getFullAgentMenu() : BuiltInAgent.getAgentMenu();
+        String agentMenu = subAgentManager.getFullAgentMenu();
         
         return "🚀 批量创建多个专家子 Agent 并行执行独立任务。这是极致的成本优化！\n\n" +
                agentMenu + "\n" +
@@ -115,11 +105,6 @@ public class ForkAgentsTool implements ToolExecutor {
 
     @Override
     public String execute(JsonNode arguments) throws ToolExecutionException {
-        SubAgentManager manager = getManager();
-        if (manager == null) {
-            throw new ToolExecutionException("SubAgentManager 未初始化");
-        }
-
         if (!arguments.has("tasks") || !arguments.get("tasks").isArray()) {
             throw new ToolExecutionException("缺少必需参数: tasks (数组类型)");
         }
@@ -169,7 +154,7 @@ public class ForkAgentsTool implements ToolExecutor {
                 taskTimeoutSeconds = Math.max(30, Math.min(3600, taskTimeoutSeconds));
             }
             
-            SubAgentTask subTask = manager.createSubAgent(task, subagentType, taskTimeoutSeconds, dependsOnTaskIds, null);
+            SubAgentTask subTask = subAgentManager.createSubAgent(task, subagentType, taskTimeoutSeconds, dependsOnTaskIds, null);
             launchedTasks.add(subTask);
             indexToTaskPosition.put(taskIndex, launchedTasks.size() - 1);
             taskIndex++;

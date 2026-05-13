@@ -1,6 +1,9 @@
 package com.example.agent.tools;
 
+import com.example.agent.tools.validator.BashToolValidator;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -10,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 public class BashTool implements ToolExecutor {
 
@@ -19,27 +21,14 @@ public class BashTool implements ToolExecutor {
     private static final int MAX_OUTPUT_CHARS = 5000;
     private static final int MAX_OUTPUT_CHARS_WARN = 3000;
     private static final String OUTPUT_TRUNCATE_MARKER = "\n... [输出过长，已截断 %d 字符，共 %d 字符] ...\n";
-    
-    private static final Set<String> ALLOWED_COMMANDS = new HashSet<>(Arrays.asList(
-        "git", "mvn", "gradle", "npm", "yarn", "pnpm",
-        "javac", "java", "jar", "javadoc",
-        "ls", "dir", "cat", "type", "more", "pwd", "echo", "mkdir", "touch",
-        "grep", "findstr", "find", "wc", "head", "tail", "sort", "uniq",
-        "curl", "wget", "where"
-    ));
-    
-    private static final Set<String> BLOCKED_COMMANDS = new HashSet<>(Arrays.asList(
-        "rm", "del", "rmdir", "rd", "format", "fdisk",
-        "sudo", "su", "chmod", "chown",
-        "shutdown", "reboot", "halt", "poweroff",
-        "dd", "mkfs", "fsck"
-    ));
-    
-    private static final Set<String> DANGEROUS_PATTERNS = new HashSet<>(Arrays.asList(
-        "rm -rf", "del /s", "format", "fdisk",
-        "sudo", "chmod 777", "chown",
-        "> /dev/", "dd if=", ":(){ :|:& };:"
-    ));
+
+    private final BashToolValidator validator;
+    private final ObjectMapper objectMapper;
+
+    public BashTool() {
+        this.validator = new BashToolValidator();
+        this.objectMapper = new ObjectMapper();
+    }
 
     @Override
     public String getName() {
@@ -121,7 +110,9 @@ public class BashTool implements ToolExecutor {
         
         timeout = Math.max(1, Math.min(MAX_TIMEOUT, timeout));
 
-        validateCommand(command);
+        ObjectNode validationArgs = objectMapper.createObjectNode();
+        validationArgs.put("command", command);
+        validator.validateParameters(validationArgs);
 
         Path workPath = PathSecurityUtils.validateAndResolve(workingDir);
         
@@ -141,79 +132,6 @@ public class BashTool implements ToolExecutor {
             Thread.currentThread().interrupt();
             throw new ToolExecutionException("命令执行被中断: " + e.getMessage(), e);
         }
-    }
-
-    private void validateCommand(String command) throws ToolExecutionException {
-        String lowerCommand = command.toLowerCase();
-        
-        if (command.contains(";") || command.contains("&&") || 
-            command.contains("||") || command.contains("`") || 
-            command.contains("$(")) {
-            throw new ToolExecutionException(
-                "安全限制: 检测到危险的 shell 操作符。\n" +
-                "禁止使用命令链接（;、&&、||）和命令替换（`、$()）。"
-            );
-        }
-        
-        for (String pattern : DANGEROUS_PATTERNS) {
-            if (lowerCommand.contains(pattern.toLowerCase())) {
-                throw new ToolExecutionException(
-                    "安全限制: 检测到危险命令模式 '" + pattern + "'。\n" +
-                    "为了系统安全，此类命令被禁止执行。"
-                );
-            }
-        }
-        
-        for (String blocked : BLOCKED_COMMANDS) {
-            if (lowerCommand.contains(blocked.toLowerCase())) {
-                throw new ToolExecutionException(
-                    "安全限制: 命令包含被禁止的操作 '" + blocked + "'。\n" +
-                    "为了系统安全，此类操作被禁止。"
-                );
-            }
-        }
-        
-        for (String segment : splitCommandSegments(command)) {
-            String baseCommand = extractBaseCommand(segment);
-            if (!baseCommand.isEmpty() && !ALLOWED_COMMANDS.contains(baseCommand)) {
-                throw new ToolExecutionException(
-                    "安全限制: 命令 '" + baseCommand + "' 不在允许列表中。\n" +
-                    "允许的命令: " + String.join(", ", ALLOWED_COMMANDS) + "\n" +
-                    "如需执行其他命令，请联系管理员添加到白名单。"
-                );
-            }
-        }
-    }
-
-    private static List<String> splitCommandSegments(String command) {
-        List<String> segments = new ArrayList<>();
-        String[] pipeParts = command.split("\\|");
-        for (String pipePart : pipeParts) {
-            String part = pipePart.trim();
-            if (part.isEmpty()) {
-                continue;
-            }
-            int redirectIdx = part.indexOf(">");
-            if (redirectIdx >= 0) {
-                part = part.substring(0, redirectIdx).trim();
-            }
-            if (!part.isEmpty()) {
-                segments.add(part);
-            }
-        }
-        return segments;
-    }
-
-    private String extractBaseCommand(String command) {
-        String[] parts = command.trim().split("\\s+");
-        if (parts.length == 0) {
-            return "";
-        }
-        String first = parts[0].toLowerCase();
-        if (first.equals("|") || first.equals(">") || first.equals(">>")) {
-            return parts.length > 1 ? parts[1].toLowerCase() : "";
-        }
-        return first;
     }
 
     private String executeCommand(String command, Path workPath, int timeout) 
