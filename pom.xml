@@ -161,7 +161,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <argLine>${surefireArgLine} --enable-preview</argLine>
+                    <argLine>${surefireArgLine} --enable-preview -Dfile.encoding=UTF-8</argLine>
                 </configuration>
             </plugin>
             <plugin>

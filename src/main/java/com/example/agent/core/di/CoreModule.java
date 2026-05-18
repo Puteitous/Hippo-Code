@@ -2,9 +2,6 @@ package com.example.agent.core.di;
 
 import com.example.agent.config.Config;
 import com.example.agent.core.di.ServiceLocator;
-import com.example.agent.core.blocker.DuplicateToolCallBlocker;
-import com.example.agent.core.blocker.EditBeforeReadBlocker;
-import com.example.agent.core.blocker.FileOperationStateMachine;
 import com.example.agent.core.concurrency.ThreadPools;
 import com.example.agent.core.todo.TodoManager;
 import com.example.agent.tools.TodoWriteTool;
@@ -123,21 +120,10 @@ public final class CoreModule {
         registry.register(new BashTool());
         registry.register(new TodoWriteTool(ServiceLocator.get(TodoManager.class)));
 
-        FileOperationStateMachine stateMachine = new FileOperationStateMachine();
-        EditBeforeReadBlocker editBeforeReadBlocker = new EditBeforeReadBlocker();
-        editBeforeReadBlocker.setStateMachine(stateMachine);
-        DuplicateToolCallBlocker duplicateBlocker = new DuplicateToolCallBlocker();
-
-        registry.getBlockerChain().add(duplicateBlocker);
-        registry.getBlockerChain().add(stateMachine);
         registry.getBlockerChain().add(new com.example.agent.core.blocker.SchemaValidationBlocker(registry));
         registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
-        registry.getBlockerChain().add(editBeforeReadBlocker);
         registry.getBlockerChain().add(new com.example.agent.core.blocker.SyntaxValidationBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.EditCountBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.RateLimitBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.ContextAwareBlocker());
 
         return registry;
     }

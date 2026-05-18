@@ -16,8 +16,8 @@ import java.util.Map;
 public class TruncationService {
 
     private static final Logger logger = LoggerFactory.getLogger(TruncationService.class);
-    public static final int GLOBAL_HARD_LIMIT = 4096;
-    public static final int PER_TOOL_SAFE_LIMIT = 2048;
+    public static final int GLOBAL_HARD_LIMIT = 32000;
+    public static final int PER_TOOL_SAFE_LIMIT = 8000;
 
     private final TokenEstimator tokenEstimator;
     private final Map<ContentType, TruncationStrategy> strategies;

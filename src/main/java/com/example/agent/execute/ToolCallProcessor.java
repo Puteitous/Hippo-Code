@@ -138,8 +138,7 @@ public class ToolCallProcessor {
                     );
                 }
 
-                String errorResult = "Error: " + errorMsg + "\nPlease try a different approach or check if the path is correct.";
-                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), errorResult, false);
+                conversationService.addToolResult(conversation, result.getToolCallId(), result.getToolName(), errorMsg, false);
             }
         }
     }

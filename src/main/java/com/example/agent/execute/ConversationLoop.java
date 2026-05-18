@@ -33,7 +33,6 @@ public class ConversationLoop {
     private static final int DEFAULT_MAX_TURNS_PER_SESSION = 50;
 
     private final List<StopHook> stopHooks = List.of(
-        new RepetitionPatternHook(),
         new TaskCompletionHook()
     );
 

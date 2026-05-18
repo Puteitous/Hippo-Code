@@ -23,15 +23,25 @@ public class InputHandler {
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "tokenEstimator cannot be null");
     }
 
+    private void println(String text) {
+        reader.getTerminal().writer().println(text);
+        reader.getTerminal().writer().flush();
+    }
+
+    private void println() {
+        reader.getTerminal().writer().println();
+        reader.getTerminal().writer().flush();
+    }
+
     public String readMultilineInput() {
-        System.out.println(ConsoleStyle.boldCyan("╔══════════════════════════════════════════════════╗"));
-        System.out.println(ConsoleStyle.boldCyan("║              多行输入模式                          ║"));
-        System.out.println(ConsoleStyle.boldCyan("╚══════════════════════════════════════════════════╝"));
-        System.out.println();
-        System.out.println(ConsoleStyle.gray("输入或粘贴多行内容，单独输入 \"\"\" 结束"));
-        System.out.println(ConsoleStyle.gray("或按 Ctrl+C 取消"));
-        System.out.println(ConsoleStyle.gray("最大限制: " + MAX_MULTILINE_LINES + " 行, " + MAX_MULTILINE_CHARS + " 字符"));
-        System.out.println();
+        println(ConsoleStyle.boldCyan("╔══════════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldCyan("║              多行输入模式                          ║"));
+        println(ConsoleStyle.boldCyan("╚══════════════════════════════════════════════════╝"));
+        println();
+        println(ConsoleStyle.gray("输入或粘贴多行内容，单独输入 \"\"\" 结束"));
+        println(ConsoleStyle.gray("或按 Ctrl+C 取消"));
+        println(ConsoleStyle.gray("最大限制: " + MAX_MULTILINE_LINES + " 行, " + MAX_MULTILINE_CHARS + " 字符"));
+        println();
 
         StringBuilder buffer = new StringBuilder();
         int lineCount = 0;
@@ -52,17 +62,17 @@ public class InputHandler {
                 
                 // 检查是否超过限制
                 if (lineCount >= MAX_MULTILINE_LINES) {
-                    System.out.println(ConsoleStyle.yellow("已达到最大行数限制 (" + MAX_MULTILINE_LINES + " 行)"));
+                    println(ConsoleStyle.yellow("已达到最大行数限制 (" + MAX_MULTILINE_LINES + " 行)"));
                     break;
                 }
                 
                 if (buffer.length() >= MAX_MULTILINE_CHARS) {
-                    System.out.println(ConsoleStyle.yellow("已达到最大字符数限制 (" + MAX_MULTILINE_CHARS + " 字符)"));
+                    println(ConsoleStyle.yellow("已达到最大字符数限制 (" + MAX_MULTILINE_CHARS + " 字符)"));
                     break;
                 }
                 
             } catch (UserInterruptException e) {
-                System.out.println(ConsoleStyle.info("已取消多行输入"));
+                println(ConsoleStyle.info("已取消多行输入"));
                 return null;
             } catch (EndOfFileException e) {
                 break;
@@ -70,13 +80,13 @@ public class InputHandler {
         }
 
         if (buffer.length() == 0) {
-            System.out.println(ConsoleStyle.yellow("输入为空，已取消"));
+            println(ConsoleStyle.yellow("输入为空，已取消"));
             return null;
         }
 
-        System.out.println();
-        System.out.println(ConsoleStyle.success("已接收 " + lineCount + " 行内容 (" + buffer.length() + " 字符)"));
-        System.out.println();
+        println();
+        println(ConsoleStyle.success("已接收 " + lineCount + " 行内容 (" + buffer.length() + " 字符)"));
+        println();
 
         return buffer.toString();
     }
@@ -89,34 +99,34 @@ public class InputHandler {
             return input;
         }
         
-        System.out.println();
-        System.out.println(ConsoleStyle.boldYellow("╔══════════════════════════════════════════════════╗"));
-        System.out.println(ConsoleStyle.boldYellow("║              ⚠ 输入内容过长                        ║"));
-        System.out.println(ConsoleStyle.boldYellow("╚══════════════════════════════════════════════════╝"));
-        System.out.println();
-        System.out.println(ConsoleStyle.yellow("当前大小: " + tokens + " tokens"));
-        System.out.println(ConsoleStyle.yellow("最大限制: " + MAX_SINGLE_INPUT_TOKENS + " tokens"));
-        System.out.println(ConsoleStyle.yellow("超出部分: " + (tokens - MAX_SINGLE_INPUT_TOKENS) + " tokens"));
-        System.out.println();
+        println();
+        println(ConsoleStyle.boldYellow("╔══════════════════════════════════════════════════╗"));
+        println(ConsoleStyle.boldYellow("║              ⚠ 输入内容过长                        ║"));
+        println(ConsoleStyle.boldYellow("╚══════════════════════════════════════════════════╝"));
+        println();
+        println(ConsoleStyle.yellow("当前大小: " + tokens + " tokens"));
+        println(ConsoleStyle.yellow("最大限制: " + MAX_SINGLE_INPUT_TOKENS + " tokens"));
+        println(ConsoleStyle.yellow("超出部分: " + (tokens - MAX_SINGLE_INPUT_TOKENS) + " tokens"));
+        println();
         
         int maxChars = MAX_SINGLE_INPUT_TOKENS * 2;
         String truncated = input.substring(0, Math.min(maxChars, input.length()));
         String removed = input.length() > maxChars ? input.substring(maxChars) : "";
         
-        System.out.println(ConsoleStyle.gray("── 保留部分预览 (前 200 字符) ──"));
-        System.out.println(ConsoleStyle.dim(truncate(truncated, 200)));
-        System.out.println();
+        println(ConsoleStyle.gray("── 保留部分预览 (前 200 字符) ──"));
+        println(ConsoleStyle.dim(truncate(truncated, 200)));
+        println();
         if (!removed.isEmpty()) {
-            System.out.println(ConsoleStyle.gray("── 将被删除部分预览 (前 200 字符) ──"));
-            System.out.println(ConsoleStyle.red(truncate(removed, 200)));
-            System.out.println();
+            println(ConsoleStyle.gray("── 将被删除部分预览 (前 200 字符) ──"));
+            println(ConsoleStyle.red(truncate(removed, 200)));
+            println();
         }
         
-        System.out.println(ConsoleStyle.cyan("请选择操作:"));
-        System.out.println(ConsoleStyle.green("  [Enter] ") + ConsoleStyle.white("继续提交（截断内容）"));
-        System.out.println(ConsoleStyle.green("  [E]     ") + ConsoleStyle.white("编辑输入"));
-        System.out.println(ConsoleStyle.green("  [C]     ") + ConsoleStyle.white("取消本次输入"));
-        System.out.println();
+        println(ConsoleStyle.cyan("请选择操作:"));
+        println(ConsoleStyle.green("  [Enter] ") + ConsoleStyle.white("继续提交（截断内容）"));
+        println(ConsoleStyle.green("  [E]     ") + ConsoleStyle.white("编辑输入"));
+        println(ConsoleStyle.green("  [C]     ") + ConsoleStyle.white("取消本次输入"));
+        println();
         
         try {
             String choice = reader.readLine(ConsoleStyle.yellow("请选择: ")).trim().toUpperCase();
@@ -124,10 +134,10 @@ public class InputHandler {
             switch (choice) {
                 case "":
                 case "Y":
-                    System.out.println(ConsoleStyle.success("已截断并提交"));
+                    println(ConsoleStyle.success("已截断并提交"));
                     return truncated;
                 case "E":
-                    System.out.println(ConsoleStyle.info("请重新输入（按 Ctrl+C 取消）:"));
+                    println(ConsoleStyle.info("请重新输入（按 Ctrl+C 取消）:"));
                     String newInput = reader.readLine(ConsoleStyle.prompt());
                     if (newInput != null && !newInput.trim().isEmpty()) {
                         int newTokens = tokenEstimator.estimateTextTokens(newInput);
@@ -139,20 +149,20 @@ public class InputHandler {
                     return null;
                 case "C":
                 case "N":
-                    System.out.println(ConsoleStyle.info("已取消"));
+                    println(ConsoleStyle.info("已取消"));
                     return null;
                 default:
-                    System.out.println(ConsoleStyle.yellow("无效选择，已取消"));
+                    println(ConsoleStyle.yellow("无效选择，已取消"));
                     return null;
             }
         } catch (UserInterruptException e) {
-            System.out.println(ConsoleStyle.info("已取消"));
+            println(ConsoleStyle.info("已取消"));
             return null;
         } catch (EndOfFileException e) {
-            System.out.println(ConsoleStyle.info("已取消"));
+            println(ConsoleStyle.info("已取消"));
             return null;
         } catch (Exception e) {
-            System.out.println(ConsoleStyle.info("已取消"));
+            println(ConsoleStyle.info("已取消"));
             return null;
         }
     }
@@ -208,10 +218,10 @@ public class InputHandler {
         }
         
         if (lineCount >= MIN_PASTE_LINES) {
-            System.out.println();
-            System.out.println(ConsoleStyle.cyan("📋 检测到粘贴了 " + lineCount + " 行内容"));
-            System.out.println(ConsoleStyle.gray("   按 Enter 直接提交，或继续补充输入..."));
-            System.out.println();
+            println();
+            println(ConsoleStyle.cyan("📋 检测到粘贴了 " + lineCount + " 行内容"));
+            println(ConsoleStyle.gray("   按 Enter 直接提交，或继续补充输入..."));
+            println();
             
             String additional = reader.readLine(ConsoleStyle.yellow("补充输入 (可选): "));
             if (additional != null && !additional.isBlank()) {

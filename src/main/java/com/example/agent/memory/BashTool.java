@@ -11,8 +11,12 @@ public class BashTool {
 
     private static final Set<String> SAFE_COMMANDS = Set.of(
         "ls", "cat", "grep", "find", "stat", "wc", "head", "tail",
-        "dir", "type", "more", "less", "echo", "pwd", "tree",
-        "awk", "sed", "sort", "uniq", "cut", "tr", "xargs"
+        "dir", "type", "more", "less", "echo", "pwd", "tree", "printf",
+        "awk", "sed", "sort", "uniq", "cut", "tr", "xargs",
+        "python", "python3", "node", "deno",
+        "pip", "pip3", "which", "where",
+        "cd", "chdir", "pushd", "popd", "set",
+        "docker"
     );
 
     private static final Set<String> DANGEROUS_COMMANDS = Set.of(
