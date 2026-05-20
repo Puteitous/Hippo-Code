@@ -80,16 +80,18 @@
 }
 
 [data-theme="dark"] {
-  /* --- 新变量体系（暗色） --- */
-  --bg-app:        #0d1117;
-  --bg-sidebar:    #161b22;
-  --bg-chat:       #0d1117;
-  --bg-code:       #1c2128;
+  /* --- 新变量体系（暗色） ---
+     以 chat-nav-strip 展开色调为基准：温暖炭灰，告别冷峻深蓝黑
+     --- */
+  --bg-app:        #1a1a20;
+  --bg-sidebar:    #212127;
+  --bg-chat:       #1a1a20;
+  --bg-code:       #2a2a32;
 
-  --border:        #30363d;
-  --text-primary:  #e6edf3;
-  --text-secondary:#8b949e;
-  --text-muted:    #6e7681;
+  --border:        #37373f;
+  --text-primary:  #e8e8ee;
+  --text-secondary:#a0a0aa;
+  --text-muted:    #737380;
 
   --accent:        #58a6ff;
 
@@ -99,7 +101,7 @@
   --bg-lighter:    var(--bg-sidebar);
   --border-color:  var(--border);
   --border-code:   var(--border);
-  --text-light:    #6e7681;
+  --text-light:    #737380;
 
   --primary-color: var(--accent);
   --primary-hover: #4a8ac4;

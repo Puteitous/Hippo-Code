@@ -26,7 +26,10 @@
 
     <!-- 顶部栏 -->
     <div class="header">
-        <span>Hippo Cockpit</span>
+        <div class="header-brand">
+            <span class="header-brand-icon">🦛</span>
+            <span>Hippo Cockpit</span>
+        </div>
         <div class="header-actions">
             <button class="header-icon-btn" id="rightPanelShowBtn" title="展开右侧面板" style="display:none;">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -40,7 +43,11 @@
                     <path d="M4 14h6m0 0v6m0-6l-6 6M20 10h-6m0 0V4m0 6l6-6"/>
                 </svg>
             </button>
-            <button class="header-icon-btn" id="themeToggle" title="切换主题">🌙</button>
+            <button class="header-icon-btn" id="themeToggle" title="切换主题">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+            </button>
             <span id="sseStatus" class="sse-status disconnected">SSE 连接中...</span>
         </div>
     </div>
