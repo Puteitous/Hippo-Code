@@ -269,12 +269,17 @@ public class TranscriptLoader {
             }
         }
 
-        if (entry.getMessage() != null) {
-            String role = entry.getMessage().getRole();
+        Message msg = entry.getMessage();
+
+        if (msg != null) {
+            String role = msg.getRole();
             if ("user".equals(role) || "assistant".equals(role) || "system".equals(role) || "tool".equals(role)) {
-                result.messages.add(entry.getMessage());
+                if ("tool".equals(role) && entry.getToolSuccess() != null) {
+                    msg.setToolSuccess(entry.getToolSuccess());
+                }
+                result.messages.add(msg);
                 logger.debug("添加消息 [{}]: role={}, contentLength={}", 
-                    result.messages.size(), role, entry.getMessage().getContent() != null ? entry.getMessage().getContent().length() : 0);
+                    result.messages.size(), role, msg.getContent() != null ? msg.getContent().length() : 0);
                 return;
             } else {
                 logger.debug("消息 role 不匹配：{}", role);
@@ -290,8 +295,11 @@ public class TranscriptLoader {
             case ASSISTANT:
             case TOOL_RESULT:
             case SYSTEM:
-                if (entry.getMessage() != null) {
-                    result.messages.add(entry.getMessage());
+                if (msg != null) {
+                    if ("tool".equals(msg.getRole()) && entry.getToolSuccess() != null) {
+                        msg.setToolSuccess(entry.getToolSuccess());
+                    }
+                    result.messages.add(msg);
                     logger.debug("通过 TranscriptType 添加消息 [{}]", result.messages.size());
                 }
                 break;

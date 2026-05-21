@@ -109,26 +109,23 @@ public class ConversationJsonlReader {
                         msgMap.put("toolCallId", msgNode.path("tool_call_id").asText(""));
 
                         boolean success = true;
-                        boolean hasErrorKeywords = false;
-                        if (content != null && !content.isBlank()) {
+                        if (node.has("toolSuccess")) {
+                            success = node.path("toolSuccess").asBoolean(true);
+                        } else if (msgNode.has("tool_success")) {
+                            success = msgNode.path("tool_success").asBoolean(true);
+                        } else if (msgNode.has("isError")) {
+                            success = !msgNode.path("isError").asBoolean();
+                        } else if (content != null && !content.isBlank()) {
                             String lowerContent = content.toLowerCase();
-                            hasErrorKeywords = lowerContent.contains("错误:") ||
+                            if (lowerContent.contains("错误:") ||
                                 lowerContent.contains("error:") ||
                                 lowerContent.contains("失败") ||
                                 lowerContent.contains("cancelled") ||
                                 lowerContent.contains("user_cancelled") ||
                                 lowerContent.contains("权限受限") ||
-                                lowerContent.contains("权限拒绝");
-                        }
-
-                        if (!hasErrorKeywords) {
-                            if (node.has("toolSuccess")) {
-                                success = node.path("toolSuccess").asBoolean(true);
-                            } else if (msgNode.has("isError")) {
-                                success = !msgNode.path("isError").asBoolean();
+                                lowerContent.contains("权限拒绝")) {
+                                success = false;
                             }
-                        } else {
-                            success = false;
                         }
 
                         msgMap.put("success", success);

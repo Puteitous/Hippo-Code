@@ -96,10 +96,10 @@ public class BashDangerousCommandBlocker implements Blocker {
         }
         command = command.trim().toLowerCase();
 
-        // 一级检查：Shell 注入操作符 — 直接严格禁止
-        if (hasShellOperators(command)) {
+        // 一级检查：命令替换注入 — 直接严格禁止
+        if (hasCommandSubstitution(command)) {
             return HookResult.block(
-                "安全限制: 检测到危险的 shell 操作符（;、&&、||、`、$()）"
+                "安全限制: 检测到命令替换操作符（`、$()），禁止执行"
             );
         }
 
@@ -110,6 +110,15 @@ public class BashDangerousCommandBlocker implements Blocker {
                     String.format("安全限制: 检测到危险命令模式 '%s'", pattern)
                 );
             }
+        }
+
+        // 三级检查：命令链操作符 — 需用户确认（提供观察窗，让用户看到完整命令意图）
+        if (hasCommandChaining(command)) {
+            return HookResult.requireConfirmation(
+                "命令链中使用操作符串联多条命令，请确认是否执行",
+                "medium",
+                command
+            );
         }
 
         // 提取命令名前先检查是否以 ./ 或 ../ 开头（本地脚本执行）
@@ -124,14 +133,14 @@ public class BashDangerousCommandBlocker implements Blocker {
         // 提取命令名
         String commandName = extractCommandName(command);
 
-        // 三级检查：严格禁止名单
+        // 四级检查：严格禁止名单
         if (STRICTLY_BLOCKED.contains(commandName)) {
             return HookResult.block(
                 "安全限制: 命令 '" + commandName + "' 被禁止执行"
             );
         }
 
-        // 四级检查：需要确认名单
+        // 五级检查：需要确认名单
         if (REQUIRES_CONFIRMATION.contains(commandName)) {
             return HookResult.requireConfirmation(
                 "命令 '" + commandName + "' 可能有副作用，请确认是否执行",
@@ -140,7 +149,7 @@ public class BashDangerousCommandBlocker implements Blocker {
             );
         }
 
-        // 五级检查：自动放行名单
+        // 六级检查：自动放行名单
         if (ALLOWED_COMMANDS.contains(commandName)) {
             // 参数感知检测：部分 ALLOWED 命令的特定子命令/参数需确认
             HookResult paramResult = checkParameterLevel(command, commandName);
@@ -277,10 +286,15 @@ public class BashDangerousCommandBlocker implements Blocker {
         return command.matches(".*\\b(pip|pip3)\\b.*\\b(install|uninstall)\\b.*");
     }
 
-    private boolean hasShellOperators(String command) {
+    /** 检测命令替换注入操作符（`、$()）— 严格禁止 */
+    private boolean hasCommandSubstitution(String command) {
+        return command.contains("`") || command.contains("$(");
+    }
+
+    /** 检测命令链操作符（;、&&、||）— 需用户确认，提供观察窗 */
+    private boolean hasCommandChaining(String command) {
         return command.contains(";") || command.contains("&&") ||
-               command.contains("||") || command.contains("`") ||
-               command.contains("$(");
+               command.contains("||");
     }
 
     private String extractCommandName(String command) {

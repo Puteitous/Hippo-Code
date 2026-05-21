@@ -32,6 +32,9 @@ public class Message {
     @JsonProperty("message_type")
     private String messageType;
 
+    @JsonProperty("tool_success")
+    private Boolean toolSuccess;
+
     public Message() {
         this.id = java.util.UUID.randomUUID().toString();
     }
@@ -213,6 +216,18 @@ public class Message {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public Boolean getToolSuccess() {
+        return toolSuccess;
+    }
+
+    public void setToolSuccess(Boolean toolSuccess) {
+        this.toolSuccess = toolSuccess;
+    }
+
+    public boolean isToolSuccess() {
+        return toolSuccess != null && toolSuccess;
     }
 
     public Message withId(String id) {

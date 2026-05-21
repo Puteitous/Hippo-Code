@@ -45,17 +45,21 @@ public class MessageConverter {
                 msgMap.put("toolCallId", msg.getToolCallId() != null ? msg.getToolCallId() : "");
 
                 boolean success = true;
-                String content = msg.getContent();
-                if (content != null && !content.isBlank()) {
-                    String lowerContent = content.toLowerCase();
-                    if (lowerContent.contains("错误:") ||
-                        lowerContent.contains("error:") ||
-                        lowerContent.contains("失败") ||
-                        lowerContent.contains("cancelled") ||
-                        lowerContent.contains("user_cancelled") ||
-                        lowerContent.contains("权限受限") ||
-                        lowerContent.contains("权限拒绝")) {
-                        success = false;
+                if (msg.getToolSuccess() != null) {
+                    success = msg.isToolSuccess();
+                } else {
+                    String content = msg.getContent();
+                    if (content != null && !content.isBlank()) {
+                        String lowerContent = content.toLowerCase();
+                        if (lowerContent.contains("错误:") ||
+                            lowerContent.contains("error:") ||
+                            lowerContent.contains("失败") ||
+                            lowerContent.contains("cancelled") ||
+                            lowerContent.contains("user_cancelled") ||
+                            lowerContent.contains("权限受限") ||
+                            lowerContent.contains("权限拒绝")) {
+                            success = false;
+                        }
                     }
                 }
                 msgMap.put("success", success);
