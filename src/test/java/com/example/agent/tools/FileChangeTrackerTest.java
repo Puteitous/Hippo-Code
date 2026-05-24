@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -158,6 +159,45 @@ class FileChangeTrackerTest {
     }
 
     @Test
+    void testNewFileFlagTrueWhenFileDoesNotExist() {
+        String filePath = tempDir.resolve("brand_new.txt").toString();
+        FileChangeTracker.recordChange(filePath, "", "new content", "write_file", true);
+
+        FileChangeTracker.FileChange change = FileChangeTracker.getLastChange(filePath);
+        assertNotNull(change);
+        assertTrue(change.newFile, "文件不存在时应标记为 newFile=true");
+    }
+
+    @Test
+    void testNewFileFlagFalseWhenFileExists() throws Exception {
+        Path testFile = tempDir.resolve("existing.txt");
+        Files.writeString(testFile, "existing content", StandardCharsets.UTF_8);
+        String filePath = testFile.toString();
+
+        FileChangeTracker.recordChange(filePath, "existing content", "modified content", "edit_file", false);
+
+        FileChangeTracker.FileChange change = FileChangeTracker.getLastChange(filePath);
+        assertNotNull(change);
+        assertFalse(change.newFile, "文件已存在时应标记为 newFile=false");
+    }
+
+    @Test
+    void testRollbackDeletesNewFile() throws Exception {
+        Path testFile = tempDir.resolve("to_delete.txt");
+        Files.writeString(testFile, "new file content", StandardCharsets.UTF_8);
+        String filePath = testFile.toString();
+
+        FileChangeTracker.recordChange(filePath, "", "new file content", "write_file", true);
+
+        assertTrue(Files.exists(testFile), "记录变更前应先创建文件（模拟 WriteFileTool 行为）");
+
+        boolean success = FileChangeTracker.rollback(filePath);
+        assertTrue(success);
+
+        assertFalse(Files.exists(testFile), "回滚新建文件应删除文件");
+    }
+
+    @Test
     void testConcurrentRecordChanges() throws InterruptedException {
         String filePath = tempDir.resolve("concurrent.txt").toString();
         int threadCount = 10;
@@ -184,7 +224,7 @@ class FileChangeTrackerTest {
     @Test
     void testToJsonProducesValidJson() {
         FileChangeTracker.FileChange change = new FileChangeTracker.FileChange(
-            "/path/to/file.txt", "line1\nline2", "modified\ncontent", "edit_file", 1234567890L);
+            "/path/to/file.txt", "line1\nline2", "modified\ncontent", "edit_file", 1234567890L, false);
 
         String json = change.toJson();
         assertTrue(json.startsWith("{"));
@@ -207,6 +247,18 @@ class FileChangeTrackerTest {
         assertEquals("new text", change.newContent);
         assertEquals("write_file", change.toolName);
         assertEquals(9876543210L, change.timestamp);
+        assertFalse(change.newFile, "旧格式缺少 newFile 字段应默认为 false");
+    }
+
+    @Test
+    void testFromJsonRecoversNewFileFlag() {
+        String json = "{\"filePath\":\"/new/file.txt\",\"originalContent\":\"\",\"newContent\":\"content\",\"toolName\":\"write_file\",\"timestamp\":100,\"newFile\":true}";
+        FileChangeTracker.FileChange change = FileChangeTracker.FileChange.fromJson(json);
+
+        assertNotNull(change);
+        assertEquals("/new/file.txt", change.filePath);
+        assertEquals("", change.originalContent);
+        assertTrue(change.newFile);
     }
 
     @Test
@@ -222,7 +274,7 @@ class FileChangeTrackerTest {
     @Test
     void testToFromJsonRoundTrip() {
         FileChangeTracker.FileChange original = new FileChangeTracker.FileChange(
-            "/path/to/file.txt", "original\ncontent", "new\ncontent", "edit_file", 42L);
+            "/path/to/file.txt", "original\ncontent", "new\ncontent", "edit_file", 42L, false);
 
         String json = original.toJson();
         FileChangeTracker.FileChange recovered = FileChangeTracker.FileChange.fromJson(json);
@@ -232,6 +284,23 @@ class FileChangeTrackerTest {
         assertEquals(original.newContent, recovered.newContent);
         assertEquals(original.toolName, recovered.toolName);
         assertEquals(original.timestamp, recovered.timestamp);
+        assertEquals(original.newFile, recovered.newFile);
+    }
+
+    @Test
+    void testToFromJsonRoundTripWithNewFile() {
+        FileChangeTracker.FileChange original = new FileChangeTracker.FileChange(
+            "/new/file.txt", "", "new content", "write_file", 99L, true);
+
+        String json = original.toJson();
+        FileChangeTracker.FileChange recovered = FileChangeTracker.FileChange.fromJson(json);
+
+        assertEquals(original.filePath, recovered.filePath);
+        assertEquals(original.originalContent, recovered.originalContent);
+        assertEquals(original.newContent, recovered.newContent);
+        assertEquals(original.toolName, recovered.toolName);
+        assertEquals(original.timestamp, recovered.timestamp);
+        assertTrue(recovered.newFile);
     }
 
     // ==================== 持久化 ====================
@@ -296,5 +365,103 @@ class FileChangeTrackerTest {
         FileChangeTracker.resetForTest();
         String content = Files.readString(storageFile, StandardCharsets.UTF_8).trim();
         assertFalse(content.contains("modified"), "回滚后持久化文件不应包含已回滚的记录");
+    }
+
+    @Test
+    void testSessionIdFieldInFileChange() {
+        FileChangeTracker.FileChange change = new FileChangeTracker.FileChange(
+            "/path/to/file.txt", "old", "new", "write_file", 100L, false, "session-123");
+
+        assertEquals("session-123", change.sessionId, "FileChange 应保存 sessionId");
+
+        String json = change.toJson();
+        assertTrue(json.contains("\"sessionId\":\"session-123\""), "sessionId 应序列化到 JSON");
+
+        FileChangeTracker.FileChange recovered = FileChangeTracker.FileChange.fromJson(json);
+        assertEquals("session-123", recovered.sessionId, "反序列化应恢复 sessionId");
+    }
+
+    @Test
+    void testRecordChangeWithSessionId() {
+        FileChangeTracker.setStorageDirForTest(tempDir);
+        FileChangeTracker.setCurrentSessionId("test-session-456");
+        try {
+            String filePath = tempDir.resolve("session_test.txt").toString();
+            FileChangeTracker.recordChange(filePath, "old", "new", "write_file");
+
+            FileChangeTracker.FileChange change = FileChangeTracker.getLastChange(filePath);
+            assertNotNull(change);
+            assertEquals("test-session-456", change.sessionId, "ThreadLocal 中的 sessionId 应传递给 FileChange");
+        } finally {
+            FileChangeTracker.clearCurrentSessionId();
+        }
+    }
+
+    @Test
+    void testSessionIsolationWithThreadLocal() throws Exception {
+        FileChangeTracker.setStorageDirForTest(tempDir);
+        String fileA = tempDir.resolve("session_a.txt").toString();
+        String fileB = tempDir.resolve("session_b.txt").toString();
+
+        // 会话 A 记录变更
+        FileChangeTracker.setCurrentSessionId("session-A");
+        try {
+            FileChangeTracker.recordChange(fileA, "old_A", "new_A", "write_file");
+        } finally {
+            FileChangeTracker.clearCurrentSessionId();
+        }
+
+        // 会话 B 记录变更
+        FileChangeTracker.setCurrentSessionId("session-B");
+        try {
+            FileChangeTracker.recordChange(fileB, "old_B", "new_B", "edit_file");
+        } finally {
+            FileChangeTracker.clearCurrentSessionId();
+        }
+
+        // 跨会话查询：getLastChange 应能查到所有会话的变更
+        FileChangeTracker.FileChange changeA = FileChangeTracker.getLastChange(fileA);
+        assertNotNull(changeA, "会话 A 的变更应可查询");
+        assertEquals("session-A", changeA.sessionId);
+
+        FileChangeTracker.FileChange changeB = FileChangeTracker.getLastChange(fileB);
+        assertNotNull(changeB, "会话 B 的变更应可查询");
+        assertEquals("session-B", changeB.sessionId);
+
+        // 会话 A 回滚不应影响会话 B
+        boolean success = FileChangeTracker.rollback(fileA);
+        assertTrue(success, "会话 A 的回滚应成功");
+
+        FileChangeTracker.FileChange afterRollback = FileChangeTracker.getLastChange(fileA);
+        assertNull(afterRollback, "会话 A 的变更被回滚后应不可查");
+
+        FileChangeTracker.FileChange stillInB = FileChangeTracker.getLastChange(fileB);
+        assertNotNull(stillInB, "会话 B 的变更应不受会话 A 回滚的影响");
+        assertEquals("session-B", stillInB.sessionId);
+    }
+
+    @Test
+    void testFromJsonOldFormatWithoutSessionId() {
+        String json = "{\"filePath\":\"/old/file.txt\",\"originalContent\":\"old\",\"newContent\":\"new\",\"toolName\":\"write_file\",\"timestamp\":100,\"newFile\":false}";
+        FileChangeTracker.FileChange change = FileChangeTracker.FileChange.fromJson(json);
+
+        assertNotNull(change);
+        assertEquals("", change.sessionId, "旧格式 JSON 缺少 sessionId 应默认为空字符串");
+    }
+
+    @Test
+    void testRecordChangeWithoutSessionIdIsolation() {
+        FileChangeTracker.setStorageDirForTest(tempDir);
+        FileChangeTracker.setCurrentSessionId("session-X");
+        try {
+            String filePath = tempDir.resolve("no_session_id.txt").toString();
+            FileChangeTracker.recordChange(filePath, "old", "new", "write_file");
+
+            FileChangeTracker.FileChange change = FileChangeTracker.getLastChange(filePath);
+            assertNotNull(change);
+            assertEquals("session-X", change.sessionId, "ThreadLocal 未设置时 sessionId 应来自上下文");
+        } finally {
+            FileChangeTracker.clearCurrentSessionId();
+        }
     }
 }

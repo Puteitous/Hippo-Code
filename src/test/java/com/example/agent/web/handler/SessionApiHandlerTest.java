@@ -41,15 +41,15 @@ class SessionApiHandlerTest {
     }
 
     @Nested
-    @DisplayName("HTTP 路由 - truncate 端点")
-    class TruncateRouteTests {
+    @DisplayName("HTTP 路由 - rewind 端点")
+    class RewindRouteTests {
 
         @Test
-        @DisplayName("POST /api/sessions/{id}/truncate 请求被正确路由")
-        void truncateRouteIsMatched() throws IOException {
+        @DisplayName("POST /api/sessions/{id}/rewind 请求被正确路由")
+        void rewindRouteIsMatched() throws IOException {
             FakeHttpExchange exchange = new FakeHttpExchange(
                 "POST",
-                "/api/sessions/test-session-123/truncate",
+                "/api/sessions/test-session-123/rewind",
                 "{\"messageId\":\"msg-1\"}"
             );
 
@@ -66,7 +66,7 @@ class SessionApiHandlerTest {
         void missingMessageIdReturns400() throws IOException {
             FakeHttpExchange exchange = new FakeHttpExchange(
                 "POST",
-                "/api/sessions/test-session-123/truncate",
+                "/api/sessions/test-session-123/rewind",
                 "{}"
             );
 
@@ -82,7 +82,7 @@ class SessionApiHandlerTest {
         void emptyMessageIdReturns400() throws IOException {
             FakeHttpExchange exchange = new FakeHttpExchange(
                 "POST",
-                "/api/sessions/test-session-123/truncate",
+                "/api/sessions/test-session-123/rewind",
                 "{\"messageId\":\"\"}"
             );
 
@@ -98,7 +98,7 @@ class SessionApiHandlerTest {
         void nonexistentSessionReturns404() throws IOException {
             FakeHttpExchange exchange = new FakeHttpExchange(
                 "POST",
-                "/api/sessions/nonexistent/truncate",
+                "/api/sessions/nonexistent/rewind",
                 "{\"messageId\":\"msg-1\"}"
             );
 
@@ -114,7 +114,7 @@ class SessionApiHandlerTest {
         void optionsRequestReturns204() throws IOException {
             FakeHttpExchange exchange = new FakeHttpExchange(
                 "OPTIONS",
-                "/api/sessions/test-session-123/truncate",
+                "/api/sessions/test-session-123/rewind",
                 ""
             );
 

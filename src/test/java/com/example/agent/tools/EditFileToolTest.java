@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
+import com.example.agent.snapshot.FileSnapshotManager;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -602,7 +603,8 @@ class EditFileToolTest {
 
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
+             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -625,7 +627,7 @@ class EditFileToolTest {
             tool.execute(args);
 
             trackerMock.verify(() -> FileChangeTracker.recordChange(
-                anyString(), eq(fileContent), contains("This is modified"), eq("edit_file")));
+                anyString(), eq(fileContent), contains("This is modified"), eq("edit_file"), eq(false)));
         }
     }
 
@@ -635,7 +637,8 @@ class EditFileToolTest {
 
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
+             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -658,7 +661,7 @@ class EditFileToolTest {
             tool.execute(args);
 
             trackerMock.verify(() -> FileChangeTracker.recordChange(
-                anyString(), eq(fileContent), eq(" World"), eq("edit_file")));
+                anyString(), eq(fileContent), eq(" World"), eq("edit_file"), eq(false)));
         }
     }
 
@@ -668,7 +671,8 @@ class EditFileToolTest {
 
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
+             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");

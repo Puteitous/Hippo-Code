@@ -322,32 +322,32 @@ describe('chat-service.js', () => {
       expect(result.currentTokens).toBe(100);
     });
 
-    it('truncateSession 调用 POST /api/sessions/{id}/truncate', async () => {
+    it('rewind 调用 POST /api/sessions/{id}/rewind', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ success: true, message: '已截断' }),
+        json: () => Promise.resolve({ success: true, filesChanged: 2 }),
       });
 
-      const result = await chatService.truncateSession('s1', 'msg-123', 1000, 2000);
+      const result = await chatService.rewind('s1', 'msg-123');
 
       expect(globalThis.fetch).toHaveBeenCalledWith(
-        '/api/sessions/s1/truncate',
+        '/api/sessions/s1/rewind',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messageId: 'msg-123', startTime: 1000, endTime: 2000 }),
+          body: JSON.stringify({ messageId: 'msg-123' }),
         })
       );
-      expect(result).toEqual({ success: true, message: '已截断' });
+      expect(result).toEqual({ success: true, filesChanged: 2 });
     });
 
-    it('truncateSession 不带时间戳参数时使用默认值', async () => {
+    it('rewind 发送正确的请求体', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ success: true }),
       });
 
-      await chatService.truncateSession('s1', 'msg-123');
+      await chatService.rewind('s1', 'msg-123');
 
       const callBody = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
       expect(callBody.messageId).toBe('msg-123');
@@ -355,7 +355,7 @@ describe('chat-service.js', () => {
       expect(callBody.endTime).toBeUndefined();
     });
 
-    it('truncateSession 请求失败时抛出错误', async () => {
+    it('rewind 请求失败时抛出错误', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,
         status: 400,
@@ -363,15 +363,15 @@ describe('chat-service.js', () => {
       });
 
       await expect(
-        chatService.truncateSession('s1', '')
+        chatService.rewind('s1', '')
       ).rejects.toThrow('messageId is required');
     });
 
-    it('truncateSession 网络错误时抛出错误', async () => {
+    it('rewind 网络错误时抛出错误', async () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
       await expect(
-        chatService.truncateSession('s1', 'msg-123', 0, 1000)
+        chatService.rewind('s1', 'msg-123')
       ).rejects.toThrow('Network error');
     });
   });

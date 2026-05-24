@@ -236,6 +236,7 @@ describe('ChatPanel.js', () => {
       const userMsg = document.createElement('div');
       userMsg.className = 'message user';
       container.appendChild(userMsg);
+      chatPanel._lastUserMsgDiv = userMsg;
 
       chatPanel.handleChunk(
         { _eventType: 'message_id', id: 'msg-123' },

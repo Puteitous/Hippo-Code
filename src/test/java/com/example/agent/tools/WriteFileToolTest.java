@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import com.example.agent.snapshot.FileSnapshotManager;
+import com.example.agent.tools.FileChangeTracker;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -322,7 +324,8 @@ class WriteFileToolTest {
     void testWriteNewFileRecordsChange() throws Exception {
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
+             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -341,7 +344,7 @@ class WriteFileToolTest {
             tool.execute(args);
 
             trackerMock.verify(() -> FileChangeTracker.recordChange(
-                anyString(), eq(""), eq("Hello World"), eq("write_file")));
+                anyString(), eq(""), eq("Hello World"), eq("write_file"), eq(true)));
         }
     }
 
@@ -349,7 +352,8 @@ class WriteFileToolTest {
     void testOverwriteExistingFileRecordsChange() throws Exception {
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
+             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -369,7 +373,7 @@ class WriteFileToolTest {
             tool.execute(args);
 
             trackerMock.verify(() -> FileChangeTracker.recordChange(
-                anyString(), eq("original content"), eq("New content"), eq("write_file")));
+                anyString(), eq("original content"), eq("New content"), eq("write_file"), eq(false)));
         }
     }
 }
