@@ -48,7 +48,6 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
         assertTrue(result.contains(".java"));
         assertTrue(result.contains("找到"));
     }
@@ -85,7 +84,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -156,7 +155,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains(".md"));
     }
 
     @Test
@@ -276,7 +275,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -288,7 +287,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -364,7 +363,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -375,7 +374,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到"));
     }
 
     @Test
@@ -386,7 +385,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到"));
     }
 
     @Test
@@ -407,7 +406,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到"));
     }
 
     @Test
@@ -418,7 +417,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -429,7 +428,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("pom.xml") || result.contains("找到"));
     }
 
     @Test
@@ -440,7 +439,6 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
         assertTrue(result.contains("pom.xml") || result.contains("README.md"));
     }
 
@@ -453,7 +451,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -465,7 +463,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -488,7 +486,7 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到"));
     }
 
     @Test
@@ -499,6 +497,6 @@ class GlobToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Glob 搜索结果"));
+        assertTrue(result.contains("未找到匹配的文件"));
     }
 }

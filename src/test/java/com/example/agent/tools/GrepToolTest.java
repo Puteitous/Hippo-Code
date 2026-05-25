@@ -48,8 +48,9 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
         assertTrue(result.contains("public class"));
+        assertTrue(result.contains("📄"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -61,8 +62,8 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
         assertTrue(result.contains("import"));
+        assertTrue(result.contains(".java"));
     }
 
     @Test
@@ -74,7 +75,8 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("ToolExecutor"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -86,7 +88,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertFalse(result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -98,7 +100,6 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
         assertTrue(result.contains("找到"));
     }
 
@@ -111,7 +112,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("仅展示前 5 条"));
     }
 
     @Test
@@ -193,7 +194,8 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("📄"));
+        assertTrue(result.contains("找到"));
     }
 
     @Test
@@ -219,7 +221,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("Hippo"));
         assertTrue(result.contains(".md"));
     }
 
@@ -232,7 +234,6 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
         assertTrue(result.contains("README.md") || result.contains("找到"));
     }
 
@@ -245,7 +246,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -258,7 +259,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("pom.xml"));
     }
 
     @Test
@@ -297,7 +298,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("未找到匹配的内容") || result.contains("找到"));
     }
 
     @Test
@@ -309,7 +310,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -321,7 +322,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -333,8 +334,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
-        assertTrue(result.contains("已达到最大结果数限制") || result.contains("找到 1 处"));
+        assertTrue(result.contains("仅展示前 1 条") || result.contains("找到 1 处"));
     }
 
     @Test
@@ -346,7 +346,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -358,7 +358,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
@@ -370,7 +370,7 @@ class GrepToolTest {
         String result = tool.execute(args);
         
         assertNotNull(result);
-        assertTrue(result.contains("Grep 搜索结果"));
+        assertTrue(result.contains("找到") || result.contains("未找到匹配的内容"));
     }
 
     @Test
