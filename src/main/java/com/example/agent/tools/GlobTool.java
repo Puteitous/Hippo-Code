@@ -1,5 +1,6 @@
 package com.example.agent.tools;
 
+import com.example.agent.tools.filter.FileFilter;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.io.IOException;
@@ -15,7 +16,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class GlobTool implements ToolExecutor {
 
@@ -123,10 +123,9 @@ public class GlobTool implements ToolExecutor {
                 throw new ToolExecutionException("无效的 glob 模式: " + pattern + " (" + e.getMessage() + ")");
             }
             
-            List<FileInfo> results;
-            try (Stream<Path> stream = Files.walk(basePath, MAX_DEPTH)) {
-                results = stream
-                    .filter(Files::isRegularFile)
+            FileFilter fileFilter = new FileFilter(basePath);
+            
+            List<FileInfo> results = fileFilter.walkFiles(basePath, MAX_DEPTH)
                     .filter(p -> isWithinProject(p))
                     .filter(p -> matcher.matches(basePath.relativize(p)))
                     .limit(maxResults * 2L)
@@ -134,7 +133,6 @@ public class GlobTool implements ToolExecutor {
                     .sorted((a, b) -> b.modifiedTime.compareTo(a.modifiedTime))
                     .limit(maxResults)
                     .collect(Collectors.toList());
-            }
 
             return formatResults(results, pattern, searchPath, maxResults);
             
