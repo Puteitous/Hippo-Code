@@ -426,8 +426,36 @@ async function handleMessageRollback(msgDiv) {
     return;
   }
 
+  const previewData = await chatService.rewindPreview(currentSessionId, messageId);
+  const previewFiles = previewData.files || [];
+
   const existing = document.querySelector('.rollback-modal-overlay');
   if (existing) existing.remove();
+
+  let filesHtml = '';
+  if (previewFiles.length > 0) {
+    filesHtml = `<div class="rollback-modal-files">
+      <div class="rollback-modal-files-title">影响文件（${previewFiles.length} 个）</div>
+      ${previewFiles.map(f => {
+        const actionLabel = f.action === 'delete' ? '删除' : f.action === 'restore' ? '恢复' : '无变化';
+        const actionClass = f.action === 'delete' ? 'action-delete' : f.action === 'restore' ? 'action-restore' : 'action-unchanged';
+        let diffStats = '';
+        if (f.action === 'restore' && (f.insertions > 0 || f.deletions > 0)) {
+          const parts = [];
+          if (f.insertions > 0) parts.push(`<span class="diff-insertions">+${f.insertions}</span>`);
+          if (f.deletions > 0) parts.push(`<span class="diff-deletions">-${f.deletions}</span>`);
+          diffStats = `<span class="diff-stats">${parts.join(' ')}</span>`;
+        } else if (f.action === 'restore') {
+          diffStats = `<span class="diff-stats diff-unchanged">无变动</span>`;
+        }
+        return `<div class="rollback-modal-file">
+          <span class="rollback-modal-file-path" title="${escapeHtml(f.filePath)}">${escapeHtml(f.filePath.replace(/^.*[/\\]/, ''))}</span>
+          <span class="file-action-badge ${actionClass}">${actionLabel}</span>
+          ${diffStats}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
 
   const overlay = document.createElement('div');
   overlay.className = 'rollback-modal-overlay';
@@ -443,9 +471,9 @@ async function handleMessageRollback(msgDiv) {
       <div class="rollback-modal-title">回滚确认</div>
       <div class="rollback-modal-message">
         此操作将回滚到<strong>上一轮对话</strong>，删除本轮及之后的所有消息，并撤销对应的文件变更。
-        <br><br>
-        该操作无法撤销，确定要继续吗？
       </div>
+      ${filesHtml}
+      <div class="rollback-modal-note">该操作无法撤销，确定要继续吗？</div>
       <div class="rollback-modal-buttons">
         <button class="rollback-modal-btn rollback-modal-btn-cancel">取消</button>
         <button class="rollback-modal-btn rollback-modal-btn-confirm">确定回滚</button>

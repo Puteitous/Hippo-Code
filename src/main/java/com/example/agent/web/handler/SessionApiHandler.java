@@ -332,6 +332,8 @@ public class SessionApiHandler implements HttpHandler {
             Map<String, Object> item = new HashMap<>();
             item.put("filePath", f.getFilePath());
             item.put("action", f.getAction());
+            item.put("insertions", f.getInsertions());
+            item.put("deletions", f.getDeletions());
             return item;
         }).collect(java.util.stream.Collectors.toList()));
         sendJson(exchange, response);

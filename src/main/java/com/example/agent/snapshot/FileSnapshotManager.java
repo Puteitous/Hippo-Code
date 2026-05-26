@@ -346,26 +346,86 @@ public class FileSnapshotManager {
         List<PreviewFile> previewFiles = new ArrayList<>();
 
         for (Snapshot.TrackedFile tf : target.getTrackedFiles()) {
-            boolean exists = Files.exists(Path.of(tf.getPath()));
+            Path filePath = Path.of(tf.getPath());
+            boolean exists = Files.exists(filePath);
 
             String action;
+            String backupToCompare = null;
             if (tf.isCreated()) {
                 action = exists ? "delete" : "restore";
+                if (!exists) {
+                    backupToCompare = tf.getBackup();
+                }
             } else if (tf.getBackup() == null) {
                 if (exists) {
                     action = "delete";
                 } else {
                     Snapshot.TrackedFile prevTf = previousSnapshot != null ? findTrackedFile(previousSnapshot, tf.getPath()) : null;
                     action = (prevTf != null && prevTf.getBackup() != null) ? "restore" : "unchanged";
+                    if (action.equals("restore")) {
+                        backupToCompare = prevTf.getBackup();
+                    }
                 }
             } else {
                 action = "restore";
+                if (previousSnapshot != null) {
+                    Snapshot.TrackedFile prevTf = findTrackedFile(previousSnapshot, tf.getPath());
+                    if (prevTf != null && prevTf.getBackup() != null) {
+                        backupToCompare = prevTf.getBackup();
+                    } else {
+                        backupToCompare = tf.getBackup();
+                    }
+                } else {
+                    backupToCompare = tf.getBackup();
+                }
             }
 
-            previewFiles.add(new PreviewFile(tf.getPath(), action));
+            int insertions = 0;
+            int deletions = 0;
+            if ("restore".equals(action) && backupToCompare != null) {
+                Path backupPath = resolveBackupPath(sessionId, backupToCompare);
+                if (Files.exists(backupPath)) {
+                    int[] stats = countDiffStats(filePath, backupPath);
+                    insertions = stats[0];
+                    deletions = stats[1];
+                }
+            }
+
+            previewFiles.add(new PreviewFile(tf.getPath(), action, insertions, deletions));
         }
 
         return new PreviewResult(previewFiles);
+    }
+
+    private static int[] countDiffStats(Path currentPath, Path backupPath) {
+        try {
+            String current = Files.exists(currentPath) ? Files.readString(currentPath, StandardCharsets.UTF_8) : "";
+            String backup = Files.readString(backupPath, StandardCharsets.UTF_8);
+            String[] currLines = current.split("\n", -1);
+            String[] backLines = backup.split("\n", -1);
+
+            if (currLines.length == 0 && backLines.length == 0) return new int[]{0, 0};
+
+            int m = currLines.length;
+            int n = backLines.length;
+
+            int[][] dp = new int[m + 1][n + 1];
+            for (int i = 1; i <= m; i++) {
+                for (int j = 1; j <= n; j++) {
+                    if (currLines[i - 1].equals(backLines[j - 1])) {
+                        dp[i][j] = dp[i - 1][j - 1] + 1;
+                    } else {
+                        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                    }
+                }
+            }
+
+            int lcs = dp[m][n];
+            return new int[]{n - lcs, m - lcs};
+        } catch (IOException e) {
+            logger.warn("计算 diff 统计失败: currentPath={}, backupPath={}", currentPath, backupPath, e);
+            return new int[]{0, 0};
+        }
     }
 
     // ===== snapshots.jsonl operations =====
@@ -688,14 +748,24 @@ public class FileSnapshotManager {
     public static class PreviewFile {
         private final String filePath;
         private final String action;
+        private final int insertions;
+        private final int deletions;
 
         PreviewFile(String filePath, String action) {
+            this(filePath, action, 0, 0);
+        }
+
+        PreviewFile(String filePath, String action, int insertions, int deletions) {
             this.filePath = filePath;
             this.action = action;
+            this.insertions = insertions;
+            this.deletions = deletions;
         }
 
         public String getFilePath() { return filePath; }
         public String getAction() { return action; }
+        public int getInsertions() { return insertions; }
+        public int getDeletions() { return deletions; }
     }
 
     public static class PreviewResult {
