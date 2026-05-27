@@ -303,8 +303,8 @@ describe('ChatUI', () => {
       });
       expect(html).toContain('editfile-card');
       expect(html).toContain('/test/file.js');
-      expect(html).toContain('原文本');
-      expect(html).toContain('新文本');
+      expect(html).toContain('diff-removed');
+      expect(html).toContain('diff-added');
       expect(html).toContain('old content');
       expect(html).toContain('new content');
       expect(html).toContain('已生效');

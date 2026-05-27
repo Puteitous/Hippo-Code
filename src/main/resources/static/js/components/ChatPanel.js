@@ -35,6 +35,12 @@ export class ChatPanel {
     this._lastSegmentCount = 0;
     this._pendingIsTextOnly = false;
 
+    // 渲染版本号：防止 async 重入覆盖
+    this._renderVersion = 0;
+
+    // 调度标记：_scheduleRender 设置的定时器不应被 _flushRender 取消
+    this._renderScheduled = false;
+
     this.init();
   }
   
@@ -343,10 +349,6 @@ export class ChatPanel {
   handleChunk(parsed, contentDiv, btnContainer) {
     if (this.isCompleted) return;
     
-    if (parsed._eventType !== 'reasoning' && parsed._eventType !== 'content') {
-      console.log('📥 收到 SSE 事件:', parsed._eventType, parsed);
-    }
-    
     // 处理 waiting_user 事件（优先处理，避免被其他逻辑拦截）
     if (parsed._eventType === 'waiting_user') {
       console.log('📥 收到 waiting_user 事件:', parsed);
@@ -431,9 +433,6 @@ export class ChatPanel {
     if (parsed._eventType === 'reasoning_done') {
       if (this._reasoningSegment) {
         this._reasoningSegment.done = true;
-        // 强制重新渲染，将思考卡片从 "streaming"（思考中...）更新为 "completed"（已思考）
-        // 直接设置 _pendingRender 确保即使节流渲染已完成也能触发 _doRender
-        this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText };
         this._flushRender();
         this._reasoningSegment = null;
       }
@@ -464,9 +463,11 @@ export class ChatPanel {
     
     // 处理 tool_start 事件
     if (parsed._eventType === 'tool_start' && parsed.name) {
-      console.log('🔧 工具开始:', parsed.name);
       
       if (parsed.id) {
+        if (this._runningToolCallIds.has(parsed.id)) {
+          return;
+        }
         this._runningToolCallIds.add(parsed.id);
       }
       
@@ -480,8 +481,8 @@ export class ChatPanel {
         this._reasoningSegment.done = true;
         this._reasoningSegment = null;
       }
-      
-      // 立即刷新任何未完成的节流渲染，确保 segments 最新
+
+      // 立即刷新，确保思考段已完成后再推 tool 段
       this._flushRender();
       
       // ask_user 工具不在这里渲染，等待 waiting_user 事件处理
@@ -572,24 +573,26 @@ export class ChatPanel {
           // 创建新的 todo 卡片
           this.segments.push(todoSegment);
         }
-        this.renderSegments(contentDiv, this.segments, this.currentText);
-      } else {
-        // 其他工具：创建新卡片
-        if (this.currentText.trim()) {
-          this.segments.push({ type: 'text', content: this.currentText });
-          this.currentText = '';
+        this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText, _isTextOnly: false };
+          this._flushRender();
+         } else {
+           // 其他工具：创建新卡片
+           if (this.currentText.trim()) {
+             this.segments.push({ type: 'text', content: this.currentText });
+             this.currentText = '';
+           }
+           this.segments.push({ 
+             type: 'tool', 
+             id: parsed.id || null,
+             name: parsed.name, 
+             args: parsed.args, 
+             result: null, 
+             error: null 
+           });
+           this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText, _isTextOnly: false };
+           this._flushRender();
         }
-        this.segments.push({ 
-          type: 'tool', 
-          id: parsed.id || null,
-          name: parsed.name, 
-          args: parsed.args, 
-          result: null, 
-          error: null 
-        });
-        this.renderSegments(contentDiv, this.segments, this.currentText);
-      }
-      return;
+        return;
     }
     
     // 处理 tool_result 事件
@@ -600,7 +603,6 @@ export class ChatPanel {
         this._runningToolCallIds.delete(resultId);
       }
       
-      // 优先匹配 toolCallId，如果没有则匹配 name
       let existingTool;
       if (parsed.tool_call_id) {
         existingTool = this.segments.find(s => s.type === 'tool' && s.id === parsed.tool_call_id && !s.result);
@@ -613,8 +615,12 @@ export class ChatPanel {
         existingTool.result = parsed.success ? 'success' : 'error';
         existingTool.error = parsed.error || null;
         existingTool.resultContent = parsed.result || null;
+        if (parsed.args) {
+          existingTool.args = parsed.args;
+        }
         existingTool.confirmationData = null;
         existingTool.progressLines = null; // 清除实时进度
+        this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText };
         this._flushRender();
         this._scheduleRender(contentDiv, this.segments, this.currentText);
       }
@@ -629,6 +635,7 @@ export class ChatPanel {
       if (existingTool) {
         existingTool.progressLines = existingTool.progressLines || [];
         existingTool.progressLines.push(parsed.line);
+        this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText };
         this._flushRender();
         this._scheduleRender(contentDiv, this.segments, this.currentText);
       }
@@ -647,6 +654,7 @@ export class ChatPanel {
           riskLevel: parsed.riskLevel,
           riskReason: parsed.riskReason
         };
+        this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText };
         this._flushRender();
         this._scheduleRender(contentDiv, this.segments, this.currentText);
       }
@@ -678,11 +686,15 @@ export class ChatPanel {
     this._pendingIsTextOnly = false;
     
     if (now - this._lastRenderTime >= THROTTLE_MS) {
+      this._renderScheduled = false;
       this._lastRenderTime = now;
       this._doRender();
     } else if (!this._renderThrottleTimer) {
+      const remaining = THROTTLE_MS - (now - this._lastRenderTime);
+      this._renderScheduled = true;
       this._renderThrottleTimer = setTimeout(() => {
         this._renderThrottleTimer = null;
+        this._renderScheduled = false;
         this._lastRenderTime = Date.now();
         this._doRender();
       }, THROTTLE_MS);
@@ -693,6 +705,12 @@ export class ChatPanel {
    * 立即刷新挂起的渲染（总是全量重建——仅在纯文本 streaming 时走增量路径）
    */
   _flushRender() {
+    // 如果 _scheduleRender 设置了有意延迟的定时器（节流窗口内），
+    // 不取消它——让定时器到期后自然渲染最新状态。
+    // 避免后续事件（如 thinking）过早覆盖 tool_result 的 pending 渲染。
+    if (this._renderScheduled) {
+      return;
+    }
     if (this._renderThrottleTimer) {
       clearTimeout(this._renderThrottleTimer);
       this._renderThrottleTimer = null;
@@ -703,7 +721,7 @@ export class ChatPanel {
       this._doRender();
     }
   }
-  
+
   /**
    * 保存当前卡片展开状态（防止 innerHTML 重建导致自动收起）
    */
@@ -812,12 +830,14 @@ export class ChatPanel {
    */
   async _doRender() {
     if (this._destroyed) return;
+    this._renderVersion++;
+    const renderVersion = this._renderVersion;
     const pending = this._pendingRender;
     if (!pending) return;
     this._pendingRender = null;
     
     const { container, segments, currentText, _isTextOnly } = pending;
-    
+
     // ========== FAST PATH：仅 streaming 文本变化，无新 segment ==========
     if (_isTextOnly && this._streamingAnchor && this._streamingAnchor.isConnected &&
         this._lastSegmentCount === segments.length) {
@@ -875,6 +895,9 @@ export class ChatPanel {
 
     if (this._destroyed) return;
 
+    // 如果已存在更新的渲染版本，跳过本次结果（防 async 重入覆盖）
+    if (renderVersion !== this._renderVersion) return;
+
     // 从当前 DOM 中保存展开状态（在重建之前）
     const savedStates = this._saveCardStates(container);
 
@@ -900,6 +923,8 @@ export class ChatPanel {
     }
 
     // 4) 原子置换：一次操作完成新旧 DOM 切换（零中间帧）
+    //   再次检查版本，防止 await renderMarkdown 期间被覆盖
+    if (renderVersion !== this._renderVersion) return;
     container.replaceChildren(...tempDiv.children);
 
     // 保存 streaming anchor 引用
@@ -1200,6 +1225,10 @@ export class ChatPanel {
             existingTool.result = parsed.success ? 'success' : 'error';
             existingTool.error = parsed.error || null;
             existingTool.resultContent = parsed.result || null;
+            if (parsed.args) {
+              existingTool.args = parsed.args;
+            }
+            this._pendingRender = { container: responseContentDiv, segments, currentText };
             this._flushRender();
             this._scheduleRender(responseContentDiv, segments, currentText);
           }
@@ -1565,7 +1594,7 @@ export class ChatPanel {
   /**
    * 从服务端消息数组加载历史消息（会话切换时调用）
    */
-  async loadHistoryMessages(messages) {
+  async loadHistoryMessages(messages, noAnimation = false) {
     const toolResults = {};
     for (const msg of messages) {
       if ((msg.role === 'tool' || msg.role === 'tool-result') && msg.toolCallId) {
@@ -1715,9 +1744,11 @@ export class ChatPanel {
           if (row.content && row.content.trim()) {
             const userRow = document.createElement('div');
             userRow.className = 'message-row user-row';
-            userRow.style.setProperty('--msg-delay', `${Math.min(rowIndex * 0.04, 0.6)}s`);
-            userRow.classList.add('animate-in');
-            rowIndex++;
+            if (!noAnimation) {
+              userRow.style.setProperty('--msg-delay', `${Math.min(rowIndex * 0.04, 0.6)}s`);
+              userRow.classList.add('animate-in');
+              rowIndex++;
+            }
 
             const userMsgDiv = document.createElement('div');
             userMsgDiv.className = 'message user';
@@ -1772,9 +1803,11 @@ export class ChatPanel {
 
           const rowEl = document.createElement('div');
           rowEl.className = 'message-row assistant-row';
-          rowEl.style.setProperty('--msg-delay', `${Math.min(rowIndex * 0.04, 0.6)}s`);
-          rowEl.classList.add('animate-in');
-          rowIndex++;
+          if (!noAnimation) {
+            rowEl.style.setProperty('--msg-delay', `${Math.min(rowIndex * 0.04, 0.6)}s`);
+            rowEl.classList.add('animate-in');
+            rowIndex++;
+          }
 
           const msgDiv = document.createElement('div');
           msgDiv.className = 'message assistant';
@@ -1883,7 +1916,9 @@ export class ChatPanel {
       }
     }
 
-    this.chatUI.scrollToBottom();
+    if (!noAnimation) {
+      this.chatUI.scrollToBottom();
+    }
   }
 
   /**
@@ -1920,7 +1955,6 @@ window.toggleThinkingRow = function(headerEl) {
     const isCapped = totalH > 300;
     content.style.maxHeight = isCapped ? '300px' : totalH + 'px';
     row.classList.add('expanded');
-    if (toggleIcon) toggleIcon.textContent = '▼';
     const onEnd = (e) => {
       if (e.propertyName !== 'max-height') return;
       content.removeEventListener('transitionend', onEnd);

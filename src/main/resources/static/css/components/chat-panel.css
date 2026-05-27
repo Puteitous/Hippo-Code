@@ -16,6 +16,7 @@
     gap: 16px;
     position: relative;
     width: 100%;
+    overflow-anchor: none;
 }
 
 .chat-container > * {

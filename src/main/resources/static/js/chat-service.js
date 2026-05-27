@@ -154,6 +154,10 @@ export class ChatService {
 
       let currentEvent = 'message';
 
+      const yieldToBrowser = () => new Promise(resolve => {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+      });
+
       const flushDataBuffer = () => {
         const data = dataBuffer;
         dataBuffer = '';
@@ -184,7 +188,7 @@ export class ChatService {
         }
       };
 
-      const processSSELines = (lines) => {
+      const processSSELines = async (lines) => {
         for (const line of lines) {
           if (line.startsWith('event: ')) {
             flushDataBuffer();
@@ -196,7 +200,11 @@ export class ChatService {
               dataBuffer = line.substring(6);
             }
           } else if (line === '') {
+            const evt = currentEvent;
             flushDataBuffer();
+            if (evt === 'tool_start' || evt === 'tool_result' || evt === 'tool_progress') {
+              await yieldToBrowser();
+            }
           }
         }
 
@@ -212,12 +220,12 @@ export class ChatService {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        processSSELines(lines);
+        await processSSELines(lines);
       }
 
       if (buffer.trim()) {
         const lines = buffer.split('\n');
-        processSSELines(lines);
+        await processSSELines(lines);
       }
     } catch (error) {
       buffer = '';
