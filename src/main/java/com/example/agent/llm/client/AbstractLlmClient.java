@@ -392,6 +392,9 @@ public abstract class AbstractLlmClient implements LlmClient {
                 if (chunk.isToolCall() && chunk.hasToolCalls()) {
                     toolCallChunkCount++;
                     mergeToolCallDeltas(toolCalls, chunk.getToolCallDeltas());
+                    if (onChunk != null) {
+                        onChunk.accept(chunk);
+                    }
                 }
                 
                 if (chunk.getFinishReason() != null) {

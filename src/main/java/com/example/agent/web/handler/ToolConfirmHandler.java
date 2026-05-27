@@ -23,7 +23,6 @@ import com.sun.net.httpserver.HttpHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
@@ -105,9 +104,12 @@ public class ToolConfirmHandler implements HttpHandler {
             exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             exchange.sendResponseHeaders(200, 0);
 
-            BufferedWriter bufferedWriter = new BufferedWriter(new OutputStreamWriter(
-                exchange.getResponseBody(), StandardCharsets.UTF_8));
-            SseWriter sseWriter = new SseWriter(bufferedWriter);
+            // 直接使用 OutputStreamWriter，不包装 BufferedWriter。
+            // SSE 事件每次 write 后立即 flush，无需缓冲层。
+            // BufferedWriter 的缓冲在 SSE 场景下从不被利用。
+            OutputStreamWriter outputStreamWriter = new OutputStreamWriter(
+                exchange.getResponseBody(), StandardCharsets.UTF_8);
+            SseWriter sseWriter = new SseWriter(outputStreamWriter);
 
             ConversationService conversationService = ServiceLocator.get(ConversationService.class);
             ToolRegistry toolRegistry = ServiceLocator.get(ToolRegistry.class);
@@ -183,7 +185,7 @@ public class ToolConfirmHandler implements HttpHandler {
             // 继续 Agent 循环
             orchestrator.execute(sessionId, conversation, sseWriter);
 
-            bufferedWriter.close();
+            outputStreamWriter.close();
             exchange.close();
 
         } catch (LlmException e) {

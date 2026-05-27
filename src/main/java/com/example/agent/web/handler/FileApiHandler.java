@@ -112,9 +112,10 @@ public class FileApiHandler implements HttpHandler {
                 changeItem.put("toolName", c.toolName);
                 changeItem.put("timestamp", c.timestamp);
                 changeItem.put("index", ci);
-                changeItem.put("changes", buildDiffList(
-                    c.originalContent != null ? c.originalContent : "",
-                    c.newContent != null ? c.newContent : ""));
+                String original = c.originalContent != null ? c.originalContent : "";
+                String modified = c.newContent != null ? c.newContent : "";
+                changeItem.put("changes", buildDiffList(original, modified));
+                changeItem.put("wordDiff", buildWordDiffList(original, modified));
                 allChangesList.add(changeItem);
             }
             Map<String, Object> response = new HashMap<>();
@@ -135,15 +136,20 @@ public class FileApiHandler implements HttpHandler {
         response.put("filePath", targetChange.filePath);
         response.put("toolName", targetChange.toolName);
         response.put("timestamp", targetChange.timestamp);
-        response.put("changes", buildDiffList(
-            targetChange.originalContent != null ? targetChange.originalContent : "",
-            targetChange.newContent != null ? targetChange.newContent : ""));
+        String original = targetChange.originalContent != null ? targetChange.originalContent : "";
+        String modified = targetChange.newContent != null ? targetChange.newContent : "";
+        response.put("changes", buildDiffList(original, modified));
+        response.put("wordDiff", buildWordDiffList(original, modified));
 
         sendJson(exchange, 200, objectMapper.writeValueAsString(response));
     }
 
     private static List<Map<String, String>> buildDiffList(String original, String modified) {
         return diffComputer.computeDiffAsMap(original, modified);
+    }
+
+    private static List<Map<String, Object>> buildWordDiffList(String original, String modified) {
+        return diffComputer.computeWordDiff(original, modified);
     }
 
     private void handleRollback(HttpExchange exchange) throws IOException {

@@ -1,6 +1,12 @@
 package com.example.agent.web.util;
 
+import com.github.difflib.DiffUtils;
+import com.github.difflib.patch.AbstractDelta;
+import com.github.difflib.patch.DeltaType;
+import com.github.difflib.patch.Patch;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,58 +28,141 @@ public class DiffComputer {
     }
 
     public List<String[]> computeDiff(String original, String modified) {
-        String[] origLines = splitLines(original);
-        String[] modLines = splitLines(modified);
+        List<String> origLines = Arrays.asList(original.split("\n", -1));
+        List<String> modLines = Arrays.asList(modified.split("\n", -1));
 
-        int m = origLines.length;
-        int n = modLines.length;
-
-        int[][] dp = buildLcsTable(origLines, modLines, m, n);
-
-        return backtrackDiff(origLines, modLines, dp, m, n);
-    }
-
-    private static String[] splitLines(String text) {
-        return text.split("\n", -1);
-    }
-
-    private static int[][] buildLcsTable(String[] origLines, String[] modLines, int m, int n) {
-        int[][] dp = new int[m + 1][n + 1];
-        for (int i = 1; i <= m; i++) {
-            for (int j = 1; j <= n; j++) {
-                if (origLines[i - 1].equals(modLines[j - 1])) {
-                    dp[i][j] = dp[i - 1][j - 1] + 1;
-                } else {
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-                }
-            }
-        }
-        return dp;
-    }
-
-    private static List<String[]> backtrackDiff(String[] origLines, String[] modLines,
-                                                  int[][] dp, int m, int n) {
-        List<String[]> reversed = new ArrayList<>();
-        int i = m, j = n;
-
-        while (i > 0 || j > 0) {
-            if (i > 0 && j > 0 && origLines[i - 1].equals(modLines[j - 1])) {
-                reversed.add(new String[]{"same", origLines[i - 1]});
-                i--;
-                j--;
-            } else if (j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-                reversed.add(new String[]{"added", modLines[j - 1]});
-                j--;
-            } else if (i > 0) {
-                reversed.add(new String[]{"removed", origLines[i - 1]});
-                i--;
-            }
-        }
-
+        Patch<String> patch = DiffUtils.diff(origLines, modLines);
         List<String[]> result = new ArrayList<>();
-        for (int k = reversed.size() - 1; k >= 0; k--) {
-            result.add(reversed.get(k));
+
+        int origIdx = 0;
+
+        for (AbstractDelta<String> delta : patch.getDeltas()) {
+            while (origIdx < delta.getSource().getPosition()) {
+                result.add(new String[]{"same", origLines.get(origIdx)});
+                origIdx++;
+            }
+
+            switch (delta.getType()) {
+                case DELETE:
+                    for (String line : delta.getSource().getLines()) {
+                        result.add(new String[]{"removed", line});
+                    }
+                    origIdx += delta.getSource().getLines().size();
+                    break;
+                case INSERT:
+                    for (String line : delta.getTarget().getLines()) {
+                        result.add(new String[]{"added", line});
+                    }
+                    break;
+                case CHANGE:
+                    for (String line : delta.getSource().getLines()) {
+                        result.add(new String[]{"removed", line});
+                    }
+                    for (String line : delta.getTarget().getLines()) {
+                        result.add(new String[]{"added", line});
+                    }
+                    origIdx += delta.getSource().getLines().size();
+                    break;
+            }
         }
+
+        while (origIdx < origLines.size()) {
+            result.add(new String[]{"same", origLines.get(origIdx)});
+            origIdx++;
+        }
+
         return result;
+    }
+
+    public List<Map<String, Object>> computeWordDiff(String original, String modified) {
+        List<String> origWords = Arrays.asList(original.split("(?<=\\s)|(?=\\s)", -1));
+        List<String> modWords = Arrays.asList(modified.split("(?<=\\s)|(?=\\s)", -1));
+
+        Patch<String> patch = DiffUtils.diff(origWords, modWords);
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        int origIdx = 0;
+
+        for (AbstractDelta<String> delta : patch.getDeltas()) {
+            while (origIdx < delta.getSource().getPosition()) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("type", "equal");
+                item.put("value", origWords.get(origIdx));
+                result.add(item);
+                origIdx++;
+            }
+
+            switch (delta.getType()) {
+                case DELETE:
+                    for (String word : delta.getSource().getLines()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("type", "delete");
+                        item.put("value", word);
+                        result.add(item);
+                    }
+                    origIdx += delta.getSource().getLines().size();
+                    break;
+                case INSERT:
+                    for (String word : delta.getTarget().getLines()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("type", "insert");
+                        item.put("value", word);
+                        result.add(item);
+                    }
+                    break;
+                case CHANGE:
+                    for (String word : delta.getSource().getLines()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("type", "delete");
+                        item.put("value", word);
+                        result.add(item);
+                    }
+                    for (String word : delta.getTarget().getLines()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("type", "insert");
+                        item.put("value", word);
+                        result.add(item);
+                    }
+                    origIdx += delta.getSource().getLines().size();
+                    break;
+            }
+        }
+
+        while (origIdx < origWords.size()) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("type", "equal");
+            item.put("value", origWords.get(origIdx));
+            result.add(item);
+            origIdx++;
+        }
+
+        return result;
+    }
+
+    public int[] countDiffStats(String original, String modified) {
+        List<String> origLines = Arrays.asList(original.split("\n", -1));
+        List<String> modLines = Arrays.asList(modified.split("\n", -1));
+
+        Patch<String> patch = DiffUtils.diff(origLines, modLines);
+
+        int insertions = 0;
+        int deletions = 0;
+
+        for (AbstractDelta<String> delta : patch.getDeltas()) {
+            switch (delta.getType()) {
+                case INSERT:
+                    insertions += delta.getTarget().getLines().size();
+                    break;
+                case DELETE:
+                    deletions += delta.getSource().getLines().size();
+                    break;
+                case CHANGE:
+                    deletions += delta.getSource().getLines().size();
+                    insertions += delta.getTarget().getLines().size();
+                    break;
+            }
+        }
+
+        return new int[]{insertions, deletions};
     }
 }

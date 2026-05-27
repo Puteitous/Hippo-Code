@@ -139,12 +139,16 @@ public class WebAgentOrchestrator {
 
                 if (chunk.isToolCall() && chunk.getToolCallDeltas() != null) {
                     for (var delta : chunk.getToolCallDeltas()) {
+                        String toolCallId = delta.getId();
+                        // 续 delta（无 id）只包含更多参数内容，已在 AbstractLlmClient
+                        // 通过 mergeToolCallDeltas 合并，无需重复处理 SSE 事件
+                        if (toolCallId == null) continue;
+
                         String toolName = delta.getFunction().getName();
                         String arguments = delta.getFunction().getArguments();
-                        String toolCallId = delta.getId();
 
                         boolean alreadySent = streamToolCalls.stream()
-                            .anyMatch(tc -> tc.get("id").equals(toolCallId));
+                            .anyMatch(tc -> toolCallId.equals(tc.get("id")));
 
                         if (!alreadySent) {
                             if (reasoningPhase[0]) {
@@ -154,20 +158,19 @@ public class WebAgentOrchestrator {
                                 }
                             }
 
-                            Map<String, Object> toolCall = new HashMap<>();
-                            toolCall.put("id", toolCallId);
-                            toolCall.put("name", toolName);
-                            toolCall.put("args", arguments);
-                            streamToolCalls.add(toolCall);
-
-                            String toolStartData = "{\"id\":\"" + SseWriter.escapeJson(toolCallId)
-                                + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                                + "\",\"args\":" + SseWriter.escapeJsonForValue(arguments) + "}";
-                            sseWriter.sendSseEvent("tool_start", toolStartData);
-
                             if ("ask_user".equals(toolName)) {
                                 hasAskUser[0] = true;
-                                sseWriter.sendSseEvent("clear_content", "{}");
+                            } else {
+                                Map<String, Object> toolCall = new HashMap<>();
+                                toolCall.put("id", toolCallId);
+                                toolCall.put("name", toolName);
+                                toolCall.put("args", arguments);
+                                streamToolCalls.add(toolCall);
+
+                                String toolStartData = "{\"id\":\"" + SseWriter.escapeJson(toolCallId)
+                                    + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
+                                    + "\",\"args\":" + SseWriter.escapeJsonForValue(arguments) + "}";
+                                sseWriter.sendSseEvent("tool_start", toolStartData);
                             }
                         }
                     }
@@ -336,7 +339,8 @@ public class WebAgentOrchestrator {
                                     getConversationService().addToolResult(conversation, toolCall.getId(), toolName, truncatedResult, true);
                                     sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(toolCall.getId())
                                         + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                                        + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult) + "\"}");
+                                        + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult)
+                                        + "\",\"args\":" + arguments + "}");
                                     SessionLogger.logToolCall(sessionId, toolName, arguments, truncatedResult, true);
                                     SessionTokenStats stats = sessionManager.getOrCreateSessionTokenStats(sessionId);
                                     stats.addToolCall();
@@ -403,7 +407,8 @@ public class WebAgentOrchestrator {
                             getConversationService().addToolResult(conversation, toolCall.getId(), toolName, truncatedResult, true);
                             sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(toolCall.getId())
                                 + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                                + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult) + "\"}");
+                                + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult)
+                                + "\",\"args\":" + arguments + "}");
                             SessionLogger.logToolCall(sessionId, toolName, arguments, truncatedResult, true);
                             SessionTokenStats stats = sessionManager.getOrCreateSessionTokenStats(sessionId);
                             stats.addToolCall();
@@ -443,7 +448,8 @@ public class WebAgentOrchestrator {
                 getConversationService().addToolResult(conversation, toolCall.getId(), toolName, truncatedResult, true);
                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(toolCall.getId())
                     + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                    + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult) + "\"}");
+                    + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult)
+                    + "\",\"args\":" + arguments + "}");
 
                 SessionLogger.logToolCall(sessionId, toolName, arguments, truncatedResult, true);
                 SessionTokenStats stats = sessionManager.getOrCreateSessionTokenStats(sessionId);

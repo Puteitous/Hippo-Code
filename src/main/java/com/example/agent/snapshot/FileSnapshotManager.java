@@ -30,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.example.agent.web.util.DiffComputer;
+
 public class FileSnapshotManager {
 
     private static final Logger logger = LoggerFactory.getLogger(FileSnapshotManager.class);
@@ -397,31 +399,13 @@ public class FileSnapshotManager {
         return new PreviewResult(previewFiles);
     }
 
+    private static final DiffComputer diffComputer = DiffComputer.DEFAULT;
+
     private static int[] countDiffStats(Path currentPath, Path backupPath) {
         try {
             String current = Files.exists(currentPath) ? Files.readString(currentPath, StandardCharsets.UTF_8) : "";
             String backup = Files.readString(backupPath, StandardCharsets.UTF_8);
-            String[] currLines = current.split("\n", -1);
-            String[] backLines = backup.split("\n", -1);
-
-            if (currLines.length == 0 && backLines.length == 0) return new int[]{0, 0};
-
-            int m = currLines.length;
-            int n = backLines.length;
-
-            int[][] dp = new int[m + 1][n + 1];
-            for (int i = 1; i <= m; i++) {
-                for (int j = 1; j <= n; j++) {
-                    if (currLines[i - 1].equals(backLines[j - 1])) {
-                        dp[i][j] = dp[i - 1][j - 1] + 1;
-                    } else {
-                        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-                    }
-                }
-            }
-
-            int lcs = dp[m][n];
-            return new int[]{n - lcs, m - lcs};
+            return diffComputer.countDiffStats(backup, current);
         } catch (IOException e) {
             logger.warn("计算 diff 统计失败: currentPath={}, backupPath={}", currentPath, backupPath, e);
             return new int[]{0, 0};
