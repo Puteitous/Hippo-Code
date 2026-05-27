@@ -350,8 +350,14 @@ export class ChatUI {
     let summary = '';
     let diffStatsHtml = '';
     if (name === 'bash') {
-      const args = this.parseToolArgs(tool.args);
-      summary = args.command || '';
+      if (tool.confirmationData && tool.confirmationData.command) {
+        summary = tool.confirmationData.command;
+      } else if (tool._savedCommand) {
+        summary = tool._savedCommand;
+      } else {
+        const args = this.parseToolArgs(tool.args);
+        summary = args.command || '';
+      }
     } else if (name === 'read_file') {
       const args = this.parseToolArgs(tool.args);
       summary = args.path || '';
@@ -388,6 +394,10 @@ export class ChatUI {
     let statusSvg;
     if (isPendingConfirm) {
       statusSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><line x1="8" y1="5" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/></svg>';
+    } else if (status === 'cancelled') {
+      statusSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><line x1="5" y1="5" x2="11" y2="11"/></svg>';
+    } else if (status === 'interrupted') {
+      statusSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><line x1="8" y1="5" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/></svg>';
     } else if (status === 'running' && (name === 'edit_file' || name === 'write_file')) {
       statusSvg = '<svg class="tool-spinner" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>';
     } else if (status === 'success' && (name === 'edit_file' || name === 'write_file') && diffStatsHtml) {
@@ -422,10 +432,22 @@ export class ChatUI {
     const isSuccess = tool.result === 'success';
     const isError = tool.result === 'error';
     const isRunning = !tool.result;
+    const isCancelled = tool.result === 'cancelled';
+    const isInterrupted = tool.result === 'interrupted';
 
     // 待确认状态：显示确认界面
     if (tool.confirmationData) {
       return this._renderConfirmationDetail(tool);
+    }
+
+    // 已取消：用户忽略了确认弹窗（如直接发新消息或停止）
+    if (isCancelled) {
+      return '<div class="timeline-detail-status cancelled">已取消（未确认）</div>';
+    }
+
+    // 执行中断：命令在执行过程中被中断（如用户主动停止）
+    if (isInterrupted) {
+      return '<div class="timeline-detail-status interrupted">执行中断</div>';
     }
 
     if (isRunning) {
@@ -744,6 +766,8 @@ export class ChatUI {
     const isSuccess = tool.result === 'success';
     const isError = tool.result === 'error';
     const isRunning = !tool.result;
+    const isCancelled = tool.result === 'cancelled';
+    const isInterrupted = tool.result === 'interrupted';
 
     let output = '';
     let exitCode = null;
@@ -775,8 +799,12 @@ export class ChatUI {
       ? '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 7 11 12 5"/></svg>'
       : isError
       ? '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>'
+      : isCancelled
+      ? '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><line x1="5" y1="5" x2="11" y2="11"/></svg>'
+      : isInterrupted
+      ? '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><line x1="8" y1="5" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/></svg>'
       : '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/></svg>';
-    const statusText = isSuccess ? '成功' : isError ? '失败' : '运行中';
+    const statusText = isSuccess ? '成功' : isError ? '失败' : isCancelled ? '已取消' : isInterrupted ? '中断' : '运行中';
 
     const terminalSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 4 8 8 4 12"/><line x1="11" y1="12" x2="12" y2="12"/></svg>';
     const folderSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3L8 5h4.5A1.5 1.5 0 0 1 14 6.5v5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z"/></svg>';
@@ -787,7 +815,7 @@ export class ChatUI {
         <div class="tool-header">
           <span class="tool-icon">${terminalSvg}</span>
           <span class="tool-title">终端命令</span>
-          <span class="tool-status-badge ${isSuccess ? 'success' : isError ? 'error' : 'running'}">${statusSvg} ${statusText}</span>
+          <span class="tool-status-badge ${isSuccess ? 'success' : isError ? 'error' : isCancelled ? 'cancelled' : isInterrupted ? 'interrupted' : 'running'}">${statusSvg} ${statusText}</span>
           <span class="arrow">▶</span>
         </div>
         <div class="tool-call-details">
@@ -966,6 +994,8 @@ export class ChatUI {
       resultDisplay = `<div class="detail-row"><span class="detail-label">结果:</span><span class="detail-value tool-result-content">${escapeHtml(tool.resultContent)}</span></div>`;
     }
 
+    const cancelSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><line x1="5" y1="5" x2="11" y2="11"/></svg>';
+    const warnSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><line x1="8" y1="5" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/></svg>';
     const wrenchSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2a4 4 0 0 0-3.5 5.7L2 12.2 3.8 14l4.5-4.5A4 4 0 1 0 10 2z"/><line x1="10" y1="6" x2="12" y2="4"/></svg>';
     const checkSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 7 11 12 5"/></svg>';
     const xSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
@@ -974,6 +1004,8 @@ export class ChatUI {
     let statusDisplay = '';
     if (tool.result === 'success') statusDisplay = `${checkSvg} 成功`;
     else if (tool.result === 'error') statusDisplay = `${xSvg} 失败`;
+    else if (tool.result === 'cancelled') statusDisplay = `${cancelSvg} 已取消`;
+    else if (tool.result === 'interrupted') statusDisplay = `${warnSvg} 中断`;
     else statusDisplay = `${dotSvg} 运行中`;
 
     return `

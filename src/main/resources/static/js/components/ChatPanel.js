@@ -202,6 +202,10 @@ export class ChatPanel {
       return;
     }
 
+    // 自愈：新消息发送前，标记所有未完成的 tool 卡片为已取消
+    // 这些卡片是因为用户忽略了确认弹窗而残留的
+    this._healStuckToolCards();
+
     // 清空输入框
     if (!overrideContent && !editMessageId && this.elements.messageInput) {
       this.elements.messageInput.value = '';
@@ -654,6 +658,8 @@ export class ChatPanel {
           riskLevel: parsed.riskLevel,
           riskReason: parsed.riskReason
         };
+        // 在 segment 上持久化命令，确保各种渲染路径下 summary 都能取到
+        bashSegment._savedCommand = parsed.command;
         this._pendingRender = { container: contentDiv, segments: this.segments, currentText: this.currentText };
         this._flushRender();
         this._scheduleRender(contentDiv, this.segments, this.currentText);
@@ -811,7 +817,8 @@ export class ChatPanel {
       const name = item.dataset.toolName || 'unknown';
       const saved = states.get(`timeline:${name}:${idx}`);
       const isPendingConfirm = item.dataset.toolStatus === 'pending_confirmation';
-      if (saved?.expanded || isPendingConfirm) {
+      const isCancelled = item.dataset.toolStatus === 'cancelled' || item.dataset.toolStatus === 'interrupted';
+      if ((saved?.expanded || isPendingConfirm) && !isCancelled) {
         item.classList.add('expanded');
         const detail = item.querySelector('.tool-timeline-detail');
         if (detail) {
@@ -1513,8 +1520,90 @@ export class ChatPanel {
     this._runningToolCallIds.clear();
     
     this.chatService.stopGeneration(this.currentAbortController);
+
+    // 自愈：停止生成时标记所有未完成的 tool 卡片
+    this._healStuckToolCards();
   }
-  
+
+  /**
+   * 自愈：标记所有未完成的 tool 卡片为已取消或中断
+   * 用户忽略了确认弹窗，或停止了生成，需要修复 UI 状态
+   */
+  _healStuckToolCards() {
+    let changed = false;
+    for (const seg of this.segments) {
+      if (seg.type !== 'tool' || seg.result) continue;
+
+      if (seg.confirmationData) {
+        // 有待确认信息但从未执行 → 用户忽略了确认弹窗
+        seg.result = 'cancelled';
+        seg.confirmationData = null;
+        changed = true;
+      } else if (seg.progressLines && seg.progressLines.length > 0) {
+        // 有进度输出但没有最终结果 → 执行被中断
+        seg.result = 'interrupted';
+        changed = true;
+      } else {
+        // 既没有确认也没进度，只是一个空壳 → 已取消
+        seg.result = 'cancelled';
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      const contentDiv = this._responseContentDiv;
+      if (contentDiv) {
+        // 直接操作 DOM，不触发异步 _doRender 全量重建
+        // _flushRender → _doRender 有 await renderMarkdown，会被后续新消息的 SSE 渲染版本号覆盖，
+        // 导致重建时重新展开已被折叠的卡片
+        const statusSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><line x1="5" y1="5" x2="11" y2="11"/></svg>';
+        contentDiv.querySelectorAll('.tool-timeline-item').forEach(item => {
+          const cur = item.dataset.toolStatus;
+          if (cur === 'running' || cur === 'pending_confirmation') {
+            const hasProgress = !!item.querySelector('.tool-timeline-detail .timeline-detail-progress, .tool-timeline-detail .timeline-detail-status');
+            const isCancelled = !hasProgress;
+            item.dataset.toolStatus = isCancelled ? 'cancelled' : 'interrupted';
+            item.classList.remove('expanded');
+            const detail = item.querySelector('.tool-timeline-detail');
+            if (detail) {
+              detail.style.maxHeight = '0';
+              detail.innerHTML = isCancelled
+                ? '<div class="timeline-detail-status cancelled">已取消（未确认）</div>'
+                : '<div class="timeline-detail-status interrupted">执行中断</div>';
+            }
+            const statusEl = item.querySelector('.tool-timeline-status');
+            if (statusEl) {
+              statusEl.className = `tool-timeline-status ${isCancelled ? 'cancelled' : 'interrupted'}`;
+              statusEl.innerHTML = statusSvg;
+            }
+          }
+        });
+        // 收起 ask_user 卡片
+        contentDiv.querySelectorAll('.tool-card.ask-user-card.expanded').forEach(card => {
+          const details = card.querySelector('.tool-call-details');
+          if (details) {
+            details.style.maxHeight = '0';
+            card.classList.remove('expanded');
+          }
+        });
+      }
+    }
+  }
+
+  /**
+   * 从消息内容中移除 [会话中断] 标记文本。
+   * 用户忽略确认弹窗后刷新页面时，后端 detectAndFixInterruption
+   * 会给 assistant 消息追加中断提示。此方法在加载历史时将其滤除，
+   * 避免用户看到"待执行的操作: bash"等无用信息。
+   */
+  _cleanInterruptionText(content) {
+    if (!content) return content;
+    const idx = content.indexOf('[会话中断]');
+    if (idx === -1) return content;
+    const cleaned = content.substring(0, idx).trim();
+    return cleaned;
+  }
+
   /**
    * 开始编辑消息
    */
@@ -1635,7 +1724,8 @@ export class ChatPanel {
             break;
           }
 
-          const amText = am.content || '';
+          const rawContent = am.content || '';
+          const amText = this._cleanInterruptionText(rawContent);
           const amReasoning = am.reasoning_content || '';
           const hasToolCalls = am.tool_calls && am.tool_calls.length > 0;
 
@@ -1681,6 +1771,9 @@ export class ChatPanel {
                 result = tr.success ? 'success' : 'error';
                 resultContent = tr.content || null;
                 if (!tr.success) error = resultContent;
+              } else {
+                // 自愈：历史中 tool 没有对应结果 → 未完成，标记为已取消
+                result = 'cancelled';
               }
               segments.push({
                 type: 'tool',

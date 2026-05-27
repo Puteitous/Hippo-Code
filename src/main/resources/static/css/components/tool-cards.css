@@ -46,6 +46,16 @@
     color: var(--warning-color);
 }
 
+.tool-call-header .tool-status.cancelled {
+    background: var(--bg-code);
+    color: var(--text-muted);
+}
+
+.tool-call-header .tool-status.interrupted {
+    background: var(--warning-bg);
+    color: var(--warning-color);
+}
+
 .tool-call-header .tool-status.success {
     background: var(--success-bg);
     color: var(--success-text);
@@ -442,6 +452,16 @@
 }
 
 .bash-card .tool-status-badge.running {
+    background: var(--warning-bg);
+    color: var(--warning-color);
+}
+
+.bash-card .tool-status-badge.cancelled {
+    background: var(--bg-code);
+    color: var(--text-muted);
+}
+
+.bash-card .tool-status-badge.interrupted {
     background: var(--warning-bg);
     color: var(--warning-color);
 }
@@ -995,6 +1015,15 @@
     color: var(--text-muted);
 }
 
+.timeline-detail-status.cancelled {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+.timeline-detail-status.interrupted {
+    color: var(--warning-color);
+}
+
 .timeline-detail-progress {
     margin: 4px 0;
     position: relative;
@@ -1127,6 +1156,14 @@
 
 .tool-timeline-status.error svg {
     stroke: var(--error-text);
+}
+
+.tool-timeline-status.cancelled svg {
+    stroke: var(--text-muted);
+}
+
+.tool-timeline-status.interrupted svg {
+    stroke: var(--warning-color);
 }
 
 .tool-timeline-status.running svg {

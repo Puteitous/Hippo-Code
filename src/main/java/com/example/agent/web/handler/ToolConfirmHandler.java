@@ -151,7 +151,8 @@ public class ToolConfirmHandler implements HttpHandler {
 
                     sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
                         + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
-                        + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult) + "\"}");
+                        + "\",\"success\":true,\"result\":\"" + SseWriter.escapeJson(truncatedResult)
+                        + "\",\"args\":" + pending.arguments + "}");
                 } catch (Exception e) {
                     String errorMsg = e.getMessage();
                     if (errorMsg == null || errorMsg.isEmpty()) {
@@ -162,7 +163,8 @@ public class ToolConfirmHandler implements HttpHandler {
 
                     sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
                         + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
-                        + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg) + "\"}");
+                        + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg)
+                        + "\",\"args\":" + pending.arguments + "}");
                 }
 
                 // session 级 auto-allow 存储
@@ -179,7 +181,8 @@ public class ToolConfirmHandler implements HttpHandler {
 
                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
                     + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
-                    + "\",\"success\":false,\"error\":\"用户拒绝了执行该命令\"}");
+                    + "\",\"success\":false,\"error\":\"用户拒绝了执行该命令\""
+                    + "\",\"args\":" + pending.arguments + "}");
             }
 
             // 继续 Agent 循环

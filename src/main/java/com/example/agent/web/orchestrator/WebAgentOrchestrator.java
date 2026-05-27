@@ -539,15 +539,17 @@ public class WebAgentOrchestrator {
                     logger.warn("  孤立的 ToolCall: id={}, name={}", tc.getId(), toolName);
                 }
 
-                if (msg.getContent() == null || msg.getContent().isBlank()) {
+                Message fixedMsg = msg.shallowCopy();
+                if (fixedMsg.getContent() == null || fixedMsg.getContent().isBlank()) {
                     StringBuilder fixContent = new StringBuilder();
                     for (ToolCall tc : toolCalls) {
                         String toolName = tc.getFunction() != null ? tc.getFunction().getName() : "unknown";
                         fixContent.append("\n  - 待执行的操作: ").append(toolName);
                     }
-                    msg.setContent("[会话中断] 检测到未完成的工具调用：" + fixContent.toString());
+                    fixedMsg.setContent("[会话中断] 检测到未完成的工具调用：" + fixContent.toString());
                 }
-                msg.setToolCalls(null);
+                fixedMsg.setToolCalls(null);
+                messages.set(i, fixedMsg);
                 foundOrphan = true;
                 continue;
             }
@@ -570,15 +572,17 @@ public class WebAgentOrchestrator {
                     logger.warn("  孤立 ToolCall: id={}, name={}, 有响应={}", tc.getId(), toolName, responded);
                 }
 
-                if (msg.getContent() == null || msg.getContent().isBlank()) {
+                Message fixedMsg = msg.shallowCopy();
+                if (fixedMsg.getContent() == null || fixedMsg.getContent().isBlank()) {
                     StringBuilder fixContent = new StringBuilder();
                     for (ToolCall tc : toolCalls) {
                         String toolName = tc.getFunction() != null ? tc.getFunction().getName() : "unknown";
                         fixContent.append("\n  - 待执行的操作: ").append(toolName);
                     }
-                    msg.setContent("[会话中断] 检测到未完成的工具调用：" + fixContent.toString());
+                    fixedMsg.setContent("[会话中断] 检测到未完成的工具调用：" + fixContent.toString());
                 }
-                msg.setToolCalls(null);
+                fixedMsg.setToolCalls(null);
+                messages.set(i, fixedMsg);
                 foundOrphan = true;
             }
         }

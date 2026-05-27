@@ -808,6 +808,7 @@ public class ConversationService {
                 fixContent.append("\n  - 待执行的操作: ").append(call.getFunction().getName());
             }
             lastMessage.setContent(fixContent.toString());
+            lastMessage.setToolCalls(null);
         }
     }
 

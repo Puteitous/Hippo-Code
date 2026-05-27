@@ -17,7 +17,8 @@ public class MessageConverter {
             if ("system".equals(role)) continue;
 
             boolean hasToolCalls = "assistant".equals(role) && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty();
-            if ((msg.getContent() == null || msg.getContent().isBlank()) && !hasToolCalls) continue;
+            boolean hasReasoning = "assistant".equals(role) && msg.getReasoningContent() != null && !msg.getReasoningContent().isEmpty();
+            if ((msg.getContent() == null || msg.getContent().isBlank()) && !hasToolCalls && !hasReasoning) continue;
 
             Map<String, Object> msgMap = new HashMap<>();
             msgMap.put("id", msg.getId());

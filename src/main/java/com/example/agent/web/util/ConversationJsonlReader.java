@@ -80,7 +80,8 @@ public class ConversationJsonlReader {
                     if (!"user".equals(role) && !"assistant".equals(role) && !"tool".equals(role) && !"tool-result".equals(type)) return;
 
                     boolean hasToolCalls = "assistant".equals(role) && msgNode.has("tool_calls");
-                    if (content.isBlank() && !"tool-result".equals(type) && !hasToolCalls) return;
+                    boolean hasReasoning = msgNode.has("reasoning_content") && !msgNode.path("reasoning_content").asText().isBlank();
+                    if (content.isBlank() && !"tool-result".equals(type) && !hasToolCalls && !hasReasoning) return;
 
                     Map<String, Object> msgMap = new HashMap<>();
                     msgMap.put("id", msgNode.path("id").asText(""));
