@@ -94,7 +94,7 @@ export class MessageSession {
       reasoning_done: () => {
         if (s._reasoningSegment) {
           s._reasoningSegment.done = true;
-          s._renderPipeline.flush();
+          s._renderPipeline.flush(s._segments, s._currentText);
           s._reasoningSegment = null;
         }
       },

@@ -353,7 +353,7 @@ export class ChatPanel {
         const session = s();
         if (!session) return;
         session.handleReasoningDone();
-        this.renderPipeline.flush();
+        this.renderPipeline.flush(session.getSegments(), session.getCurrentText());
       },
 
       content: (parsed, contentDiv) => {

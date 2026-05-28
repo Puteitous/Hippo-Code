@@ -103,6 +103,16 @@ input, textarea {
 .thinking-row.streaming .thinking-row-content {
   color: var(--text-muted);
   font-style: italic;
+  border-left: 2px solid var(--border-color);
+  padding-left: 14px;
+  border-top: none;
+  margin: 4px 0 0 16px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+[data-theme="dark"] .thinking-row.streaming .thinking-row-content {
+  border-left-color: rgba(255, 255, 255, 0.12);
 }
 
 /* Completed - 可展开/收起 */
