@@ -2,6 +2,13 @@ import { escapeHtml } from '../../utils.js';
 import { parseToolArgs } from './shared.js';
 
 export function renderBashCard(tool) {
+  const isPendingConfirm = !!(tool.confirmationData);
+
+  // 待确认状态：显示确认 UI
+  if (isPendingConfirm) {
+    return renderBashConfirmCard(tool);
+  }
+
   const args = parseToolArgs(tool.args);
   const command = args.command || '';
   const workingDir = args.working_dir || '';
@@ -66,6 +73,43 @@ export function renderBashCard(tool) {
         ${exitCode !== null ? `<div class="bash-meta">${exitSvg} 退出码: ${exitCode} ${duration ? `| ⏱ ${duration}ms` : ''}</div>` : ''}
         ${output ? `<div class="bash-output"><pre><code>${escapeHtml(output)}</code></pre></div>` : ''}
         ${isError && tool.error ? `<div class="bash-error">${escapeHtml(tool.error)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderBashConfirmCard(tool) {
+  const data = tool.confirmationData;
+  const cmd = data.command || '';
+  const riskLevel = data.riskLevel || 'medium';
+  const riskReason = data.riskReason || '';
+  const riskLabel = riskLevel === 'high' ? '高风险' : riskLevel === 'low' ? '低风险' : '中风险';
+  const riskSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1z"/><line x1="8" y1="5" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/></svg>';
+  const terminalSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 4 8 8 4 12"/><line x1="11" y1="12" x2="12" y2="12"/></svg>';
+
+  return `
+    <div class="tool-card bash-card">
+      <div class="tool-header">
+        <span class="tool-icon">${terminalSvg}</span>
+        <span class="tool-title">终端命令</span>
+        <span class="tool-status-badge pending_confirmation">${riskSvg} 等待确认</span>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="tool-call-details">
+        <div class="bash-command">${escapeHtml(cmd)}</div>
+        <div class="confirmation-body">
+          ${riskReason ? `<div class="confirmation-reason">${escapeHtml(riskReason)}</div>` : ''}
+          <div class="confirmation-footer">
+            <label class="confirmation-auto-allow">
+              <input type="checkbox" class="auto-allow-checkbox" data-confirm-id="${escapeHtml(data.confirmId)}">
+              <span>本次会话不再询问此类命令</span>
+            </label>
+            <div class="confirmation-buttons">
+              <button class="confirmation-btn deny" data-confirm-id="${escapeHtml(data.confirmId)}">拒绝</button>
+              <button class="confirmation-btn allow" data-confirm-id="${escapeHtml(data.confirmId)}">执行</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `;

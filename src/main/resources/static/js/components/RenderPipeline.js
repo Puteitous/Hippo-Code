@@ -21,13 +21,13 @@ export class RenderPipeline {
     this._renderScheduled = false;
     this._destroyed = false;
 
-    // 去重指纹：上次完整重构的输入摘要
+    // debug: 去重指纹（注释掉以降低日志噪音）
     this._lastFingerprint = null;
-    // 降噪：上次日志的 thinking 长度
+    // debug: 上次日志的 thinking 长度
     this._lastLoggedThinkingLen = -1;
-    // 只打第一次 done=true
+    // debug: 只打第一次 done=true
     this._loggedFirstDone = false;
-    // 重复调用溯源
+    // debug: 重复调用溯源
     this._loggedRedundantCaller = false;
   }
 
@@ -46,6 +46,7 @@ export class RenderPipeline {
   }
 
   _logThinking(thinkingSegments) {
+    /** debug: Thinking 渲染日志已注释
     const allDone = thinkingSegments.every(s => s.done);
     if (allDone) {
       if (!this._loggedFirstDone) {
@@ -58,6 +59,7 @@ export class RenderPipeline {
     if (Math.abs(maxLen - this._lastLoggedThinkingLen) < 50) return;
     this._lastLoggedThinkingLen = maxLen;
     console.log('[Thinking:Render] v' + this._renderVersion, thinkingSegments.map(s => `done=${s.done}, len=${s.content.length}`).join(', '));
+    */
   }
 
   setContainer(container) {
@@ -70,12 +72,14 @@ export class RenderPipeline {
 
   scheduleRender(segments, currentText) {
     const fp = this._computeFingerprint(segments, currentText);
-    const allThinkingDone = segments.some(s => s.type === 'thinking' && s.done);
     if (!this._fingerprintChanged(fp)) {
+      /** debug: 冗余渲染日志已注释
+      const allThinkingDone = segments.some(s => s.type === 'thinking' && s.done);
       if (allThinkingDone && !this._loggedRedundantCaller) {
         this._loggedRedundantCaller = true;
         console.log('[Thinking:Render] redundant after done:', new Error().stack.split('\n').slice(2, 4).join(' -> '));
       }
+      */
       return;
     }
 
@@ -115,6 +119,7 @@ export class RenderPipeline {
     if (this._pendingRender) {
       this._pendingRender._isTextOnly = false;
       this._lastRenderTime = Date.now();
+      this._lastFingerprint = null; // flush 是强制渲染，跳过指纹去重
       this.doRender();
     }
   }
