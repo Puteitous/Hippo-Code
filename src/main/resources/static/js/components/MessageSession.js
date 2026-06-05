@@ -124,6 +124,13 @@ export class MessageSession {
       tool_start: (parsed, contentDiv) => {
         if (parsed.id) {
           if (s._runningToolCallIds.has(parsed.id)) {
+            // 第二次 tool_start（来自 executeToolCalls）带有完整的 args，
+            // 覆盖流式阶段创建的 segment 中可能不完整的 args，并触发重渲染
+            const existing = s._segments.find(seg => seg.type === 'tool' && seg.id === parsed.id);
+            if (existing && parsed.args) {
+              existing.args = parsed.args;
+              s._renderPipeline.flush(s._segments, s._currentText);
+            }
             return;
           }
           s._runningToolCallIds.add(parsed.id);

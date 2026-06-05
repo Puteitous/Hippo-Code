@@ -35,6 +35,18 @@ export class ChatPanel {
         const item = btn.closest('.tool-timeline-item');
         const checkbox = item?.querySelector('.auto-allow-checkbox');
         const autoAllowSimilar = checkbox ? checkbox.checked : false;
+        // 立即清除 segment 的确认状态，UI 从确认弹窗切换到"运行中..."，防止重复点击
+        const session = this._activeSession;
+        if (session && confirmId) {
+          const seg = session.getSegments().find(s =>
+            s.type === 'tool' && s.confirmationData && s.confirmationData.confirmId === confirmId
+          );
+          if (seg) {
+            seg.confirmationData = null;
+            // 保留 _savedCommand，用于执行过程中 tool-timeline-summary 的显示
+            this.renderPipeline.flush(session.getSegments(), session.getCurrentText());
+          }
+        }
         this._sendToolConfirmResponse(confirmId, decision, autoAllowSimilar);
         if (item) {
           const detail = item.querySelector('.tool-timeline-detail');
@@ -206,6 +218,9 @@ export class ChatPanel {
       console.log('⏭️ sendMessage 跳过：内容为空');
       return;
     }
+
+    // 新消息开始，清理跨轮残留的 runningToolCallIds
+    this._runningToolCallIds.clear();
 
     this._healStuckToolCards();
 

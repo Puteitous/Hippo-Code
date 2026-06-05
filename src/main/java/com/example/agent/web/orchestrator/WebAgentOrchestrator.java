@@ -101,6 +101,12 @@ public class WebAgentOrchestrator {
                 return;
             }
 
+            // 防御：如果已有挂起的确认弹窗，不进入新一轮 LLM 调用
+            if (sessionManager.hasPendingBashConfirmation(sessionId)) {
+                logger.info("检测到挂起的 bash 确认，暂停当前 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                return;
+            }
+
             List<Message> messages = new ArrayList<>(getConversationService().getContextForInference(conversation));
 
             messages = ensureSystemMessageFirst(messages);
@@ -526,6 +532,12 @@ public class WebAgentOrchestrator {
             logger.info("确认弹窗关闭，开始执行剩余工具 (sessionId={}, 数量={}, 列表=[{}])",
                 sessionId, remaining.size(), remainingIds);
             executeToolCalls(remaining, conversation, sseWriter, sessionId);
+            // 执行剩余工具时又触发了新的确认弹窗（如第二个 bash 也需确认），
+            // 等待用户确认，不进入下一轮 Agent 循环
+            if (sessionManager.hasPendingBashConfirmation(sessionId)) {
+                logger.info("剩余工具执行中触发了新的确认弹窗，等待用户确认 (sessionId={})", sessionId);
+                return;
+            }
         } else {
             logger.info("确认弹窗关闭，无剩余工具 (sessionId={})", sessionId);
         }

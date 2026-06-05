@@ -169,39 +169,66 @@ public class BashTool implements ToolExecutor {
             BashProcessManager.getInstance().register(toolCallId, process);
         }
         
+        Thread readerThread = null;
         try {
             StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), getPipeCharset()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (toolCallId != null && !BashProcessManager.getInstance().isRunning(toolCallId)) {
-                        process.destroyForcibly();
-                        while (reader.readLine() != null) {
-                        }
-                        break;
-                    }
-                    if (progressCallback != null) {
-                        progressCallback.accept(line);
-                    }
-                    output.append(line).append("\n");
-                }
-            }
             
+            // 守护线程读取输出，主线程负责超时控制
+            // 修复：将 process.waitFor 放在 readLine 之前，
+            // 避免 readLine 阻塞导致超时机制失效
+            readerThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), getPipeCharset()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (toolCallId != null && !BashProcessManager.getInstance().isRunning(toolCallId)) {
+                            break;
+                        }
+                        if (progressCallback != null) {
+                            progressCallback.accept(line);
+                        }
+                        synchronized (output) {
+                            output.append(line).append("\n");
+                        }
+                    }
+                } catch (IOException e) {
+                    // 进程销毁时流关闭，忽略异常
+                }
+            });
+            readerThread.setDaemon(true);
+            readerThread.start();
+            
+            // 主线程等待进程完成或超时（这才是真正的超时控制）
             boolean finished = process.waitFor(timeout, TimeUnit.SECONDS);
             long duration = System.currentTimeMillis() - startTime;
             
             if (!finished) {
+                // 超时：强制杀掉进程
                 process.destroyForcibly();
-                return formatResult(command, truncateOutput(output.toString()), 124, duration, workPath, true);
+            }
+            
+            // 等待读取线程处理完剩余输出
+            readerThread.join(3000);
+            
+            if (!finished) {
+                String rawOutput;
+                synchronized (output) {
+                    rawOutput = output.toString();
+                }
+                return formatResult(command, truncateOutput(rawOutput), 124, duration, workPath, true);
             }
             
             int exitCode = process.exitValue();
+            String rawOutput;
+            synchronized (output) {
+                rawOutput = output.toString();
+            }
             
-            String rawOutput = truncateOutput(output.toString());
-            
-            return formatResult(command, rawOutput, exitCode, duration, workPath, false);
+            return formatResult(command, truncateOutput(rawOutput), exitCode, duration, workPath, false);
         } finally {
+            if (readerThread != null && readerThread.isAlive()) {
+                readerThread.interrupt();
+            }
             if (toolCallId != null) {
                 BashProcessManager.getInstance().unregister(toolCallId);
             }
