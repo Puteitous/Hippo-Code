@@ -48,11 +48,6 @@
 - 超过最大执行时间将被强制终止，防止无限执行
 - 可通过 list_subagents 查看任务执行时间和剩余时间
 
-- lsp_goto_definition: 跳转到符号定义位置
-- lsp_find_references: 查找所有引用位置
-- lsp_hover: 获取文档和类型信息
-- lsp_document_symbol: 列出文件结构
-- lsp_workspace_symbol: 全局符号搜索
 ❌ 禁止：write_file、edit_file、undo_file、bash 等修改性工具
 
 🔄 模式切换提示：

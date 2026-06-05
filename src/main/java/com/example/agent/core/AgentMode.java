@@ -5,17 +5,15 @@ import java.util.Set;
 public enum AgentMode {
 
     CHAT("💬", "聊天模式", "只读探索，提供建议，不修改文件",
-        Set.of("glob", "grep", "list_directory", "read_file", "ask_user", "fork_agent", "fork_agents", "list_subagents", "cancel_subagent",
-               "lsp_goto_definition", "lsp_find_references", "lsp_hover", 
-               "lsp_document_symbol", "lsp_workspace_symbol",
+        Set.of("glob", "grep", "list_directory", "read_file", "ask_user",
+               "fork_agent", "fork_agents", "list_subagents", "cancel_subagent",
                "recall_memory")
     ),
 
     CODING("🛠️", "构建模式", "全权限执行，自动完成任务",
         Set.of("glob", "grep", "list_directory", "read_file",
-               "write_file", "edit_file", "bash", "ask_user", "todo_write", "fork_agent", "fork_agents", "list_subagents", "cancel_subagent",
-               "lsp_goto_definition", "lsp_find_references", "lsp_hover", 
-               "lsp_document_symbol", "lsp_workspace_symbol",
+               "write_file", "edit_file", "bash", "ask_user", "todo_write",
+               "fork_agent", "fork_agents", "list_subagents", "cancel_subagent",
                "recall_memory")
     );
 

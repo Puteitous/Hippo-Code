@@ -19,12 +19,6 @@
 - list_subagents: 查询所有子 Agent 任务的状态和执行结果
 - cancel_subagent: 取消正在执行的子 Agent 任务（支持单个取消或批量取消）
 
-- lsp_goto_definition: 跳转到符号定义位置
-- lsp_find_references: 查找所有引用位置
-- lsp_hover: 获取文档和类型信息
-- lsp_document_symbol: 列出文件结构
-- lsp_workspace_symbol: 全局符号搜索
-
 === 📋 任务清单管理规范 ===
 
 🔴 开始执行任务前：
