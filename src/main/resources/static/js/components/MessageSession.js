@@ -16,6 +16,7 @@ export class MessageSession {
 
     this._contentDiv = null;
     this._btnContainer = null;
+    this._pendingInteraction = false;
 
     this._destroyed = false;
 
@@ -26,6 +27,7 @@ export class MessageSession {
     const s = this;
     return new EventRouter({
       waiting_user: (parsed, contentDiv) => {
+        s._pendingInteraction = true;
         s._pushTextSegment();
         const segment = {
           type: 'tool', name: 'ask_user',
@@ -206,6 +208,7 @@ export class MessageSession {
       },
 
       tool_confirmation: (parsed) => {
+        s._pendingInteraction = true;
         const bashSegment = s._segments.find(
           seg => seg.type === 'tool' && seg.name === 'bash' && !seg.result && !seg.confirmationData
         );
@@ -280,7 +283,9 @@ export class MessageSession {
         await this._renderPipeline.renderFinal(this._segments, '');
       }
 
-      this._btnContainer.style.display = 'flex';
+      if (!this._pendingInteraction) {
+        this._btnContainer.style.display = 'flex';
+      }
       this._chatUI.scrollToBottom();
 
     } catch (error) {
@@ -305,7 +310,7 @@ export class MessageSession {
           </div>`;
       }
 
-      if (this._btnContainer) this._btnContainer.style.display = 'flex';
+      if (this._btnContainer && !this._pendingInteraction) this._btnContainer.style.display = 'flex';
       this._chatUI.scrollToBottom();
     }
 
@@ -329,6 +334,16 @@ export class MessageSession {
 
   getBtnContainer() {
     return this._btnContainer;
+  }
+
+  /**
+   * 显示操作按钮（复制/重试/回撤）
+   * 用于 pendingInteraction 场景下在外部控制按钮显示时机
+   */
+  showActionButtons() {
+    if (this._btnContainer) {
+      this._btnContainer.style.display = 'flex';
+    }
   }
 
   setCurrentText(text) {

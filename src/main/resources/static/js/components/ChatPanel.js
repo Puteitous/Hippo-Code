@@ -624,6 +624,10 @@ export class ChatPanel {
     const btn = document.querySelector(`.confirmation-btn.${decision}[data-confirm-id="${confirmId}"]`);
     if (btn) btn.disabled = true;
 
+    // 恢复发送状态，显示终止按钮
+    this.isSendingMessage = true;
+    this.setSendingState(true);
+    this.currentAbortController = new AbortController();
     this.isCompleted = false;
 
     fetch('/api/tool/confirm', {
@@ -634,7 +638,8 @@ export class ChatPanel {
         confirmId,
         decision,
         autoAllowSimilar: !!autoAllowSimilar
-      })
+      }),
+      signal: this.currentAbortController.signal
     }).then(async response => {
       if (!response.ok) {
         return response.json().then(err => {
@@ -694,6 +699,7 @@ export class ChatPanel {
           processLines(buffer.split('\n'));
         }
       } catch (e) {
+        if (e.name === 'AbortError') return;
         console.error('读取确认 SSE 流失败:', e);
       }
 
@@ -702,13 +708,24 @@ export class ChatPanel {
         session.pushTextSegment();
         if (contentDiv) this.renderPipeline.setContainer(contentDiv);
         this.renderPipeline.renderFinal(session.getSegments(), '');
+        // 内容已完整渲染，显示操作按钮
+        session.showActionButtons();
+        this.chatUI.scrollToBottom();
       }
-      this.isCompleted = true;
 
     }).catch(err => {
+      if (err.name === 'AbortError') return;
       console.error('确认请求失败:', err);
       showToast('确认请求失败', { type: 'error', duration: 4000 });
       if (btn) btn.disabled = false;
+      // 错误时也显示操作按钮，让用户能重试
+      if (this._activeSession) {
+        this._activeSession.showActionButtons();
+      }
+    }).finally(() => {
+      this.isSendingMessage = false;
+      this.setSendingState(false);
+      this.currentAbortController = null;
       this.isCompleted = true;
     });
   }
@@ -1329,6 +1346,7 @@ export class ChatPanel {
    */
   destroy() {
     this._destroyed = true;
+    this.isCompleted = true;
     this.renderPipeline.destroy();
     if (this.currentAbortController) {
       this.currentAbortController.abort();
