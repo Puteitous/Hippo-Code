@@ -91,7 +91,16 @@ public class NativeGrepBackend implements GrepBackend {
                 throw new ToolExecutionException("ripgrep 执行失败 (退出码 " + process.exitValue() + "): " + error);
             }
 
-            return parseJsonOutput(outputLines);
+            List<SearchResult> results = parseJsonOutput(outputLines);
+
+            // offset 是应用层分页参数，不透传到 ripgrep
+            if (options.getOffset() > 0 && options.getOffset() < results.size()) {
+                results = results.subList(options.getOffset(), results.size());
+            } else if (options.getOffset() > 0) {
+                results = Collections.emptyList();
+            }
+
+            return results;
             
         } catch (IOException e) {
             throw new ToolExecutionException("执行 ripgrep 时发生 IO 错误：" + e.getMessage(), e);
@@ -187,10 +196,7 @@ public class NativeGrepBackend implements GrepBackend {
             }
         }
         
-        if (options.getOffset() > 0) {
-            command.add("--offset");
-            command.add(String.valueOf(options.getOffset()));
-        }
+        // 注意: offset 是应用层分页参数，在 search() 中处理，不透传到 ripgrep
         
         if (options.getFilePattern() != null && !options.getFilePattern().isEmpty()) {
             command.add("--glob");

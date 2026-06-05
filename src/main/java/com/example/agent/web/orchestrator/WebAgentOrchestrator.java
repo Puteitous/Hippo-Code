@@ -357,7 +357,8 @@ public class WebAgentOrchestrator {
                                 getConversationService().addToolResult(conversation, toolCall.getId(), toolName, "错误: " + errorMsg, false);
                                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(toolCall.getId())
                                     + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                                    + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg) + "\"}");
+                                    + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg)
+                                    + "\",\"args\":" + arguments + "}");
                                 SessionLogger.logToolCall(sessionId, toolName, arguments, errorMsg, false);
                                 continue;
                             }
@@ -462,7 +463,8 @@ public class WebAgentOrchestrator {
                 getConversationService().addToolResult(conversation, toolCall.getId(), toolName, "错误: " + errorMsg, false);
                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(toolCall.getId())
                     + "\",\"name\":\"" + SseWriter.escapeJson(toolName)
-                    + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg) + "\"}");
+                    + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg)
+                    + "\",\"args\":" + arguments + "}");
 
                 SessionLogger.logToolCall(sessionId, toolName, arguments, errorMsg, false);
             } finally {

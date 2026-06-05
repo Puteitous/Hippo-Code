@@ -1,7 +1,9 @@
 package com.example.agent.web.session;
 
 import com.example.agent.domain.conversation.Conversation;
+import com.example.agent.llm.model.ToolCall;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
