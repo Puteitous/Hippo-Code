@@ -161,8 +161,13 @@ public class BashTool implements ToolExecutor {
         processBuilder.directory(workPath.toFile());
         processBuilder.redirectErrorStream(true);
         
+        // 禁止分页器 — 防止命令（如 git log、less 等）进入交互式分页模式导致进程挂起
+        processBuilder.environment().put("PAGER", "cat");
+        processBuilder.environment().put("GIT_PAGER", "cat");
+        
         long startTime = System.currentTimeMillis();
         Process process = processBuilder.start();
+        process.getOutputStream().close();  // 关闭子进程 stdin，防止被 date 等命令卡在交互式输入等待
         
         String toolCallId = currentToolCallId.get();
         if (toolCallId != null) {
