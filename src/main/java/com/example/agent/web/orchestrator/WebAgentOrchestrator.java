@@ -309,6 +309,14 @@ public class WebAgentOrchestrator {
 
             executeToolCalls(toolCalls, conversation, sseWriter, sessionId);
 
+            // 工具执行可能修改了文件，但 makeSnapshot（在 addAssistantMessage 中）在工具执行前就调用过了
+            // 重新创建快照以捕获工具执行后的实际文件状态
+            String userMsgId = getConversationService().findLastUserMessageId(conversation);
+            if (userMsgId != null) {
+                FileSnapshotManager.removeSnapshot(sessionId, userMsgId);
+                FileSnapshotManager.makeSnapshot(sessionId, userMsgId);
+            }
+
             toolRegistry.getBlockerChain().onTurnComplete();
 
             List<Message> history = getConversationService().getHistory(conversation);

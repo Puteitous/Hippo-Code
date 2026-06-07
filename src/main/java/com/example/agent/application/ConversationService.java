@@ -506,7 +506,7 @@ public class ConversationService {
         }
     }
 
-    private String findLastUserMessageId(Conversation conversation) {
+    public String findLastUserMessageId(Conversation conversation) {
         List<Message> messages = conversation.getMessages();
         for (int i = messages.size() - 1; i >= 0; i--) {
             Message msg = messages.get(i);

@@ -341,60 +341,93 @@ public class FileSnapshotManager {
     public static PreviewResult getPreview(String sessionId, String messageId) {
         Snapshot target = findSnapshot(sessionId, messageId);
         if (target == null) {
+            logger.warn("getPreview: 未找到快照 sessionId={}, messageId={}", sessionId, messageId);
             return null;
         }
 
         Snapshot previousSnapshot = findPreviousSnapshot(sessionId, messageId);
         List<PreviewFile> previewFiles = new ArrayList<>();
 
-        for (Snapshot.TrackedFile tf : target.getTrackedFiles()) {
-            Path filePath = Path.of(tf.getPath());
-            boolean exists = Files.exists(filePath);
+        logger.info("getPreview: sessionId={}, messageId={}, 目标快照文件数={}, 前一个快照={}",
+            sessionId, messageId, target.getTrackedFiles().size(),
+            previousSnapshot != null ? previousSnapshot.getMessageId() + ", files=" + previousSnapshot.getTrackedFiles().stream().map(Snapshot.TrackedFile::getPath).collect(java.util.stream.Collectors.joining(",")) : "无");
 
-            String action;
-            String backupToCompare = null;
-            if (tf.isCreated()) {
-                action = exists ? "delete" : "restore";
-                if (!exists) {
-                    backupToCompare = tf.getBackup();
-                }
-            } else if (tf.getBackup() == null) {
-                if (exists) {
-                    action = "delete";
-                } else {
-                    Snapshot.TrackedFile prevTf = previousSnapshot != null ? findTrackedFile(previousSnapshot, tf.getPath()) : null;
-                    action = (prevTf != null && prevTf.getBackup() != null) ? "restore" : "unchanged";
-                    if (action.equals("restore")) {
-                        backupToCompare = prevTf.getBackup();
-                    }
-                }
-            } else {
-                action = "restore";
-                if (previousSnapshot != null) {
-                    Snapshot.TrackedFile prevTf = findTrackedFile(previousSnapshot, tf.getPath());
-                    if (prevTf != null && prevTf.getBackup() != null) {
-                        backupToCompare = prevTf.getBackup();
-                    } else {
-                        backupToCompare = tf.getBackup();
-                    }
-                } else {
-                    backupToCompare = tf.getBackup();
-                }
+        // 收集所有后续快照（用于后续判断）
+        List<Snapshot> allSnapshots = loadAllSnapshots(sessionId);
+        List<Snapshot> subsequentSnapshots = new ArrayList<>();
+        boolean foundTarget = false;
+        for (Snapshot s : allSnapshots) {
+            if (s.getMessageId().equals(messageId)) {
+                foundTarget = true;
+                continue;
             }
-
-            int insertions = 0;
-            int deletions = 0;
-            if ("restore".equals(action) && backupToCompare != null) {
-                Path backupPath = resolveBackupPath(sessionId, backupToCompare);
-                if (Files.exists(backupPath)) {
-                    int[] stats = countDiffStats(filePath, backupPath);
-                    insertions = stats[0];
-                    deletions = stats[1];
-                }
+            if (foundTarget) {
+                subsequentSnapshots.add(s);
             }
-
-            previewFiles.add(new PreviewFile(tf.getPath(), action, insertions, deletions));
         }
+        logger.debug("getPreview: 后续快照数={}", subsequentSnapshots.size());
+
+        // 构建"文件路径 → 后续快照中最新备份引用"的映射
+        // 如果一个文件在后续被改过，回滚到本轮就会还原它
+        Map<String, String> subsequentBackupMap = new HashMap<>();
+        for (Snapshot s : subsequentSnapshots) {
+            for (Snapshot.TrackedFile tf : s.getTrackedFiles()) {
+                subsequentBackupMap.put(tf.getPath(), tf.getBackup());
+            }
+        }
+
+        // 1. 收集上一轮快照中各文件的备份引用
+        Map<String, String> prevBackupMap = new HashMap<>();
+        if (previousSnapshot != null) {
+            for (Snapshot.TrackedFile tf : previousSnapshot.getTrackedFiles()) {
+                prevBackupMap.put(tf.getPath(), tf.getBackup());
+            }
+        }
+
+        // 2. 遍历目标快照中的文件，判断哪些会在回滚时受影响
+        Set<String> seenFiles = new HashSet<>();
+        for (Snapshot.TrackedFile tf : target.getTrackedFiles()) {
+            seenFiles.add(tf.getPath());
+            boolean wasInPrev = prevBackupMap.containsKey(tf.getPath());
+            String prevBackup = prevBackupMap.get(tf.getPath());
+
+            boolean changedThisRound = !wasInPrev || !Objects.equals(prevBackup, tf.getBackup());
+            boolean changedLater = subsequentBackupMap.containsKey(tf.getPath()) &&
+                !Objects.equals(subsequentBackupMap.get(tf.getPath()), tf.getBackup());
+
+            logger.debug("getPreview 文件={}, wasInPrev={}, prevBackup={}, tf.backup={}, isCreated={}, changedThisRound={}, changedLater={}",
+                tf.getPath(), wasInPrev, prevBackup, tf.getBackup(), tf.isCreated(), changedThisRound, changedLater);
+
+            if (changedThisRound || changedLater) {
+                String action;
+                if (tf.isCreated()) {
+                    action = "delete";
+                } else if (tf.getBackup() == null) {
+                    action = "add";
+                } else {
+                    action = "restore";
+                }
+                logger.debug("getPreview -> 添加: file={}, action={}", tf.getPath(), action);
+                previewFiles.add(new PreviewFile(tf.getPath(), action, 0, 0));
+            } else {
+                logger.debug("getPreview -> 跳过: file={} (未变化)", tf.getPath());
+            }
+        }
+
+        // 3. 后续快照中出现的文件（不在目标快照中的）→ "delete"（将被删除）
+        for (Snapshot s : subsequentSnapshots) {
+            for (Snapshot.TrackedFile f : s.getTrackedFiles()) {
+                if (!seenFiles.contains(f.getPath())) {
+                    logger.debug("getPreview -> 后续快照删除: file={}", f.getPath());
+                    previewFiles.add(new PreviewFile(f.getPath(), "delete", 0, 0));
+                    seenFiles.add(f.getPath());
+                }
+            }
+        }
+
+        logger.info("getPreview 完成: sessionId={}, messageId={}, 预览文件数={}, 结果={}",
+            sessionId, messageId, previewFiles.size(),
+            previewFiles.stream().map(pf -> pf.getFilePath() + "=" + pf.getAction()).collect(java.util.stream.Collectors.joining(", ")));
 
         return new PreviewResult(previewFiles);
     }
@@ -479,6 +512,38 @@ public class FileSnapshotManager {
 
         List<Snapshot> retained = allSnapshots.subList(0, targetIndex);
         rewriteSnapshotsFile(sessionId, retained);
+    }
+
+    public static void removeSnapshot(String sessionId, String messageId) {
+        List<Snapshot> allSnapshots = loadAllSnapshots(sessionId);
+        List<Snapshot> retained = new ArrayList<>();
+        Snapshot removedSnapshot = null;
+        for (Snapshot s : allSnapshots) {
+            if (!s.getMessageId().equals(messageId)) {
+                retained.add(s);
+            } else {
+                removedSnapshot = s;
+            }
+        }
+        if (removedSnapshot != null) {
+            // 清理被移除快照引用的孤立备份文件
+            Set<String> retainedBackups = retained.stream()
+                .flatMap(s -> s.getTrackedFiles().stream())
+                .map(Snapshot.TrackedFile::getBackup)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+            for (Snapshot.TrackedFile tf : removedSnapshot.getTrackedFiles()) {
+                if (tf.getBackup() != null && !retainedBackups.contains(tf.getBackup())) {
+                    try {
+                        Files.deleteIfExists(resolveBackupPath(sessionId, tf.getBackup()));
+                    } catch (IOException e) {
+                        logger.warn("清理备份文件失败: backupPath={}", tf.getBackup(), e);
+                    }
+                }
+            }
+            rewriteSnapshotsFile(sessionId, retained);
+            logger.info("已移除快照: sessionId={}, messageId={}", sessionId, messageId);
+        }
     }
 
     public static void retainSnapshots(String sessionId, Set<String> retainedMessageIds) {

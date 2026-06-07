@@ -1528,6 +1528,11 @@
     color: #2e7d32;
 }
 
+.rollback-inline-file .file-action-badge.action-add {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
 .rollback-inline-file .file-action-badge.action-delete {
     background: #fbe9e7;
     color: #c62828;

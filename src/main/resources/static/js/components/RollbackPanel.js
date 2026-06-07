@@ -12,6 +12,7 @@ export class RollbackPanel {
   }
 
   async execute(msgDiv, currentSessionId) {
+    console.log('[Rollback] execute 触发', { currentSessionId });
     const rollbackBtn = msgDiv.querySelector('.rollback-btn');
     if (!rollbackBtn || rollbackBtn.classList.contains('rolling')) return;
 
@@ -20,6 +21,7 @@ export class RollbackPanel {
 
     const existingPanel = assistantRow.nextElementSibling;
     if (existingPanel && existingPanel.classList.contains('rollback-inline')) {
+      console.log('[Rollback] 关闭已展开的面板');
       this._animateRemove(existingPanel);
       return;
     }
@@ -32,6 +34,7 @@ export class RollbackPanel {
     }
 
     const messageId = this._resolveMessageId(assistantRow);
+    console.log('[Rollback] 解析到的 messageId:', messageId);
     if (!messageId) {
       showToast('无法确定上一轮对话的消息 ID，请刷新后重试', { type: 'error', duration: 3000 });
       rollbackBtn.innerHTML = '↩';
@@ -44,9 +47,13 @@ export class RollbackPanel {
 
     let previewFiles = [];
     try {
+      console.log('[Rollback] 请求预览: sessionId=%s, messageId=%s', currentSessionId, messageId);
       const previewData = await this._chatService.rewindPreview(currentSessionId, messageId);
+      console.log('[Rollback] 预览原始响应:', previewData);
       previewFiles = previewData.files || [];
+      console.log('[Rollback] 预览文件列表(%d):', previewFiles.length, previewFiles.map(f => ({ filePath: f.filePath, action: f.action, insertions: f.insertions, deletions: f.deletions })));
     } catch (e) {
+      console.error('[Rollback] 预览请求失败:', e);
       loadingPanel.remove();
       showToast('检查文件变更失败，请重试', { type: 'error', duration: 3000 });
       rollbackBtn.innerHTML = '↩';
@@ -85,17 +92,22 @@ export class RollbackPanel {
 
     if (!result) return;
 
+    console.log('[Rollback] 用户确认回滚，调用 rewind API: sessionId=%s, messageId=%s', currentSessionId, messageId);
     try {
       const rewindResult = await this._chatService.rewind(currentSessionId, messageId);
+      console.log('[Rollback] rewind 响应:', rewindResult);
 
       if (rewindResult.success) {
         panel.remove();
 
+        console.log('[Rollback] 回滚成功，重新加载会话消息');
         this._chatService.invalidateMessageCache(currentSessionId);
         this._chatContainer.classList.add('switching');
         const messages = await this._chatService.getSessionMessages(currentSessionId);
+        console.log('[Rollback] 回滚后消息数:', messages.length);
 
         if (messages.length === 0) {
+          console.log('[Rollback] 会话已清空，创建新会话');
           try {
             await this._chatService.deleteSession(currentSessionId);
           } catch (_) {}
@@ -162,27 +174,34 @@ export class RollbackPanel {
   _buildPanel(previewFiles) {
     const fileSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2h6l3 3v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M9 2v3h3"/></svg>';
 
+    // 只保留有实际变动的文件（delete / add / restore）
+    const changedFiles = previewFiles.filter(f =>
+      f.action === 'delete' || f.action === 'add' || f.action === 'restore'
+    );
+
+    console.log('[Rollback] _buildPanel: 原始%d条, 过滤后%d条', previewFiles.length, changedFiles.length,
+      changedFiles.map(f => ({ filePath: f.filePath, action: f.action })));
+
     let filesHtml = '';
-    if (previewFiles.length > 0) {
+    if (changedFiles.length > 0) {
       filesHtml = `
       <div class="rollback-inline-files">
-        ${previewFiles.map(f => {
-          const actionLabel = f.action === 'delete' ? '删除' : f.action === 'restore' ? '恢复' : '无变化';
-          const actionClass = f.action === 'delete' ? 'action-delete' : f.action === 'restore' ? 'action-restore' : 'action-unchanged';
-          let diffStats = '';
-          if (f.action === 'restore' && (f.insertions > 0 || f.deletions > 0)) {
-            const parts = [];
-            if (f.insertions > 0) parts.push(`<span class="diff-add">+${f.insertions}</span>`);
-            if (f.deletions > 0) parts.push(`<span class="diff-del">-${f.deletions}</span>`);
-            diffStats = `<span class="diff-stats">${parts.join(' ')}</span>`;
-          } else if (f.action === 'restore') {
-            diffStats = `<span class="diff-stats"><span class="diff-none">无变动</span></span>`;
+        ${changedFiles.map(f => {
+          let actionLabel, actionClass;
+          if (f.action === 'delete') {
+            actionLabel = '将被删除';
+            actionClass = 'action-delete';
+          } else if (f.action === 'add') {
+            actionLabel = '将被添加';
+            actionClass = 'action-add';
+          } else {
+            actionLabel = '将被修改';
+            actionClass = 'action-restore';
           }
           return `<div class="rollback-inline-file">
             <span class="file-icon">${fileSvg}</span>
             <span class="file-name" title="${escapeHtml(f.filePath)}">${escapeHtml(f.filePath.replace(/^.*[/\\]/, ''))}</span>
             <span class="file-action-badge ${actionClass}">${actionLabel}</span>
-            ${diffStats}
           </div>`;
         }).join('')}
       </div>
@@ -201,7 +220,7 @@ export class RollbackPanel {
           </svg>
         </span>
         <span>回滚到上一轮对话</span>
-        <span class="rollback-inline-count">${previewFiles.length > 0 ? previewFiles.length + ' 个文件' : '无文件变更'}</span>
+        <span class="rollback-inline-count">${changedFiles.length > 0 ? changedFiles.length + ' 个文件' : '无文件变更'}</span>
       </div>
       ${filesHtml}
       <div class="rollback-inline-footer">

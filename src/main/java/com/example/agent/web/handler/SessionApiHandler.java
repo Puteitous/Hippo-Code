@@ -316,6 +316,8 @@ public class SessionApiHandler implements HttpHandler {
         JsonNode json = objectMapper.readTree(requestBody);
         String messageId = json.has("messageId") ? json.get("messageId").asText() : "";
 
+        logger.info("handleRewindCheck: sessionId={}, messageId={}", sessionId, messageId);
+
         if (messageId.isBlank()) {
             sendJson(exchange, Map.of("files", List.of()));
             return;
@@ -323,9 +325,39 @@ public class SessionApiHandler implements HttpHandler {
 
         FileSnapshotManager.PreviewResult preview = FileSnapshotManager.getPreview(sessionId, messageId);
         if (preview == null) {
+            logger.info("handleRewindCheck: getPreview 返回 null，尝试 fallback");
+            // 与 handleRewindSession 保持一致的 fallback：没有精确快照时找上一个
+            Conversation conversation = com.example.agent.web.session.WebSessionManager.getInstance().getSessions().get(sessionId);
+            ConversationService conversationService = null;
+            Path jsonlPath = null;
+
+            if (conversation != null) {
+                conversationService = ServiceLocator.get(ConversationService.class);
+                jsonlPath = conversationService.flushTranscript(sessionId);
+            } else {
+                jsonlPath = jsonlReader.findJsonlFile(sessionId);
+            }
+
+            if (jsonlPath != null && Files.exists(jsonlPath)) {
+                Snapshot fallback = findLastSnapshot(jsonlPath, sessionId, messageId);
+                if (fallback != null) {
+                    logger.info("handleRewindCheck: fallback 找到快照 messageId={}", fallback.getMessageId());
+                    preview = FileSnapshotManager.getPreview(sessionId, fallback.getMessageId());
+                } else {
+                    logger.info("handleRewindCheck: fallback 未找到快照");
+                }
+            } else {
+                logger.info("handleRewindCheck: JSONL 文件不存在, jsonlPath={}", jsonlPath);
+            }
+        }
+
+        if (preview == null) {
+            logger.info("handleRewindCheck: 最终预览为 null，返回空文件列表");
             sendJson(exchange, Map.of("files", List.of()));
             return;
         }
+
+        logger.info("handleRewindCheck: 返回 {} 个文件", preview.getFiles().size());
 
         Map<String, Object> response = new HashMap<>();
         response.put("files", preview.getFiles().stream().map(f -> {
@@ -355,6 +387,8 @@ public class SessionApiHandler implements HttpHandler {
         JsonNode json = objectMapper.readTree(requestBody);
         String messageId = json.has("messageId") ? json.get("messageId").asText("") : "";
 
+        logger.info("handleRewindSession: sessionId={}, messageId={}", sessionId, messageId);
+
         if (messageId.isBlank()) {
             sendError(exchange, 400, "messageId is required");
             return;
@@ -373,6 +407,7 @@ public class SessionApiHandler implements HttpHandler {
         }
 
         if (jsonlPath == null || !Files.exists(jsonlPath)) {
+            logger.warn("handleRewindSession: JSONL 文件不存在 sessionId={}", sessionId);
             sendError(exchange, 404, "Session not found");
             return;
         }
@@ -404,7 +439,15 @@ public class SessionApiHandler implements HttpHandler {
             int filesChanged = 0;
             Snapshot targetSnapshot = FileSnapshotManager.findSnapshot(sessionId, messageId);
             if (targetSnapshot == null) {
+                logger.info("handleRewindSession: 未找到精确快照，尝试 fallback");
                 targetSnapshot = findLastSnapshot(jsonlPath, sessionId, messageId);
+                if (targetSnapshot != null) {
+                    logger.info("handleRewindSession: fallback 找到快照 messageId={}, files={}",
+                        targetSnapshot.getMessageId(), targetSnapshot.getTrackedFiles().size());
+                }
+            } else {
+                logger.info("handleRewindSession: 找到精确快照 messageId={}, files={}",
+                    targetSnapshot.getMessageId(), targetSnapshot.getTrackedFiles().size());
             }
             if (targetSnapshot != null) {
                 FileSnapshotManager.RewindResult rewindResult = FileSnapshotManager.rewindToSnapshot(sessionId, targetSnapshot.getMessageId());
@@ -472,12 +515,7 @@ public class SessionApiHandler implements HttpHandler {
 
         Path tempFile = jsonlPath.resolveSibling("conversation.jsonl.tmp");
         Files.write(tempFile, keptLines, StandardCharsets.UTF_8);
-        try {
-            Files.move(tempFile, jsonlPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (Exception e) {
-            logger.warn("原子移动失败，使用常规替换: {}", e.getMessage());
-            Files.move(tempFile, jsonlPath, StandardCopyOption.REPLACE_EXISTING);
-        }
+        Files.move(tempFile, jsonlPath, StandardCopyOption.REPLACE_EXISTING);
         jsonlReader.removeFromCache(sessionId);
         logger.debug("JSONL 文件截断完成: sessionId={}, 保留{}行", sessionId, keptLines.size());
     }

@@ -569,18 +569,14 @@ class FileSnapshotManagerTest {
         FileSnapshotManager.trackFile(SESSION_ID, newFile.toString(), true);
         FileSnapshotManager.makeSnapshot(SESSION_ID, MSG_ID_2);
 
-        // Preview for msg-002: newFile should show "delete", existingFile should show "restore"
+        // Preview for msg-002: newFile should show "delete" (existingFile unchanged, not shown)
         FileSnapshotManager.PreviewResult preview = FileSnapshotManager.getPreview(SESSION_ID, MSG_ID_2);
         assertNotNull(preview);
-        assertEquals(2, preview.getFiles().size());
+        assertEquals(1, preview.getFiles().size());
 
-        for (FileSnapshotManager.PreviewFile pf : preview.getFiles()) {
-            if (pf.getFilePath().equals(newFile.toString())) {
-                assertEquals("delete", pf.getAction(), "新建文件预览应显示 delete");
-            } else if (pf.getFilePath().equals(existingFile.toString())) {
-                assertEquals("restore", pf.getAction(), "已有文件预览应显示 restore");
-            }
-        }
+        FileSnapshotManager.PreviewFile pf = preview.getFiles().get(0);
+        assertEquals(newFile.toString(), pf.getFilePath());
+        assertEquals("delete", pf.getAction(), "新建文件预览应显示 delete");
     }
 
     @Test
@@ -620,12 +616,12 @@ class FileSnapshotManagerTest {
         Files.delete(testFile);
         FileSnapshotManager.makeSnapshot(SESSION_ID, MSG_ID_2);
 
-        // Preview for msg-002: should show "restore"
+        // Preview for msg-002: should show "add" (rollback will restore the deleted file)
         FileSnapshotManager.PreviewResult preview = FileSnapshotManager.getPreview(SESSION_ID, MSG_ID_2);
         assertNotNull(preview);
         assertEquals(1, preview.getFiles().size());
         FileSnapshotManager.PreviewFile pf = preview.getFiles().get(0);
-        assertEquals("restore", pf.getAction(), "被删除的文件预览应显示 restore");
+        assertEquals("add", pf.getAction(), "被删除的文件预览应显示 add");
         assertEquals(testFile.toString(), pf.getFilePath());
     }
 
