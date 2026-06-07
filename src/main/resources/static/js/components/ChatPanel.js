@@ -670,6 +670,7 @@ export class ChatPanel {
       );
       if (seg) {
         seg.confirmationData = null;
+        this._pendingConfirmSeg = seg; // 保存引用，供 404 错误恢复使用
         this.renderPipeline.flush(session.getSegments(), session.getCurrentText());
       }
     }
@@ -710,6 +711,15 @@ export class ChatPanel {
       if (!response.ok) {
         return response.json().then(err => {
           showToast(err.error || '确认请求失败', { type: 'error', duration: 4000 });
+          // 后端超时或确认请求失败，将 segment 标记为已取消
+          if (this._pendingConfirmSeg) {
+            this._pendingConfirmSeg.result = 'cancelled';
+            this._pendingConfirmSeg.error = err.error || '确认已超时';
+            this._pendingConfirmSeg = null;
+            if (this._activeSession) {
+              this.renderPipeline.flush(this._activeSession.getSegments(), this._activeSession.getCurrentText());
+            }
+          }
           if (btn) btn.disabled = false;
         });
       }

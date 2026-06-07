@@ -35,7 +35,7 @@ public class ToolConfirmHandler implements HttpHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(ToolConfirmHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    private static final long CONFIRM_TIMEOUT_MS = 60_000;
+    private static final long CONFIRM_TIMEOUT_MS = 180_000;
     private static final TruncationService truncationService =
         new TruncationService(TokenEstimatorFactory.getDefault());
 
@@ -144,6 +144,12 @@ public class ToolConfirmHandler implements HttpHandler {
             logger.warn("bash 确认超时：confirmId={}, command={}", confirmId, pending.command);
             conversationService.addToolResult(
                 conversation, pending.toolCallId, pending.toolName, "错误: 确认已超时", false);
+            String cleanArgs = pending.arguments.replace("\r", "").replace("\n", "");
+            sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
+                + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
+                + "\",\"success\":false,\"error\":\"确认已超时"
+                + "\",\"args\":" + cleanArgs + "}");
+            orchestrator.continueAfterConfirmation(sessionId, conversation, sseWriter);
             return;
         }
 
@@ -242,6 +248,15 @@ public class ToolConfirmHandler implements HttpHandler {
             logger.warn("delete_file 确认超时：confirmId={}", confirmId);
             conversationService.addToolResult(
                 conversation, pending.toolCallId, pending.toolName, "错误: 确认已超时", false);
+            sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
+                + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
+                + "\",\"success\":false,\"error\":\"确认已超时"
+                + "\",\"args\":" + pending.arguments + "}");
+            try {
+                orchestrator.continueAfterConfirmation(sessionId, conversation, sseWriter);
+            } catch (LlmException e) {
+                logger.error("继续 Agent 循环失败", e);
+            }
             return;
         }
 
