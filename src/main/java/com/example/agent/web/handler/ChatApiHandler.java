@@ -8,6 +8,7 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.web.logging.SessionLogger;
 import com.example.agent.web.orchestrator.WebAgentOrchestrator;
+import com.example.agent.web.session.SessionCancelManager;
 import com.example.agent.web.server.WebInitializer;
 import com.example.agent.web.session.PendingBashConfirmation;
 import com.example.agent.web.session.PendingDeleteConfirmation;
@@ -97,6 +98,8 @@ public class ChatApiHandler implements HttpHandler {
             lockAcquired = true;
 
             SseWriter.resetClientDisconnected();
+            // 清理上一轮可能残留的取消标志，避免旧信号影响新请求
+            SessionCancelManager.getInstance().reset(sessionId);
 
             logger.info("Web Chat 收到消息：session={}, message={}, edit={}, hasPendingTool={}",
                 sessionId, userMessage, editMessageId != null, sessionManager.hasPendingToolCall(sessionId));

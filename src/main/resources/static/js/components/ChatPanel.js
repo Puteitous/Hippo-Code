@@ -901,6 +901,17 @@ export class ChatPanel {
    * 停止生成
    */
   stopGeneration() {
+    // 无论 currentAbortController 状态如何，都发送服务端终止请求
+    // 解决前端状态已清空时停止按钮"无效"的问题
+    const sessionId = appState.currentSessionId;
+    if (sessionId) {
+      fetch('/api/tool/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toolCallId: null, sessionId })
+      }).catch(() => {});
+    }
+
     if (!this.currentAbortController) {
       return;
     }
@@ -918,7 +929,7 @@ export class ChatPanel {
       fetch('/api/tool/abort', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolCallId })
+        body: JSON.stringify({ toolCallId, sessionId })
       }).catch(() => {});
     }
     this._runningToolCallIds.clear();

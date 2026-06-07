@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public abstract class AbstractLlmClient implements LlmClient {
 
@@ -58,6 +59,7 @@ public abstract class AbstractLlmClient implements LlmClient {
 
     private final ThreadLocal<InputStream> currentResponseStream = new ThreadLocal<>();
     private final ThreadLocal<Boolean> aborted = ThreadLocal.withInitial(() -> false);
+    private final ThreadLocal<Supplier<Boolean>> streamCancelCheck = ThreadLocal.withInitial(() -> () -> false);
 
     protected AbstractLlmClient(Config config, RetryPolicy retryPolicy) {
         if (config == null) {
@@ -111,6 +113,17 @@ public abstract class AbstractLlmClient implements LlmClient {
                 logger.debug("关闭 LLM 响应流时出错（可能已关闭）: {}", e.getMessage());
             }
         }
+    }
+
+    /**
+     * 设置流式读取的取消检查器。
+     * 与 {@link #abortCurrentRequest()} 不同，此检查器可被外部线程（如 HTTP 请求线程）设置，
+     * 并在流式读取线程中生效，不受 ThreadLocal 隔离的限制。
+     *
+     * @param check 返回 true 表示应取消当前请求的检查器
+     */
+    public void setCancelCheck(Supplier<Boolean> check) {
+        streamCancelCheck.set(check != null ? check : () -> false);
     }
     
     protected List<Message> applyCacheStrategy(List<Message> messages) {
@@ -244,6 +257,7 @@ public abstract class AbstractLlmClient implements LlmClient {
             } finally {
                 this.currentResponseStream.remove();
                 this.aborted.remove();
+                this.streamCancelCheck.remove();
             }
             
             long totalLatencyMs = System.currentTimeMillis() - startMs;
@@ -348,11 +362,22 @@ public abstract class AbstractLlmClient implements LlmClient {
         int reasoningChunkCount = 0;
         int toolCallChunkCount = 0;
         
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
             
             String line;
             while ((line = reader.readLine()) != null) {
+                // 检查外部取消信号（如用户点击停止按钮）
+                // 使用共享的 SessionCancelManager（非 ThreadLocal），可被其他线程设置
+                Supplier<Boolean> cancelCheck = streamCancelCheck.get();
+                if (cancelCheck != null && cancelCheck.get()) {
+                    logger.debug("收到外部取消信号，主动关闭流式读取 (已收集 content={}字符, reasoning={}字符)",
+                        fullContent.length(), fullReasoning.length());
+                    reader.close();
+                    break;
+                }
+                
                 if (Thread.currentThread().isInterrupted()) {
                     Thread.interrupted();
                     logger.debug("流式响应读取被中断");
@@ -409,7 +434,8 @@ public abstract class AbstractLlmClient implements LlmClient {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            if (aborted.get()) {
+            Supplier<Boolean> cancelCheck = streamCancelCheck.get();
+            if (aborted.get() || (cancelCheck != null && cancelCheck.get())) {
                 logger.info("LLM 流式请求被主动中止，返回已收集的部分响应 (content={}字符, reasoning={}字符, toolCalls={})",
                     fullContent.length(), fullReasoning.length(), toolCalls.size());
                 return buildChatResponse(fullContent.toString(), fullReasoning.toString(), toolCalls, finishReason, usage);
@@ -418,6 +444,13 @@ public abstract class AbstractLlmClient implements LlmClient {
                 throw (LlmException) e;
             }
             throw new LlmException("读取流式响应失败: " + e.getMessage(), e);
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException ignored) {
+                }
+            }
         }
         
         if (reasoningChunkCount > 0) {

@@ -13,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -90,6 +91,37 @@ class StreamInterruptTest {
             Thread.interrupted();
 
             assertFalse(Thread.currentThread().isInterrupted());
+        }
+    }
+
+    @Nested
+    @DisplayName("🔵 CancelCheck 中止机制")
+    class CancelCheckTests {
+
+        @Test
+        @DisplayName("setCancelCheck 不应抛异常")
+        void setCancelCheck_doesNotThrow() {
+            TestableStreamClient client = new TestableStreamClient();
+            assertDoesNotThrow(() -> client.setCancelCheck(() -> false));
+        }
+
+        @Test
+        @DisplayName("setCancelCheck(null) 不应抛异常")
+        void setCancelCheckNull_doesNotThrow() {
+            TestableStreamClient client = new TestableStreamClient();
+            assertDoesNotThrow(() -> client.setCancelCheck(null));
+        }
+
+        @Test
+        @DisplayName("设置和移除 cancelCheck 后数据读取不受影响")
+        void cancelCheckCycle_doesNotAffectNormalProcessing() {
+            TestableStreamClient client = new TestableStreamClient();
+
+            client.setCancelCheck(() -> true);
+            client.setCancelCheck(() -> false);
+
+            int processed = client.processLinesWithInterruptCheck("line1\nline2\nline3\n");
+            assertEquals(3, processed);
         }
     }
 

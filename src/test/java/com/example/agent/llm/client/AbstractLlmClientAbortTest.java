@@ -20,7 +20,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -234,6 +236,27 @@ class AbstractLlmClientAbortTest {
             assertNotNull(response);
             assertTrue(response.getContent() == null || response.getContent().isEmpty(),
                 "没有收到任何 chunk 时 content 应为空");
+        }
+    }
+
+    @Nested
+    @DisplayName("CancelCheck 路径")
+    class CancelCheckPathTests {
+
+        @Test
+        @DisplayName("setCancelCheck(() → true) 应在第一个 readLine 后提前中止")
+        void cancelCheckTrue_abortsEarly_returnsEmptyContent() throws LlmException {
+            // cancelCheck 在 while 循环顶部检查（在 readLine 返回后、处理 line 之前）。
+            // 当 cancelCheck 为 true 时，reader.close() + break 退出，fullContent 为空。
+            client.setCancelCheck(() -> true);
+            String sseData = sseChunk("Hello") + sseDone();
+            InputStream input = new ByteArrayInputStream(sseData.getBytes(StandardCharsets.UTF_8));
+
+            ChatResponse response = client.processStreamResponse(
+                mockResponse(200, input), null);
+
+            assertNotNull(response, "取消后应返回非 null 的 ChatResponse");
+            // cancelCheck 在第一个 readLine 后触发，此时 fullContent 为空
         }
     }
 

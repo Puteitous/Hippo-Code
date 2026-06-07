@@ -9,6 +9,7 @@ import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.execute.AgentTurnResult;
 import com.example.agent.execute.StopHook;
 import com.example.agent.execute.TaskCompletionHook;
+import com.example.agent.llm.client.AbstractLlmClient;
 import com.example.agent.llm.client.LlmClient;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.llm.model.ChatResponse;
@@ -27,6 +28,7 @@ import com.example.agent.web.logging.SessionLogger;
 import com.example.agent.web.session.PendingBashConfirmation;
 import com.example.agent.web.session.PendingDeleteConfirmation;
 import com.example.agent.web.session.PendingToolCall;
+import com.example.agent.web.session.SessionCancelManager;
 import com.example.agent.web.session.SessionManager;
 import com.example.agent.web.session.SessionTokenStats;
 import com.example.agent.web.session.WebSessionManager;
@@ -56,6 +58,7 @@ public class WebAgentOrchestrator {
     );
 
     private static final TruncationService truncationService = new TruncationService(TokenEstimatorFactory.getDefault());
+    private static final SessionCancelManager cancelManager = SessionCancelManager.getInstance();
 
     private static final WebAgentOrchestrator INSTANCE = new WebAgentOrchestrator(WebSessionManager.getInstance());
 
@@ -98,8 +101,12 @@ public class WebAgentOrchestrator {
         List<Tool> tools = toolRegistry.toTools();
 
         for (int turn = 0; turn < MAX_TURNS; turn++) {
-            if (SseWriter.isClientDisconnected()) {
-                logger.info("客户端已断开，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+            if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                if (SseWriter.isClientDisconnected()) {
+                    logger.info("客户端已断开，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                } else {
+                    logger.info("收到取消信号，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                }
                 return;
             }
 
@@ -132,15 +139,28 @@ public class WebAgentOrchestrator {
 
             sseWriter.sendSseEvent("thinking", "{\"turn\":" + (turn + 1) + "}");
 
-            if (SseWriter.isClientDisconnected()) {
-                logger.info("客户端已断开，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+            if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                if (SseWriter.isClientDisconnected()) {
+                    logger.info("客户端已断开，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                } else {
+                    logger.info("收到取消信号，提前结束 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                }
                 return;
             }
 
             final int currentTurn = turn + 1;
 
+            // 设置流式取消检查器，让 LLM 流式读取线程能感知外部取消信号
+            // 通过 SessionCancelManager（共享状态），而非 ThreadLocal 的 aborted 标志
+            if (llmClient instanceof AbstractLlmClient) {
+                ((AbstractLlmClient) llmClient).setCancelCheck(() -> cancelManager.isCancelled(sessionId));
+            }
+
             ChatResponse response = llmClient.chatStream(messages, tools, (StreamChunk chunk) -> {
-                if (SseWriter.isClientDisconnected()) {
+                if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                    if (!SseWriter.isClientDisconnected()) {
+                        logger.debug("流式回调感知取消信号, 中止 LLM 请求: sessionId={}", sessionId);
+                    }
                     llmClient.abortCurrentRequest();
                     return;
                 }
@@ -213,8 +233,12 @@ public class WebAgentOrchestrator {
                 }
             });
 
-            if (SseWriter.isClientDisconnected()) {
-                logger.info("客户端已断开，跳过工具执行 (sessionId={}, turn={})", sessionId, turn + 1);
+            if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                if (SseWriter.isClientDisconnected()) {
+                    logger.info("客户端已断开，跳过工具执行 (sessionId={}, turn={})", sessionId, turn + 1);
+                } else {
+                    logger.info("收到取消信号，跳过工具执行 (sessionId={}, turn={})", sessionId, turn + 1);
+                }
                 return;
             }
 
@@ -305,8 +329,12 @@ public class WebAgentOrchestrator {
                 }
             }
 
-            if (SseWriter.isClientDisconnected()) {
-                logger.info("客户端已断开，停止下一轮 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+            if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                if (SseWriter.isClientDisconnected()) {
+                    logger.info("客户端已断开，停止下一轮 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                } else {
+                    logger.info("收到取消信号，停止下一轮 Agent 循环 (sessionId={}, turn={})", sessionId, turn + 1);
+                }
                 return;
             }
 
@@ -329,8 +357,12 @@ public class WebAgentOrchestrator {
     private void executeToolCalls(List<ToolCall> toolCalls, Conversation conversation, SseWriter sseWriter, String sessionId) {
         for (int i = 0; i < toolCalls.size(); i++) {
             ToolCall toolCall = toolCalls.get(i);
-            if (SseWriter.isClientDisconnected()) {
-                logger.info("客户端已断开，跳过工具执行 (sessionId={})", sessionId);
+            if (SseWriter.isClientDisconnected() || cancelManager.isCancelled(sessionId)) {
+                if (SseWriter.isClientDisconnected()) {
+                    logger.info("客户端已断开，跳过工具执行 (sessionId={})", sessionId);
+                } else {
+                    logger.info("收到取消信号，跳过工具执行 (sessionId={})", sessionId);
+                }
                 return;
             }
 
