@@ -342,7 +342,12 @@ export class MessageSession {
     }
 
     if (this._contentDiv) {
-      this._contentDiv.dataset.markdown = this._currentText;
+      // 从所有 text segment 重建完整内容，避免只保存 _currentText 遗漏之前已 flushing 的文本
+      const textSegments = this._segments
+        .filter(s => s.type === 'text')
+        .map(s => s.content);
+      if (this._currentText.trim()) textSegments.push(this._currentText);
+      this._contentDiv.dataset.markdown = textSegments.join('');
     }
   }
 
