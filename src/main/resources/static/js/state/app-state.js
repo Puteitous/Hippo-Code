@@ -1,4 +1,20 @@
 // 全局应用状态管理
+
+// 可靠的主题读取：localStorage → cookie 后备
+function _loadTheme() {
+  const fromLS = localStorage.getItem('hippo-theme');
+  if (fromLS === 'dark' || fromLS === 'light') return fromLS;
+  // cookie 后备（JCEF 环境 localStorage 可能不持久）
+  const match = document.cookie.match(/\bhippo-theme=(dark|light)\b/);
+  return match ? match[1] : 'light';
+}
+
+function _saveTheme(value) {
+  try { localStorage.setItem('hippo-theme', value); } catch (_) {}
+  // cookie 后备，30 天过期
+  document.cookie = `hippo-theme=${value}; path=/; max-age=2592000; SameSite=Lax`;
+}
+
 export const AppState = {
   // ========== 会话状态 ==========
   currentSessionId: null,
@@ -23,7 +39,7 @@ export const AppState = {
   maxTrendPoints: 30,
   
   // ========== 主题状态 ==========
-  currentTheme: localStorage.getItem('hippo-theme') || 'light',
+  currentTheme: _loadTheme(),
   
   // ========== 状态监听器 ==========
   listeners: new Map(),
@@ -38,9 +54,9 @@ export const AppState = {
       this.listeners.get(key).forEach(cb => cb(value, oldValue));
     }
     
-    // 自动持久化到 localStorage
+    // 自动持久化
     if (key === 'currentTheme') {
-      localStorage.setItem('hippo-theme', value);
+      _saveTheme(value);
     } else if (key === 'selectedPresetId') {
       localStorage.setItem('hippo-prompt-preset', value);
     } else if (key === 'tokenHistory') {

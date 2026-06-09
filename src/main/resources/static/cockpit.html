@@ -61,7 +61,7 @@
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                 </svg>
             </button>
-            <div class="workspace-indicator desktop-only" id="workspaceIndicator" style="display:none;">
+            <div class="workspace-indicator desktop-only desktop-only-flex" id="workspaceIndicator" style="display:none !important;">
                 <svg class="workspace-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                 </svg>
@@ -140,7 +140,7 @@
         <div class="session-resizer" id="sessionResizer"></div>
 
         <!-- 预览面板（中间，桌面端） -->
-        <div class="preview-panel desktop-only desktop-only-flex" id="previewPanel" style="display:none;">
+        <div class="preview-panel desktop-only desktop-only-flex hidden" id="previewPanel" style="display:none;">
             <div class="file-tab-bar" id="fileTabBar">
                 <div class="file-tabs" id="fileTabs"></div>
             </div>
@@ -164,11 +164,30 @@
         <div class="chat-panel">
             <div class="chat-panel-header" id="chatPanelHeader" style="display:none;">
                 <span class="chat-panel-title">聊天</span>
-                <button class="panel-toggle-btn" id="chatCollapseBtn" title="收起聊天">
-                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 4 12 8 4 12"/>
-                    </svg>
-                </button>
+                <div class="chat-header-actions">
+                    <div class="chat-history-wrapper" id="chatHistoryWrapper">
+                        <button class="chat-header-btn" id="chatHistoryBtn" title="历史会话">
+                            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="8" cy="8" r="6.5"/>
+                                <polyline points="8 4.5 8 8 10.5 10"/>
+                            </svg>
+                        </button>
+                        <div class="chat-history-dropdown" id="chatHistoryDropdown">
+                            <div class="chat-history-list" id="chatHistoryList"></div>
+                        </div>
+                    </div>
+                    <button class="chat-header-btn" id="chatNewBtn" title="新建会话">
+                        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="8" y1="2" x2="8" y2="14"/>
+                            <line x1="2" y1="8" x2="14" y2="8"/>
+                        </svg>
+                    </button>
+                    <button class="panel-toggle-btn" id="chatCollapseBtn" title="收起聊天">
+                        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 4 12 8 4 12"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="chat-container" id="chatContainer">
                 <div class="empty-state">

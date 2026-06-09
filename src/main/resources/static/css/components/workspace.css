@@ -18,6 +18,7 @@
     flex-direction: column;
     overflow: hidden;
     padding: 4px 6px 8px;
+    position: relative;
 }
 
 .file-tree-body {
@@ -27,7 +28,8 @@
 }
 
 .file-tree-empty {
-    flex: 1;
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -38,6 +40,7 @@
     opacity: 0.6;
     padding: 20px;
     text-align: center;
+    pointer-events: none;
 }
 
 /* 树节点 */

@@ -57,6 +57,9 @@ const HippoWorkspace = (() => {
     return { isAvailable: false };
   }
 
+  // 桌面端默认显示视图切换胶囊（工作区状态不影响）
+  if (els.viewSwitcher) els.viewSwitcher.style.display = '';
+
   // ========== 组件实例 ==========
   const fileTree = new FileTree({
     container: els.fileTreeBody,
@@ -118,8 +121,7 @@ const HippoWorkspace = (() => {
       fileTabs.closeAll();
       hidePreview();
       if (els.fileTreeEmpty) els.fileTreeEmpty.style.display = '';
-      if (els.viewSwitcher) els.viewSwitcher.style.display = 'none';
-      if (els.workspaceIndicator) els.workspaceIndicator.style.display = 'none';
+      if (els.workspaceIndicator) els.workspaceIndicator.style.setProperty('display', 'none', 'important');
       switchView('sessions');
     },
 

@@ -125,6 +125,8 @@ function init() {
   sessionManager.setCurrentSession(currentSessionId);
   appState.currentSessionId = currentSessionId;
   sessionManager.loadSessions();
+  // 刷新历史会话下拉
+  setTimeout(() => updateHistoryDropdown?.(), 100);
   
   // 11. 启动自动更新
   tokenMonitor.startAutoUpdate(30000);
@@ -146,6 +148,7 @@ function init() {
       if (!sessionManager.sessionNames || !sessionManager.sessionNames[sessionId]) {
         sessionManager.setSessionName(sessionId, content);
         sessionManager.loadSessions();
+        setTimeout(() => updateHistoryDropdown?.(), 100);
       }
     }
   });
@@ -218,6 +221,56 @@ function bindGlobalEvents() {
   
   // 新建会话
   document.getElementById('sessionNewBtn')?.addEventListener('click', createNewSession);
+  
+  // 聊天面板头部 - 新建会话
+  document.getElementById('chatNewBtn')?.addEventListener('click', createNewSession);
+  
+  // 工作区清除按钮（workspace-manager 的守卫可能让它的绑定不生效）
+  document.getElementById('workspaceClear')?.addEventListener('click', () => {
+    const indicator = document.getElementById('workspaceIndicator');
+    if (indicator) indicator.style.setProperty('display', 'none', 'important');
+    const fileTreeEmpty = document.getElementById('fileTreeEmpty');
+    if (fileTreeEmpty) fileTreeEmpty.style.display = '';
+    const sessionList = document.getElementById('sessionList');
+    if (sessionList) sessionList.style.display = '';
+    // 切换到会话视图
+    const viewBtns = document.querySelectorAll('[data-view]');
+    for (const btn of viewBtns) {
+      btn.classList.toggle('active', btn.dataset.view === 'sessions');
+    }
+    document.getElementById('sessionPanel')?.classList.remove('view-files');
+    // 关闭预览
+    const previewPanel = document.getElementById('previewPanel');
+    if (previewPanel) previewPanel.classList.add('hidden');
+    const chatPanelHeader = document.getElementById('chatPanelHeader');
+    if (chatPanelHeader) chatPanelHeader.style.display = 'none';
+    const chatPanel = document.querySelector('.chat-panel');
+    if (chatPanel) chatPanel.classList.remove('collapsed');
+    const chatShowBtn = document.getElementById('chatShowBtn');
+    if (chatShowBtn) chatShowBtn.style.display = 'none';
+    // 同步后端
+    if (window.HippoDesktop?.clearCurrentFolder) {
+      window.HippoDesktop.clearCurrentFolder();
+    }
+  });
+  
+  // 聊天面板头部 - 历史会话下拉点击外部关闭
+  document.addEventListener('click', (e) => {
+    const wrapper = document.getElementById('chatHistoryWrapper');
+    const dropdown = document.getElementById('chatHistoryDropdown');
+    if (wrapper && dropdown && !wrapper.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+  
+  // 恢复 hover 控制
+  const historyWrapper = document.getElementById('chatHistoryWrapper');
+  if (historyWrapper) {
+    historyWrapper.addEventListener('mouseenter', () => {
+      const dropdown = document.getElementById('chatHistoryDropdown');
+      if (dropdown) dropdown.style.display = '';
+    });
+  }
   
   // 压缩会话
   elements.compactBtn?.addEventListener('click', handleCompact);
@@ -340,6 +393,43 @@ function bindGlobalEvents() {
 
 // RollbackPanel 接管了回滚逻辑
 
+// ========== 会话历史下拉（模块级，供多处调用） ==========
+function updateHistoryDropdown() {
+  const listEl = document.getElementById('chatHistoryList');
+  if (!listEl) return;
+
+  const sessions = sessionManager.sessions || [];
+  if (sessions.length === 0) {
+    listEl.innerHTML = '<div class="chat-history-empty">暂无历史会话</div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
+  for (const s of sessions.slice(0, 30)) {
+    const name = sessionManager.sessionNames?.[s.id] || s.title || ('会话 ' + s.id.replace('web-', '').slice(-6));
+    const item = document.createElement('div');
+    item.className = 'chat-history-item' + (s.id === currentSessionId ? ' active' : '');
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'history-item-name';
+    nameSpan.textContent = name;
+
+    item.appendChild(nameSpan);
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      switchSession(s.id);
+      const dropdown = document.getElementById('chatHistoryDropdown');
+      if (dropdown) dropdown.style.display = 'none';
+    });
+
+    fragment.appendChild(item);
+  }
+
+  listEl.appendChild(fragment);
+}
+
 // ========== 会话管理 ==========
 async function createNewSession() {
   currentSessionId = await sessionManager.createNewSession();
@@ -350,6 +440,7 @@ async function createNewSession() {
     elements.messageInput.style.height = 'auto';
     elements.messageInput.focus();
   }
+  updateHistoryDropdown();
 }
 
 async function switchSession(sessionId) {
@@ -446,6 +537,7 @@ async function switchSession(sessionId) {
     }
   });
   elements.messageInput?.focus();
+  updateHistoryDropdown();
 }
 
 
