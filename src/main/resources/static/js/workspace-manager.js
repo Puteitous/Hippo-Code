@@ -16,6 +16,7 @@
 import { FileTree } from './components/FileTree.js';
 import { FileTabs } from './components/FileTabs.js';
 import { FilePreview } from './components/FilePreview.js';
+import { EventBus } from './utils/event-bus.js';
 
 const HippoWorkspace = (() => {
   if (typeof window.cefQuery === 'undefined') {
@@ -82,6 +83,85 @@ const HippoWorkspace = (() => {
   let _currentRoot = null;
   let _currentView = 'sessions'; // 'sessions' | 'files'
 
+  // ========== 最近文件夹管理 ==========
+
+  const RECENT_FOLDERS_KEY = 'hippo-recent-folders';
+  const MAX_RECENT_FOLDERS = 20;
+
+  function _syncRecentFolders() {
+    // 桌面端：同步到后端文件，确保重启后不丢失
+    if (window.HippoDesktop?.isAvailable && window.HippoDesktop.setRecentFolders) {
+      const folders = _getRecentFolders();
+      window.HippoDesktop.setRecentFolders(JSON.stringify(folders));
+    }
+    // 同步更新下拉 DOM
+    _renderRecentFolders();
+  }
+
+  function _getRecentFolders() {
+    try {
+      const raw = localStorage.getItem(RECENT_FOLDERS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  function _saveRecentFolder(folderPath) {
+    let folders = _getRecentFolders();
+    // 去重，把当前放到最前面
+    folders = folders.filter(f => f !== folderPath);
+    folders.unshift(folderPath);
+    if (folders.length > MAX_RECENT_FOLDERS) {
+      folders = folders.slice(0, MAX_RECENT_FOLDERS);
+    }
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders));
+    _syncRecentFolders();
+  }
+
+  function _removeRecentFolder(folderPath) {
+    const folders = _getRecentFolders().filter(f => f !== folderPath);
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders));
+    _syncRecentFolders();
+    _renderRecentFolders();
+  }
+
+  function _renderRecentFolders() {
+    const listEl = document.getElementById('recentFoldersList');
+    const dropdown = document.getElementById('recentFoldersDropdown');
+    if (!listEl) return;
+    const folders = _getRecentFolders();
+    if (folders.length === 0) {
+      listEl.innerHTML = '<div class="header-folder-dropdown-empty">暂无最近打开的文件夹</div>';
+      return;
+    }
+    listEl.innerHTML = folders.map(f => `
+      <div class="header-folder-dropdown-item" data-path="${f.replace(/"/g, '&quot;')}">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h5l2 2h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z"/></svg>
+        <span class="folder-item-path">${f.replace(/</g, '&lt;')}</span>
+        <button class="folder-item-remove" data-path="${f.replace(/"/g, '&quot;')}" title="移除">✕</button>
+      </div>
+    `).join('');
+
+    // 点击项目打开文件夹
+    listEl.querySelectorAll('.header-folder-dropdown-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.folder-item-remove')) return;
+        const path = item.dataset.path;
+        if (path) {
+          dropdown.classList.remove('show');
+          api.openWorkspace(path);
+        }
+      });
+    });
+
+    // 点击 ✕ 移除
+    listEl.querySelectorAll('.folder-item-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _removeRecentFolder(btn.dataset.path);
+      });
+    });
+  }
+
   // ========== 公开 API ==========
 
   const api = {
@@ -92,6 +172,10 @@ const HippoWorkspace = (() => {
     async openWorkspace(path) {
       if (!path) return;
       _currentRoot = path.replace(/\\/g, '/');
+
+      // 保存到最近文件夹
+      _saveRecentFolder(_currentRoot);
+      _renderRecentFolders();
 
       // 显示视图切换器和工作区指示器
       if (els.viewSwitcher) els.viewSwitcher.style.display = '';
@@ -140,6 +224,16 @@ const HippoWorkspace = (() => {
       if (filePreview.currentPath) {
         filePreview.reload();
       }
+    },
+
+    /** 刷新文件树（保留展开状态），AI 工具调用后自动调用 */
+    refreshFileTree() {
+      fileTree.refresh();
+    },
+
+    /** 渲染最近文件夹下拉列表 */
+    renderRecentFolders() {
+      _renderRecentFolders();
     },
   };
 
@@ -338,6 +432,17 @@ const HippoWorkspace = (() => {
       resizer.style.display = '';
     }
     chatShowBtn.style.display = 'none';
+  });
+
+  // ========== 事件订阅：文件变更时自动刷新文件树 ==========
+
+  EventBus.on('file:changes-updated', () => {
+    fileTree.refresh();
+  });
+
+  // AI 消息发送完成后也刷新文件树（捕获 write/edit/delete 结果）
+  EventBus.on('message:sent', () => {
+    fileTree.refresh();
   });
 
   console.log('HippoWorkspace initialized ✅');

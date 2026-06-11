@@ -124,9 +124,7 @@ function init() {
   currentSessionId = generateSessionId();
   sessionManager.setCurrentSession(currentSessionId);
   appState.currentSessionId = currentSessionId;
-  sessionManager.loadSessions();
-  // 刷新历史会话下拉
-  setTimeout(() => updateHistoryDropdown?.(), 100);
+  sessionManager.loadSessions().then(() => updateHistoryDropdown?.());
   
   // 11. 启动自动更新
   tokenMonitor.startAutoUpdate(30000);
@@ -147,8 +145,7 @@ function init() {
     if (sessionId && sessionManager) {
       if (!sessionManager.sessionNames || !sessionManager.sessionNames[sessionId]) {
         sessionManager.setSessionName(sessionId, content);
-        sessionManager.loadSessions();
-        setTimeout(() => updateHistoryDropdown?.(), 100);
+        sessionManager.loadSessions().then(() => updateHistoryDropdown?.());
       }
     }
   });
@@ -271,10 +268,11 @@ function bindGlobalEvents() {
     }
   });
   
-  // 恢复 hover 控制
+  // 恢复 hover 控制 + 刷新下拉内容
   const historyWrapper = document.getElementById('chatHistoryWrapper');
   if (historyWrapper) {
     historyWrapper.addEventListener('mouseenter', () => {
+      updateHistoryDropdown?.();
       const dropdown = document.getElementById('chatHistoryDropdown');
       if (dropdown) dropdown.style.display = '';
     });

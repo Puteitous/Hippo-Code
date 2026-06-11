@@ -213,6 +213,15 @@ const HippoDesktop = (() => {
       return send('setTheme', { theme });
     },
 
+    // ===== 最近文件夹持久化 =====
+    getRecentFolders() {
+      return send('getRecentFolders').then(r => r && r.folders);
+    },
+
+    setRecentFolders(folders) {
+      return send('setRecentFolders', { folders });
+    },
+
     // ===== 窗口控制 =====
     minimizeWindow() {
       return send('windowMinimize');
@@ -253,27 +262,86 @@ const HippoDesktop = (() => {
 
     // 检查 WorkspaceManager 是否可用
     const ws = window.HippoWorkspace;
-    if (ws && ws.isAvailable) {
-      // 打开文件夹按钮
-      const openBtn = document.getElementById('desktopOpenFolderBtn');
-      if (openBtn) {
-        openBtn.style.display = '';
-        openBtn.addEventListener('click', async () => {
-          try {
-            const result = await api.openFileDialog();
-            if (result && result.path) {
-              await api.setCurrentFolder(result.path);
-              await ws.openWorkspace(result.path);
-              showToast('工作区已切换: ' + result.path);
-            }
-          } catch (err) {
-            console.error('openFolder failed', err);
-            showToast('打开文件夹失败: ' + err.message);
+
+    // 文件夹操作组（打开 + 最近文件夹下拉）
+    const folderGroup = document.getElementById('headerFolderGroup');
+    const openBtn = document.getElementById('desktopOpenFolderBtn');
+    const recentDropdown = document.getElementById('recentFoldersDropdown');
+
+    if (folderGroup) folderGroup.style.display = '';
+
+    // 打开文件夹按钮
+    const handleOpenFolder = async () => {
+      try {
+        const result = await api.openFileDialog();
+        if (result && result.path) {
+          await api.setCurrentFolder(result.path);
+          if (ws && ws.isAvailable) {
+            await ws.openWorkspace(result.path);
           }
-        });
+          showToast('工作区已切换: ' + result.path);
+        }
+      } catch (err) {
+        console.error('openFolder failed', err);
+        showToast('打开文件夹失败: ' + err.message);
+      }
+    };
+
+    if (openBtn) {
+      openBtn.addEventListener('click', handleOpenFolder);
+    }
+
+    // 最近文件夹下拉 — 悬浮到文件夹操作组时展示
+    if (folderGroup && recentDropdown) {
+      let hoverTimer = null;
+
+      // 初始化时渲染一次，后续数据变化时 workspace-manager 内会同步更新
+      if (ws && ws.isAvailable) {
+        ws.renderRecentFolders?.();
       }
 
-      // 恢复上次工作区
+      folderGroup.addEventListener('mouseenter', () => {
+        clearTimeout(hoverTimer);
+        recentDropdown.classList.add('show');
+      });
+
+      folderGroup.addEventListener('mouseleave', (e) => {
+        // 如果鼠标移到了下拉菜单本身，不关闭
+        const related = e.relatedTarget;
+        if (related && (folderGroup.contains(related) || recentDropdown.contains(related))) return;
+        hoverTimer = setTimeout(() => {
+          recentDropdown.classList.remove('show');
+        }, 100);
+      });
+
+      recentDropdown.addEventListener('mouseenter', () => {
+        clearTimeout(hoverTimer);
+      });
+
+      recentDropdown.addEventListener('mouseleave', () => {
+        hoverTimer = setTimeout(() => {
+          recentDropdown.classList.remove('show');
+        }, 100);
+      });
+
+      // 点击下拉外部关闭
+      document.addEventListener('click', (e) => {
+        if (!folderGroup.contains(e.target) && !recentDropdown.contains(e.target)) {
+          recentDropdown.classList.remove('show');
+        }
+      });
+    }
+
+    // 检查 WorkspaceManager 是否可用
+    if (ws && ws.isAvailable) {
+      // 1. 先从后端加载持久化的最近文件夹列表到 localStorage
+      api.getRecentFolders().then((foldersStr) => {
+        if (foldersStr && foldersStr !== '[]') {
+          try { localStorage.setItem('hippo-recent-folders', foldersStr); } catch(e) {}
+        }
+      }).catch(() => {});
+
+      // 2. 恢复上次工作区
       api.getCurrentFolder().then((result) => {
         if (result && result.path) {
           ws.openWorkspace(result.path);
@@ -281,22 +349,6 @@ const HippoDesktop = (() => {
       }).catch(() => {});
     } else {
       console.warn('HippoDesktop: HippoWorkspace not available');
-      // 降级：只显示按钮，打开文件夹后只更新 indicator
-      const openBtn = document.getElementById('desktopOpenFolderBtn');
-      if (openBtn) {
-        openBtn.style.display = '';
-        openBtn.addEventListener('click', async () => {
-          try {
-            const result = await api.openFileDialog();
-            if (result && result.path) {
-              await api.setCurrentFolder(result.path);
-              showToast('工作区已切换: ' + result.path);
-            }
-          } catch (err) {
-            console.error('openFolder failed', err);
-          }
-        });
-      }
     }
 
     // DevTools 按钮

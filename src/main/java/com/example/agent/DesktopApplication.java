@@ -281,6 +281,10 @@ public final class DesktopApplication {
         return WorkspaceManager.getGlobalConfigDir().resolve("theme.txt");
     }
 
+    private static Path getRecentFoldersConfigPath() {
+        return WorkspaceManager.getGlobalConfigDir().resolve("recent-folders.json");
+    }
+
     private static void moveWindow(int x, int y) {
         mainFrame.setLocation(x, y);
     }
@@ -346,6 +350,12 @@ public final class DesktopApplication {
                         break;
                     case "setTheme":
                         handleSetTheme(json, callback);
+                        break;
+                    case "getRecentFolders":
+                        handleGetRecentFolders(callback);
+                        break;
+                    case "setRecentFolders":
+                        handleSetRecentFolders(json, callback);
                         break;
                     // ===== 窗口控制 =====
                     case "windowMinimize":
@@ -453,6 +463,35 @@ public final class DesktopApplication {
                 callback.success("{}");
             } catch (Exception e) {
                 logger.error("保存主题配置失败", e);
+                callback.failure(500, e.getMessage());
+            }
+        }
+
+        private void handleGetRecentFolders(CefQueryCallback callback) {
+            try {
+                Path file = getRecentFoldersConfigPath();
+                String data = "[]";
+                if (Files.exists(file)) {
+                    data = Files.readString(file).trim();
+                }
+                callback.success(MAPPER.writeValueAsString(
+                        MAPPER.createObjectNode().put("folders", data)));
+            } catch (Exception e) {
+                logger.error("读取最近文件夹配置失败", e);
+                callback.success("{\"folders\":[]}");
+            }
+        }
+
+        private void handleSetRecentFolders(JsonNode json, CefQueryCallback callback) {
+            try {
+                String folders = json.has("folders") ? json.get("folders").asText() : "[]";
+                Path file = getRecentFoldersConfigPath();
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, folders);
+                logger.debug("最近文件夹列表已保存");
+                callback.success("{}");
+            } catch (Exception e) {
+                logger.error("保存最近文件夹配置失败", e);
                 callback.failure(500, e.getMessage());
             }
         }

@@ -7,6 +7,7 @@ import { ReviewState } from './review-state.js';
 export class FileChangeManager {
   constructor() {
     this._refreshTimer = null;
+    this._lastChangeSnapshot = null; // 记录上一次变更快照，用于检测新变更
   }
 
   init() {
@@ -95,6 +96,13 @@ export class FileChangeManager {
 
       const statusBarFiles = document.getElementById('statusBarFilesValue');
       if (statusBarFiles) statusBarFiles.textContent = `${fileGroups.size}`;
+
+      // 检测是否有新变更（文件列表或时间戳变化），有则触发文件树刷新
+      const currentSnapshot = JSON.stringify(Array.from(fileGroups.entries()).map(([k, v]) => [k, v.latest]));
+      if (this._lastChangeSnapshot !== null && currentSnapshot !== this._lastChangeSnapshot) {
+        EventBus.emit('file:changes-updated');
+      }
+      this._lastChangeSnapshot = currentSnapshot;
 
       list.innerHTML = Array.from(fileGroups.values()).map(c => {
         const fileName = c.filePath.split(/[/\\]/).pop();

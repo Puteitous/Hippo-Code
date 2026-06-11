@@ -56,11 +56,17 @@
                     <path d="M4 14h6m0 0v6m0-6l-6 6M20 10h-6m0 0V4m0 6l6-6"/>
                 </svg>
             </button>
-            <button class="header-icon-btn desktop-only" id="desktopOpenFolderBtn" title="打开工作区文件夹" style="display:none;">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-            </button>
+            <div class="header-folder-group desktop-only" id="headerFolderGroup" style="display:none;">
+                <button class="header-icon-btn" id="desktopOpenFolderBtn" title="打开工作区文件夹">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                </button>
+                <div class="header-folder-dropdown" id="recentFoldersDropdown">
+                    <div class="header-folder-dropdown-header">最近打开的文件夹</div>
+                    <div id="recentFoldersList"></div>
+                </div>
+            </div>
             <div class="workspace-indicator desktop-only desktop-only-flex" id="workspaceIndicator" style="display:none !important;">
                 <svg class="workspace-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>

@@ -803,6 +803,7 @@ export class ChatPanel {
       this.setSendingState(false);
       this.currentAbortController = null;
       this.isCompleted = true;
+      EventBus.emit('message:sent');
     });
   }
   
