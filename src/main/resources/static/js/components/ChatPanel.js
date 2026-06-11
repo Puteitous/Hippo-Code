@@ -86,6 +86,19 @@ export class ChatPanel {
     };
     
     this.bindEvents();
+
+    // 监听文本选中快捷操作 → 插入输入框
+    this._unsubscribeSelectionAction = EventBus.on('selection:add-to-input', ({ text }) => {
+      // 实时查询当前文档中可见的输入框，避免持有已脱离 DOM 的旧引用
+      const input = document.querySelector('#messageInput, #heroInput');
+      if (!input) return;
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.value = input.value.substring(0, start) + text + input.value.substring(end);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      input.selectionStart = input.selectionEnd = start + text.length;
+    });
   }
   
   bindEvents() {
@@ -217,6 +230,46 @@ export class ChatPanel {
         }
       });
     }
+
+    // ── 拖拽文件到输入框 ─────────────────────────────
+    this.container.addEventListener('dragover', (e) => {
+      const inputArea = e.target.closest('#inputContainer, .empty-hero-input-area');
+      if (!inputArea) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      inputArea.classList.add('drag-over');
+    });
+
+    this.container.addEventListener('dragleave', (e) => {
+      const inputArea = e.target.closest('#inputContainer, .empty-hero-input-area');
+      if (!inputArea) return;
+      // 只在真正离开容器时移除高亮
+      const related = e.relatedTarget;
+      if (!related || !inputArea.contains(related)) {
+        inputArea.classList.remove('drag-over');
+      }
+    });
+
+    this.container.addEventListener('drop', (e) => {
+      const inputArea = e.target.closest('#inputContainer, .empty-hero-input-area');
+      if (!inputArea) return;
+      e.preventDefault();
+      inputArea.classList.remove('drag-over');
+
+      const path = e.dataTransfer.getData('text/plain');
+      if (!path) return;
+
+      const textarea = inputArea.querySelector('#messageInput, #heroInput');
+      if (!textarea) return;
+
+      // 在光标位置插入路径
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = textarea.value.substring(0, start) + path + textarea.value.substring(end);
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.focus();
+      textarea.selectionStart = textarea.selectionEnd = start + path.length;
+    });
   }
   
   /**
@@ -1438,6 +1491,9 @@ export class ChatPanel {
     this.renderPipeline.destroy();
     if (this.currentAbortController) {
       this.currentAbortController.abort();
+    }
+    if (this._unsubscribeSelectionAction) {
+      this._unsubscribeSelectionAction();
     }
   }
 }

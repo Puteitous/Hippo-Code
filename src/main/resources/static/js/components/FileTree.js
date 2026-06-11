@@ -428,6 +428,21 @@ export class FileTree {
     nameEl.textContent = entry.name;
     nodeEl.appendChild(nameEl);
 
+    // 拖拽支持：从文件树拖文件到聊天输入框
+    nodeEl.draggable = true;
+    nodeEl.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', fullPath);
+      e.dataTransfer.effectAllowed = 'copy';
+      // 小拖拽图标
+      const dragImg = document.createElement('span');
+      dragImg.textContent = '📄';
+      dragImg.style.position = 'absolute';
+      dragImg.style.top = '-100px';
+      document.body.appendChild(dragImg);
+      e.dataTransfer.setDragImage(dragImg, 0, 0);
+      setTimeout(() => document.body.removeChild(dragImg), 0);
+    });
+
     nodeEl.addEventListener('click', (e) => {
       e.stopPropagation();
       this._onFileSelect(fullPath);

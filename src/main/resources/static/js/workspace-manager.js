@@ -124,6 +124,60 @@ const HippoWorkspace = (() => {
     _renderRecentFolders();
   }
 
+  // ========== 工作区会话持久化（标签页 + 预览恢复） ==========
+
+  function _saveWorkspaceSession() {
+    if (!_currentRoot) return;
+    const openFiles = fileTabs.openPaths;
+    if (openFiles.length === 0) {
+      try { localStorage.removeItem('hippo-workspace-session'); } catch(e) {}
+      return;
+    }
+    const session = {
+      root: _currentRoot,
+      openFiles: openFiles,
+      activeFile: fileTabs.activePath
+    };
+    try {
+      localStorage.setItem('hippo-workspace-session', JSON.stringify(session));
+    } catch(e) {}
+  }
+
+  function _restoreWorkspaceSession() {
+    if (!_currentRoot) return;
+    try {
+      const raw = localStorage.getItem('hippo-workspace-session');
+      if (!raw) return;
+      const session = JSON.parse(raw);
+      // 只恢复同一个工作区的标签页
+      if (session.root !== _currentRoot) return;
+
+      const files = session.openFiles || [];
+      if (files.length === 0) return;
+
+      // 临时替换回调，批量打开标签时不逐个触发预览
+      const savedCallback = fileTabs._onTabSelect;
+      fileTabs._onTabSelect = () => {};
+
+      for (const filePath of files) {
+        const displayName = filePath.split('/').pop() || filePath;
+        fileTabs.openTab(filePath, displayName);
+      }
+
+      // 恢复回调
+      fileTabs._onTabSelect = savedCallback;
+
+      // 切换到激活的文件（会通过回调触发预览 + 文件树高亮）
+      if (session.activeFile && files.includes(session.activeFile)) {
+        fileTabs._selectTab(session.activeFile);
+      } else {
+        fileTabs._selectTab(files[files.length - 1]);
+      }
+    } catch(e) {
+      console.warn('恢复工作区标签页失败', e);
+    }
+  }
+
   function _renderRecentFolders() {
     const listEl = document.getElementById('recentFoldersList');
     const dropdown = document.getElementById('recentFoldersDropdown');
@@ -177,6 +231,11 @@ const HippoWorkspace = (() => {
       _saveRecentFolder(_currentRoot);
       _renderRecentFolders();
 
+      // 持久化到 workspace.txt，确保重启后可恢复
+      if (window.HippoDesktop?.setCurrentFolder) {
+        window.HippoDesktop.setCurrentFolder(_currentRoot).catch(() => {});
+      }
+
       // 显示视图切换器和工作区指示器
       if (els.viewSwitcher) els.viewSwitcher.style.display = '';
       if (els.workspaceIndicator && els.workspacePath) {
@@ -196,6 +255,9 @@ const HippoWorkspace = (() => {
 
       // 自动切换到文件视图
       switchView('files');
+
+      // 恢复上次打开的标签页和预览
+      _restoreWorkspaceSession();
     },
 
     clearWorkspace() {
@@ -206,6 +268,8 @@ const HippoWorkspace = (() => {
       hidePreview();
       if (els.fileTreeEmpty) els.fileTreeEmpty.style.display = '';
       if (els.workspaceIndicator) els.workspaceIndicator.style.setProperty('display', 'none', 'important');
+      // 清除保存的工作区会话
+      try { localStorage.removeItem('hippo-workspace-session'); } catch(e) {}
       switchView('sessions');
     },
 
@@ -274,6 +338,8 @@ const HippoWorkspace = (() => {
     fileTabs.openTab(filePath, displayName);
     fileTree.setActiveFile(filePath);
     showPreview(filePath);
+    // 打开文件后持久化标签页状态
+    _saveWorkspaceSession();
   }
 
   function handleTabSelect(filePath) {
@@ -285,6 +351,8 @@ const HippoWorkspace = (() => {
     if (fileTabs.count === 0) {
       hidePreview();
     }
+    // 关闭标签后持久化标签页状态
+    _saveWorkspaceSession();
   }
 
   // ========== 预览控制 ==========

@@ -24,6 +24,7 @@ import { generateSessionId } from './utils.js';
 import { renderMarkdown } from './markdown-renderer.js';
 import { SplashScreen } from './components/SplashScreen.js';
 import { RollbackPanel } from './components/RollbackPanel.js';
+import { initSelectionActions } from './components/selection-actions.js';
 
 // ========== 全局状态 ==========
 let currentSessionId = null;
@@ -113,6 +114,9 @@ function init() {
   // 7. 初始化文件变更监控
   fileChangeManager = new FileChangeManager();
   fileChangeManager.init();
+
+  // 7.1 初始化文本选中快捷操作
+  initSelectionActions();
   
   // 8. 绑定全局事件
   bindGlobalEvents();

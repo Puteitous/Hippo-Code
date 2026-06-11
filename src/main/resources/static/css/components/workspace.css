@@ -281,16 +281,44 @@
     flex-direction: column;
 }
 
+/* ── 行号 + 代码的滚动容器 ─────────────────── */
+.file-preview-code {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* 行号列 */
+.file-preview-code pre.file-preview-lines {
+    margin: 0;
+    padding: 20px 8px 20px 16px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-md);
+    line-height: 1.7;
+    color: var(--text-muted);
+    opacity: 0.45;
+    user-select: none;
+    text-align: right;
+    min-width: 32px;
+    flex: none;
+    flex-shrink: 0;
+    background: transparent !important;
+    border: none;
+    overflow: visible;
+}
+
+/* 代码列 */
 .file-preview-content pre {
     margin: 0;
-    padding: 20px 24px;
+    padding: 20px 24px 20px 12px;
     font-family: var(--font-mono);
     font-size: var(--font-size-md);
     line-height: 1.7;
     background: transparent !important;
-    overflow-y: auto;
+    overflow: visible;
     flex: 1;
-    min-height: 0;
+    min-width: 0;
 }
 
 .file-preview-content pre code {
@@ -302,6 +330,11 @@
 /* 覆盖 hljs 主题的 overflow-x: auto，避免其劫持垂直滚动 */
 .file-preview-content pre code.hljs {
     overflow: visible !important;
+}
+
+/* 暗色主题下行号稍微亮一点 */
+[data-theme="dark"] .file-preview-code pre.file-preview-lines {
+    opacity: 0.55;
 }
 
 /* ========== 侧栏视图切换 - 折叠/视图切换 ========== */

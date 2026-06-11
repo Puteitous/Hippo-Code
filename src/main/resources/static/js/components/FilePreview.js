@@ -76,8 +76,15 @@ export class FilePreview {
       highlighted = this._escapeHtml(content);
     }
 
+    // 生成行号（与代码行高严格对齐）
+    const lineCount = content.split('\n').length;
+    const lineNums = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+
     this._container.innerHTML = `
-      <pre><code class="hljs">${highlighted}</code></pre>`;
+      <div class="file-preview-code">
+        <pre class="file-preview-lines" aria-hidden="true">${lineNums}</pre>
+        <pre><code class="hljs">${highlighted}</code></pre>
+      </div>`;
   }
 
   _detectLanguage(filePath, content) {

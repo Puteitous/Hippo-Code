@@ -401,6 +401,29 @@
     border-color: rgba(153, 173, 204, 0.35);
 }
 
+/* ── 拖拽文件到输入框 ───────────────────────────── */
+#inputContainer.drag-over .input-inner {
+    border-color: var(--accent-color, #4d6b99);
+    box-shadow: 0 0 0 2px rgba(77, 107, 153, 0.15),
+                0 0 24px rgba(77, 107, 153, 0.08);
+}
+
+[data-theme="dark"] #inputContainer.drag-over .input-inner {
+    border-color: var(--accent-color, #7b9fcf);
+    box-shadow: 0 0 0 2px rgba(123, 159, 207, 0.2),
+                0 0 24px rgba(123, 159, 207, 0.1);
+}
+
+.empty-hero-input-area.drag-over .empty-hero-input {
+    border-color: var(--accent-color, #4d6b99);
+    box-shadow: 0 0 0 2px rgba(77, 107, 153, 0.15);
+}
+
+[data-theme="dark"] .empty-hero-input-area.drag-over .empty-hero-input {
+    border-color: var(--accent-color, #7b9fcf);
+    box-shadow: 0 0 0 2px rgba(123, 159, 207, 0.2);
+}
+
 .input-row {
     display: flex;
     align-items: center;
@@ -947,4 +970,52 @@
 .message-action-btn.rollback-btn.rolling {
     opacity: 0.5;
     pointer-events: none;
+}
+
+/* ── 文本选中快捷操作按钮 ──────────────────────────── */
+.selection-action-btn {
+    position: fixed;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    height: 32px;
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.06);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    transform: translateY(0);
+    line-height: 1;
+    font-family: inherit;
+}
+
+.selection-action-btn:hover {
+    background: var(--bg-code);
+    box-shadow: 0 3px 12px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+
+.selection-action-btn:active {
+    transform: translateY(0);
+}
+
+.selection-action-btn svg {
+    flex-shrink: 0;
+}
+
+[data-theme="dark"] .selection-action-btn {
+    background: var(--bg-app);
+    border-color: rgba(153, 173, 204, 0.25);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.15);
+}
+
+[data-theme="dark"] .selection-action-btn:hover {
+    background: var(--bg-code);
 }

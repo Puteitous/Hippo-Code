@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: rgb(32, 55, 99);
+  color: #fff;
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-app);
