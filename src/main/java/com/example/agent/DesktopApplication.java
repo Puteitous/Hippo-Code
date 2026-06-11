@@ -207,6 +207,25 @@ public final class DesktopApplication {
                 "", 0
             );
 
+            // 应用持久化的主题（覆盖 localStorage 默认值）
+            try {
+                Path themeFile = getThemeConfigPath();
+                if (Files.exists(themeFile)) {
+                    String savedTheme = Files.readString(themeFile).trim();
+                    if (savedTheme.equals("dark") || savedTheme.equals("light")) {
+                        browser.executeJavaScript(
+                            "try{localStorage.setItem('hippo-theme','" + savedTheme + "');" +
+                            "document.cookie='hippo-theme=" + savedTheme + ";path=/;max-age=2592000;SameSite=Lax';" +
+                            "}catch(e){}",
+                            "", 0
+                        );
+                        logger.info("已注入持久化主题: {}", savedTheme);
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("未找到持久化主题配置，使用默认主题", e);
+            }
+
         } catch (Exception e) {
             logger.error("JCEF 初始化失败", e);
             System.exit(1);
@@ -256,6 +275,10 @@ public final class DesktopApplication {
 
     private static void closeWindow() {
         mainFrame.dispatchEvent(new WindowEvent(mainFrame, WindowEvent.WINDOW_CLOSING));
+    }
+
+    private static Path getThemeConfigPath() {
+        return WorkspaceManager.getGlobalConfigDir().resolve("theme.txt");
     }
 
     private static void moveWindow(int x, int y) {
@@ -318,6 +341,12 @@ public final class DesktopApplication {
                     case "openDevTools":
                         handleOpenDevTools(browser, callback);
                         break;
+                    case "getTheme":
+                        handleGetTheme(callback);
+                        break;
+                    case "setTheme":
+                        handleSetTheme(json, callback);
+                        break;
                     // ===== 窗口控制 =====
                     case "windowMinimize":
                         SwingUtilities.invokeLater(DesktopApplication::minimizeWindow);
@@ -376,12 +405,12 @@ public final class DesktopApplication {
             CefBrowser devTools = browser.getDevTools();
             SwingUtilities.invokeLater(() -> {
                 try {
-                    JFrame devFrame = new JFrame("Hippo Code - DevTools");
-                    devFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-                    devFrame.setSize(960, 640);
-                    devFrame.setLocationRelativeTo(mainFrame);
-                    devFrame.add(devTools.getUIComponent(), BorderLayout.CENTER);
-                    devFrame.setVisible(true);
+                    JDialog devDialog = new JDialog(mainFrame, "Hippo Code - DevTools", false);
+                    devDialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+                    devDialog.setSize(960, 640);
+                    devDialog.setLocationRelativeTo(mainFrame);
+                    devDialog.add(devTools.getUIComponent(), BorderLayout.CENTER);
+                    devDialog.setVisible(true);
                     logger.info("DevTools 窗口已打开");
                     callback.success("{}");
                 } catch (Exception e) {
@@ -391,6 +420,41 @@ public final class DesktopApplication {
                     pendingCallbacks.remove(callback);
                 }
             });
+        }
+
+        private void handleGetTheme(CefQueryCallback callback) {
+            try {
+                Path file = getThemeConfigPath();
+                String theme = "light";
+                if (Files.exists(file)) {
+                    String saved = Files.readString(file).trim();
+                    if (saved.equals("dark") || saved.equals("light")) {
+                        theme = saved;
+                    }
+                }
+                callback.success(MAPPER.writeValueAsString(
+                        MAPPER.createObjectNode().put("theme", theme)));
+            } catch (Exception e) {
+                logger.error("读取主题配置失败", e);
+                callback.success("{\"theme\":\"light\"}");
+            }
+        }
+
+        private void handleSetTheme(JsonNode json, CefQueryCallback callback) {
+            try {
+                String theme = json.has("theme") ? json.get("theme").asText() : "light";
+                if (!theme.equals("dark") && !theme.equals("light")) {
+                    theme = "light";
+                }
+                Path file = getThemeConfigPath();
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, theme);
+                logger.info("主题配置已保存: {}", theme);
+                callback.success("{}");
+            } catch (Exception e) {
+                logger.error("保存主题配置失败", e);
+                callback.failure(500, e.getMessage());
+            }
         }
 
         private void handleReadDir(JsonNode json, CefQueryCallback callback) throws Exception {

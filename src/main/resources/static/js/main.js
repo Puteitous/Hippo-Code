@@ -218,6 +218,14 @@ function bindGlobalEvents() {
     elements.themeToggle.innerHTML = next === 'dark' ? ICON_SUN : ICON_MOON;
     applyHljsTheme(next);
   });
+
+  // 监听桌面端后端恢复的主题
+  window.addEventListener('theme-restored', (e) => {
+    const theme = e.detail.theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    elements.themeToggle.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON;
+    applyHljsTheme(theme);
+  });
   
   // 新建会话
   document.getElementById('sessionNewBtn')?.addEventListener('click', createNewSession);

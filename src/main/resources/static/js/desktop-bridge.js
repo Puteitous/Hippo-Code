@@ -204,6 +204,15 @@ const HippoDesktop = (() => {
       return send('openDevTools');
     },
 
+    // ===== 主题持久化 =====
+    getTheme() {
+      return send('getTheme').then(r => r && r.theme);
+    },
+
+    setTheme(theme) {
+      return send('setTheme', { theme });
+    },
+
     // ===== 窗口控制 =====
     minimizeWindow() {
       return send('windowMinimize');
