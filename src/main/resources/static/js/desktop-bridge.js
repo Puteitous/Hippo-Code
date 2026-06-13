@@ -143,11 +143,12 @@ const HippoDesktop = (() => {
           .catch(() => syncMaximizeState());
       });
 
-      // 双击标题栏切换最大化
-      const brand = document.querySelector('.header-brand');
-      if (brand) {
-        brand.addEventListener('dblclick', (e) => {
-          if (e.target.closest('button, .header-brand-icon')) return;
+      // 双击标题栏空白区域切换最大化
+      const header = document.querySelector('.header');
+      if (header) {
+        header.addEventListener('dblclick', (e) => {
+          // 排除按钮、窗口控件、下拉菜单等交互元素
+          if (e.target.closest('button, .window-controls, .header-folder-dropdown, .header-brand-icon')) return;
           if (maximizeBtn) {
             maximizeBtn.classList.toggle('is-maximized');
             maximizeBtn.title = maximizeBtn.classList.contains('is-maximized') ? '还原' : '最大化';
