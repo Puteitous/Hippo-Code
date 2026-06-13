@@ -279,62 +279,33 @@
     padding: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
-/* ── 行号 + 代码的滚动容器 ─────────────────── */
-.file-preview-code {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+/* ── CodeMirror 6 容器 ─────────────────── */
+.file-preview-content .cm-editor {
+    height: 100%;
 }
 
-/* 行号列 */
-.file-preview-code pre.file-preview-lines {
-    margin: 0;
-    padding: 20px 8px 20px 16px;
-    font-family: var(--font-mono);
-    font-size: var(--font-size-md);
+.file-preview-content .cm-editor .cm-scroller {
+    font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
+    font-size: var(--font-size-md, 14px);
     line-height: 1.7;
-    color: var(--text-muted);
-    opacity: 0.45;
-    user-select: none;
-    text-align: right;
-    min-width: 32px;
-    flex: none;
-    flex-shrink: 0;
-    background: transparent !important;
-    border: none;
-    overflow: visible;
 }
 
-/* 代码列 */
-.file-preview-content pre {
-    margin: 0;
-    padding: 20px 24px 20px 12px;
-    font-family: var(--font-mono);
-    font-size: var(--font-size-md);
-    line-height: 1.7;
-    background: transparent !important;
-    overflow: visible;
-    flex: 1;
-    min-width: 0;
+.file-preview-content .cm-editor.cm-focused {
+    outline: none;
 }
 
-.file-preview-content pre code {
-    font-family: inherit !important;
-    background: transparent !important;
-    padding: 0 !important;
+/* 只读模式下显示更柔和的背景 */
+.file-preview-content .cm-editor .cm-content {
+    padding: 20px 0;
 }
 
-/* 覆盖 hljs 主题的 overflow-x: auto，避免其劫持垂直滚动 */
-.file-preview-content pre code.hljs {
-    overflow: visible !important;
-}
-
-/* 暗色主题下行号稍微亮一点 */
-[data-theme="dark"] .file-preview-code pre.file-preview-lines {
-    opacity: 0.55;
+/* 暗色主题 CM6 */
+[data-theme="dark"] .file-preview-content .cm-editor .cm-gutters {
+    background: transparent;
+    border-right: 1px solid #2a2a2a;
 }
 
 /* ========== 侧栏视图切换 - 折叠/视图切换 ========== */
@@ -840,29 +811,12 @@
     color: #e0e0e0;
 }
 
-/* ========== 文件编辑区 ========== */
-
-.file-preview-textarea {
-    width: 100%;
-    height: 100%;
-    padding: 8px 12px;
-    border: none;
-    outline: none;
-    resize: none;
-    font-family: var(--font-mono, 'Consolas', 'Courier New', monospace);
-    font-size: var(--font-size-sm, 13px);
-    line-height: 1.6;
-    background: var(--bg-canvas, #fafafa);
-    color: var(--text-primary, #1a1a1a);
-    tab-size: 2;
-    white-space: pre;
-    overflow: auto;
-    box-sizing: border-box;
+.preview-btn.dirty {
+    color: var(--accent-color, #4a9eff) !important;
 }
 
-[data-theme="dark"] .file-preview-textarea {
-    background: #1e1e1e;
-    color: #d4d4d4;
+[data-theme="dark"] .preview-btn.dirty {
+    color: #6ab0ff !important;
 }
 
 /* ========== 标签 dirty 标记 ========== */

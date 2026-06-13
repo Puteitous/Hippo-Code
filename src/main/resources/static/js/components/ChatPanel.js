@@ -116,6 +116,15 @@ export class ChatPanel {
           this.sendMessage(content);
         }
       }
+      // Backspace 删除最后一个引用卡片（输入框为空或光标在开头时）
+      if (e.key === 'Backspace' && (input.value === '' || input.selectionStart === 0)) {
+        const refsBar = this._getActiveRefsBar();
+        if (refsBar && refsBar.children.length > 0) {
+          e.preventDefault();
+          refsBar.lastElementChild.remove();
+          if (refsBar.children.length === 0) refsBar.style.display = 'none';
+        }
+      }
     });
     
     this._inputResizeHandler = (e) => {
@@ -303,7 +312,7 @@ export class ChatPanel {
       const fileName = filePath.split('/').pop();
       const { iconFile } = getFileIconInfo(fileName, { isDirectory: options?.isDirectory });
       const hasLines = startLine != null && endLine != null;
-      chip.innerHTML = `<img src="icons/${iconFile}" class="input-ref-chip-icon" draggable="false"> <span class="input-ref-chip-text">${fileName}${hasLines ? `<span class="input-ref-chip-lines">:${startLine}-${endLine}</span>` : ''}</span>`;
+      chip.innerHTML = `<img src="icons/${iconFile}" class="input-ref-chip-icon" draggable="false"> <span class="input-ref-chip-text">${fileName}</span>${hasLines ? `<span class="input-ref-chip-lines">:${startLine}-${endLine}</span>` : ''}`;
       chip.title = hasLines ? `${filePath}:${startLine}-${endLine}` : filePath;
       chip.dataset.refType = 'file';
       chip.dataset.filePath = filePath;

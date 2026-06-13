@@ -29,27 +29,15 @@ const SELECTABLE_AREAS = [
 ];
 
 /**
- * 计算选区在代码元素中的起始/结束行号
+ * 计算选区在文件中的起始/结束行号（CM6 版本）
+ * @param {object} cmView - CM6 EditorView 实例
  * @param {Selection} selection
- * @param {HTMLElement} codeEl - <code> 元素
  * @returns {{ startLine: number, endLine: number }}
  */
-function calcLineNumbers(selection, codeEl) {
-  const range = selection.getRangeAt(0);
-
-  // 从 codeEl 开头到选区起点 → 数换行
-  const startRange = document.createRange();
-  startRange.selectNodeContents(codeEl);
-  startRange.setEnd(range.startContainer, range.startOffset);
-  const beforeText = startRange.toString();
-  const startLine = beforeText.split('\n').length;
-
-  // 选中文本中的换行数 → 计算结束行
-  const selectedText = range.toString();
-  const lineCount = selectedText.split('\n').length;
-  const endLine = startLine + lineCount - 1;
-
-  startRange.detach();
+function calcLineNumbers(cmView, selection) {
+  const sel = cmView.state.selection.main;
+  const startLine = cmView.state.doc.lineAt(sel.from).number;
+  const endLine = cmView.state.doc.lineAt(sel.to).number;
   return { startLine, endLine };
 }
 
@@ -88,9 +76,9 @@ export function initSelectionActions() {
         const previewContent = anchorEl?.closest?.('.file-preview-content');
         if (previewContent && selection.rangeCount > 0) {
           const filePath = previewContent.dataset.currentPath;
-          const codeEl = previewContent.querySelector('code');
-          if (filePath && codeEl) {
-            const { startLine, endLine } = calcLineNumbers(selection, codeEl);
+          const cmView = previewContent._cmPreviewView;
+          if (filePath && cmView) {
+            const { startLine, endLine } = calcLineNumbers(cmView, selection);
             EventBus.emit('selection:add-to-input', {
               text: `${filePath}:${startLine}-${endLine}`,
               refType: 'file',

@@ -526,17 +526,9 @@ const HippoWorkspace = (() => {
     hidePreview();
   });
 
-  // 编辑按钮
-  document.getElementById('previewEditBtn')?.addEventListener('click', () => {
-    filePreview.toggleEdit();
-  });
-
-  // Ctrl+E 切换编辑模式、Ctrl+S 保存（全局兜底）
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
-      e.preventDefault();
-      filePreview.toggleEdit();
-    }
+  // 保存按钮
+  document.getElementById('previewSaveBtn')?.addEventListener('click', () => {
+    filePreview.save();
   });
 
   // 聊天折叠
