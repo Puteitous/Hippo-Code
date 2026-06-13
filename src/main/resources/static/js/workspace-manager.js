@@ -65,6 +65,7 @@ const HippoWorkspace = (() => {
   const fileTree = new FileTree({
     container: els.fileTreeBody,
     onFileSelect: handleFileSelect,
+    onRefresh: _saveWorkspaceSession,
     onError: (err) => console.error('FileTree:', err),
   });
 

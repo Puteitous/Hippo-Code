@@ -368,6 +368,18 @@ public final class DesktopApplication {
                     case "setWorkspaceSession":
                         handleSetWorkspaceSession(json, callback);
                         break;
+                    case "createFile":
+                        handleCreateFile(json, callback);
+                        break;
+                    case "createDir":
+                        handleCreateDir(json, callback);
+                        break;
+                    case "rename":
+                        handleRename(json, callback);
+                        break;
+                    case "deleteFile":
+                        handleDeleteFile(json, callback);
+                        break;
                     case "showItemInFolder":
                         handleShowItemInFolder(json, callback);
                         break;
@@ -563,6 +575,94 @@ public final class DesktopApplication {
                 logger.error("打开文件所在目录失败", e);
                 callback.failure(500, e.getMessage());
             }
+        }
+
+        private void handleCreateFile(JsonNode json, CefQueryCallback callback) throws Exception {
+            String path = json.has("path") ? json.get("path").asText() : null;
+            if (path == null || path.isBlank()) {
+                callback.failure(400, "path is required");
+                return;
+            }
+            Path file = Paths.get(path);
+            if (Files.exists(file)) {
+                callback.failure(409, "File already exists: " + path);
+                return;
+            }
+            Files.createDirectories(file.getParent());
+            Files.createFile(file);
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("path", path);
+            callback.success(MAPPER.writeValueAsString(result));
+        }
+
+        private void handleCreateDir(JsonNode json, CefQueryCallback callback) throws Exception {
+            String path = json.has("path") ? json.get("path").asText() : null;
+            if (path == null || path.isBlank()) {
+                callback.failure(400, "path is required");
+                return;
+            }
+            Path dir = Paths.get(path);
+            if (Files.exists(dir)) {
+                callback.failure(409, "Directory already exists: " + path);
+                return;
+            }
+            Files.createDirectories(dir);
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("path", path);
+            callback.success(MAPPER.writeValueAsString(result));
+        }
+
+        private void handleRename(JsonNode json, CefQueryCallback callback) throws Exception {
+            String oldPath = json.has("oldPath") ? json.get("oldPath").asText() : null;
+            String newPath = json.has("newPath") ? json.get("newPath").asText() : null;
+            if (oldPath == null || oldPath.isBlank() || newPath == null || newPath.isBlank()) {
+                callback.failure(400, "oldPath and newPath are required");
+                return;
+            }
+            Path source = Paths.get(oldPath);
+            if (!Files.exists(source)) {
+                callback.failure(404, "Source not found: " + oldPath);
+                return;
+            }
+            Path target = Paths.get(newPath);
+            if (Files.exists(target)) {
+                callback.failure(409, "Target already exists: " + newPath);
+                return;
+            }
+            Files.createDirectories(target.getParent());
+            Files.move(source, target);
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("oldPath", oldPath);
+            result.put("newPath", newPath);
+            callback.success(MAPPER.writeValueAsString(result));
+        }
+
+        private void handleDeleteFile(JsonNode json, CefQueryCallback callback) throws Exception {
+            String path = json.has("path") ? json.get("path").asText() : null;
+            if (path == null || path.isBlank()) {
+                callback.failure(400, "path is required");
+                return;
+            }
+            Path target = Paths.get(path);
+            if (!Files.exists(target)) {
+                callback.failure(404, "Not found: " + path);
+                return;
+            }
+            if (Files.isDirectory(target)) {
+                // 只删除空目录，避免误删大量文件
+                try (var stream = Files.list(target)) {
+                    if (stream.findAny().isPresent()) {
+                        callback.failure(400, "Directory is not empty: " + path);
+                        return;
+                    }
+                }
+                Files.delete(target);
+            } else {
+                Files.delete(target);
+            }
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("path", path);
+            callback.success(MAPPER.writeValueAsString(result));
         }
 
         private void handleReadDir(JsonNode json, CefQueryCallback callback) throws Exception {

@@ -6,7 +6,8 @@
  *   2. 递归渲染树节点（文件夹可展开/收起）
  *   3. 点击文件触发 onFileSelect 回调
  *   4. 从后端拉取 git status 并标记文件状态
- *   5. 提供 refresh() 保留展开状态重新加载
+ *   5. 右键菜单：新建文件/文件夹、重命名、删除、复制路径等
+ *   6. 提供 refresh() 保留展开状态重新加载
  *
  * 依赖：
  *   - window.HippoDesktop（桌面端 bridge）
@@ -20,22 +21,32 @@ export class FileTree {
    * @param {Object} options
    * @param {HTMLElement} options.container - 渲染容器 (#fileTreeBody)
    * @param {Function} options.onFileSelect - (filePath: string) => void
+   * @param {Function} options.onRefresh - () => void 操作后刷新文件树
    * @param {Function} options.onError - (err: Error) => void
    */
-  constructor({ container, onFileSelect, onError }) {
+  constructor({ container, onFileSelect, onRefresh, onError }) {
     this._container = container;
     this._onFileSelect = onFileSelect || (() => {});
+    this._onRefresh = onRefresh || (() => {});
     this._onError = onError || (() => {});
     this._rootPath = null;
     this._expandedDirs = new Set();
     this._activeFilePath = null;
-    this._gitStatus = null; // { available: boolean, files: { [path]: 'M'|'A'|'D' } }
+    this._gitStatus = null;
     this._refreshDebounceTimer = null;
+
+    // 右键菜单
     this._contextMenuEl = this._createContextMenu();
-    // 全局关闭：点击其他位置或 Escape 关闭菜单
+    this._ctxTargetPath = null;
+    this._ctxIsDir = false;
+
+    // 模态弹窗
+    this._modalEl = this._createModal();
+    this._modalResolve = null;
+
+    // 全局事件
     this._contextMenuCloseHandler = (e) => {
       if (e.type === 'keydown' && e.key !== 'Escape') return;
-      // 点击菜单本身不关闭
       if (e.type === 'mousedown' && this._contextMenuEl.contains(e.target)) return;
       this._hideContextMenu();
     };
@@ -50,119 +61,17 @@ export class FileTree {
     if (this._contextMenuEl && this._contextMenuEl.parentNode) {
       this._contextMenuEl.parentNode.removeChild(this._contextMenuEl);
     }
+    if (this._modalEl && this._modalEl.parentNode) {
+      this._modalEl.parentNode.removeChild(this._modalEl);
+    }
     if (this._refreshDebounceTimer) {
       clearTimeout(this._refreshDebounceTimer);
     }
   }
 
-  // ========== 右键菜单 ==========
+  // ==================== 读取/加载 ====================
 
-  _createContextMenu() {
-    const el = document.createElement('div');
-    el.className = 'file-tree-context-menu';
-    el.innerHTML = `
-      <div class="file-tree-context-item" data-action="copy-absolute">
-        <span class="ctx-icon"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 2V1"/><path d="M10 2V1"/></svg></span>
-        <span class="ctx-label">复制绝对路径</span>
-      </div>
-      <div class="file-tree-context-item" data-action="copy-relative">
-        <span class="ctx-icon"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h7a2 2 0 0 1 2 2v7"/><path d="M2 5l3-3"/><path d="M2 5l3 3"/></svg></span>
-        <span class="ctx-label">复制相对路径</span>
-      </div>
-      <div class="file-tree-context-separator" data-action="sep1"></div>
-      <div class="file-tree-context-item" data-action="show-in-explorer">
-        <span class="ctx-icon"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h5l2 2h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z"/></svg></span>
-        <span class="ctx-label">在资源管理器中显示</span>
-      </div>
-    `;
-
-    el.addEventListener('click', (e) => {
-      const item = e.target.closest('.file-tree-context-item');
-      if (!item) return;
-      const action = item.dataset.action;
-      const targetPath = el._targetPath;
-      if (!targetPath) return;
-
-      if (action === 'copy-absolute') {
-        this._copyToClipboard(targetPath);
-        this._hideContextMenu();
-      } else if (action === 'copy-relative') {
-        const relative = this._rootPath && targetPath.startsWith(this._rootPath + '/')
-          ? targetPath.slice(this._rootPath.length + 1)
-          : targetPath;
-        this._copyToClipboard(relative);
-        this._hideContextMenu();
-      } else if (action === 'show-in-explorer') {
-        if (window.HippoDesktop?.showItemInFolder) {
-          window.HippoDesktop.showItemInFolder(targetPath).catch(() => {});
-        }
-        this._hideContextMenu();
-      }
-    });
-
-    document.body.appendChild(el);
-    return el;
-  }
-
-  _showContextMenu(e, filePath, isDir) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const el = this._contextMenuEl;
-    el._targetPath = filePath;
-
-    // 根据 node 类型调整菜单项可见性
-    const showInExplorer = el.querySelector('[data-action="show-in-explorer"]');
-    if (showInExplorer) {
-      showInExplorer.style.display = window.HippoDesktop?.showItemInFolder ? '' : 'none';
-    }
-    // 目录下分隔线也可能需要调整，这里保持简单
-
-    // 定位：确保菜单不超出视口
-    const menuW = 200;
-    const menuH = el.querySelectorAll('.file-tree-context-item, .file-tree-context-separator').length * 34 + 8;
-    let left = e.clientX;
-    let top = e.clientY;
-    if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8;
-    if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8;
-    if (left < 4) left = 4;
-    if (top < 4) top = 4;
-
-    el.style.left = left + 'px';
-    el.style.top = top + 'px';
-    el.classList.add('show');
-  }
-
-  _hideContextMenu() {
-    this._contextMenuEl.classList.remove('show');
-  }
-
-  _copyToClipboard(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).catch(() => {
-        this._fallbackCopy(text);
-      });
-    } else {
-      this._fallbackCopy(text);
-    }
-  }
-
-  _fallbackCopy(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } catch (e) {
-      console.error('复制失败:', e);
-    }
-    document.body.removeChild(textarea);
-  }
-
-  /** 设置根路径并加载（完整加载，清空展开状态） */
+  /** 设置根路径并加载 */
   async loadRoot(rootPath) {
     this._rootPath = rootPath.replace(/\\/g, '/').replace(/\/$/, '');
     this._expandedDirs.clear();
@@ -174,9 +83,7 @@ export class FileTree {
   }
 
   /**
-   * 刷新文件树（保留当前展开的目录 + 激活的文件）
-   * 在 AI 工具（write/edit/delete）执行后调用
-   * 带防抖：多次快速调用只执行最后一次
+   * 刷新文件树（保留展开 + 激活状态），外部调用 + 内部操作后自动调用
    */
   async refresh() {
     if (!this._rootPath) return;
@@ -195,8 +102,6 @@ export class FileTree {
     try {
       this._container.innerHTML = '';
       await this._renderTree(this._rootPath, this._container);
-      // 重新展开之前展开的目录 — 使用 nextElementSibling 查找 children 容器
-      // 避免 CSS.escape 兼容性问题或 + 相邻兄弟选择器的 DOM 结构敏感问题
       for (const dirPath of preservedDirs) {
         const nodeEl = this._findDirNode(dirPath);
         if (!nodeEl) continue;
@@ -218,25 +123,6 @@ export class FileTree {
     await this._fetchAndApplyGitStatus();
   }
 
-  /** 在容器中查找目录节点 */
-  _findDirNode(path) {
-    return this._container.querySelector(`.file-tree-node[data-is-dir][data-path="${this._escapeCss(path)}"]`);
-  }
-
-  /** 在容器中查找文件节点 */
-  _findFileNode(path) {
-    return this._container.querySelector(`.file-tree-node:not([data-is-dir])[data-path="${this._escapeCss(path)}"]`);
-  }
-
-  /** 安全地转义 CSS 选择器中的属性值 */
-  _escapeCss(value) {
-    if (typeof CSS !== 'undefined' && CSS.escape) {
-      return CSS.escape(value);
-    }
-    // CSS.escape polyfill（精简版）
-    return value.replace(/[!"#$%&'()*+,.\/:;<=>?@[\]^`{|}~ \\]/g, '\\$&');
-  }
-
   /** 清空文件树 */
   clear() {
     this._rootPath = null;
@@ -255,7 +141,368 @@ export class FileTree {
     }
   }
 
-  // ========== 内部：Git 状态 ==========
+  // ==================== 右键菜单 ====================
+
+  _createContextMenu() {
+    const el = document.createElement('div');
+    el.className = 'file-tree-context-menu';
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => {
+      const item = e.target.closest('.file-tree-context-item');
+      if (!item) return;
+      const action = item.dataset.action;
+      this._handleContextAction(action);
+      this._hideContextMenu();
+    });
+    return el;
+  }
+
+  _buildContextMenu(isDir) {
+    const items = [];
+    if (isDir) {
+      items.push(
+        { action: 'new-file', label: '新建文件', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-3-3z"/><line x1="8" y1="7" x2="8" y2="11"/><line x1="6" y1="9" x2="10" y2="9"/></svg>' },
+        { action: 'new-folder', label: '新建文件夹', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h5l2 2h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z"/><line x1="8" y1="8" x2="8" y2="12"/><line x1="6" y1="10" x2="10" y2="10"/></svg>' },
+        { separator: true }
+      );
+    }
+    items.push(
+      { action: 'copy-absolute', label: '复制绝对路径', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 2V1"/><path d="M10 2V1"/></svg>' },
+      { action: 'copy-relative', label: '复制相对路径', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h7a2 2 0 0 1 2 2v7"/><path d="M2 5l3-3"/><path d="M2 5l3 3"/></svg>' },
+      { separator: true },
+      { action: 'rename', label: '重命名', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3l9.5-9.5z"/></svg>' },
+      { action: 'delete', label: '删除', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12"/><path d="M5 4V2h6v2"/><path d="M3 4l1 10h8l1-10"/></svg>' }
+    );
+    if (window.HippoDesktop?.showItemInFolder) {
+      items.push(
+        { separator: true },
+        { action: 'show-in-explorer', label: '在资源管理器中显示', icon: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3.5h5l2 2h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z"/></svg>' }
+      );
+    }
+    return items.map(item => {
+      if (item.separator) return '<div class="file-tree-context-separator"></div>';
+      return `<div class="file-tree-context-item" data-action="${item.action}">
+        <span class="ctx-icon">${item.icon}</span>
+        <span class="ctx-label">${item.label}</span>
+      </div>`;
+    }).join('');
+  }
+
+  _showContextMenu(e, filePath, isDir) {
+    e.preventDefault();
+    e.stopPropagation();
+    this._ctxTargetPath = filePath;
+    this._ctxIsDir = isDir;
+
+    const el = this._contextMenuEl;
+    el.innerHTML = this._buildContextMenu(isDir);
+    el._targetPath = filePath;
+
+    const menuW = 210;
+    const itemCount = el.querySelectorAll('.file-tree-context-item').length;
+    const sepCount = el.querySelectorAll('.file-tree-context-separator').length;
+    const menuH = itemCount * 32 + sepCount * 1 + 8;
+    let left = e.clientX;
+    let top = e.clientY;
+    if (left + menuW > window.innerWidth) left = window.innerWidth - menuW - 8;
+    if (top + menuH > window.innerHeight) top = window.innerHeight - menuH - 8;
+    if (left < 4) left = 4;
+    if (top < 4) top = 4;
+
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.classList.add('show');
+  }
+
+  _hideContextMenu() {
+    this._contextMenuEl.classList.remove('show');
+    this._ctxTargetPath = null;
+  }
+
+  async _handleContextAction(action) {
+    const targetPath = this._ctxTargetPath;
+    if (!targetPath) return;
+
+    const api = window.HippoDesktop;
+
+    switch (action) {
+      case 'new-file':
+      case 'new-folder': {
+        const isFile = action === 'new-file';
+        const label = isFile ? '文件名' : '文件夹名';
+        const hint = isFile ? '例如: index.js' : '例如: my-folder';
+        const name = await this._showInputDialog({
+          title: isFile ? '新建文件' : '新建文件夹',
+          label,
+          hint,
+          placeholder: isFile ? 'index.js' : 'my-folder'
+        });
+        if (!name) return;
+        const newPath = targetPath + '/' + name;
+        try {
+          if (isFile) {
+            await api.createFile(newPath);
+          } else {
+            await api.createDir(newPath);
+          }
+          this._doRefresh();
+          this._onRefresh();
+        } catch (err) {
+          this._showToast('创建失败: ' + err.message);
+        }
+        break;
+      }
+      case 'rename': {
+        const oldName = targetPath.split('/').pop();
+        const newName = await this._showInputDialog({
+          title: '重命名',
+          label: '新名称',
+          value: oldName
+        });
+        if (!newName || newName === oldName) return;
+        const parentPath = targetPath.substring(0, targetPath.lastIndexOf('/'));
+        const newPath = parentPath + '/' + newName;
+        try {
+          await api.rename(targetPath, newPath);
+          this._doRefresh();
+          this._onRefresh();
+        } catch (err) {
+          this._showToast('重命名失败: ' + err.message);
+        }
+        break;
+      }
+      case 'delete': {
+        const type = this._ctxIsDir ? '文件夹' : '文件';
+        const name = targetPath.split('/').pop();
+        const confirmed = await this._showConfirmDialog({
+          title: '删除' + type,
+          message: `确定要删除 <strong>${name}</strong> 吗？`,
+          note: this._ctxIsDir ? '只能删除空文件夹' : undefined
+        });
+        if (!confirmed) return;
+        try {
+          await api.deleteFile(targetPath);
+          // 如果删除的是当前激活的文件，取消激活状态
+          if (targetPath === this._activeFilePath) {
+            this._activeFilePath = null;
+          }
+          this._doRefresh();
+          this._onRefresh();
+        } catch (err) {
+          this._showToast('删除失败: ' + err.message);
+        }
+        break;
+      }
+      case 'copy-absolute':
+        this._copyToClipboard(targetPath);
+        break;
+      case 'copy-relative': {
+        const relative = this._rootPath && targetPath.startsWith(this._rootPath + '/')
+          ? targetPath.slice(this._rootPath.length + 1)
+          : targetPath;
+        this._copyToClipboard(relative);
+        break;
+      }
+      case 'show-in-explorer':
+        if (api?.showItemInFolder) {
+          api.showItemInFolder(targetPath).catch(() => {});
+        }
+        break;
+    }
+  }
+
+  // ==================== 模态弹窗 ====================
+
+  _createModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'file-tree-modal-overlay';
+    overlay.style.display = 'none';
+    overlay.innerHTML = `
+      <div class="file-tree-modal">
+        <div class="file-tree-modal-header">
+          <span class="file-tree-modal-title"></span>
+        </div>
+        <div class="file-tree-modal-body">
+          <div class="file-tree-modal-message"></div>
+          <div class="file-tree-modal-input-wrap" style="display:none;">
+            <label class="file-tree-modal-input-label"></label>
+            <input class="file-tree-modal-input" type="text" spellcheck="false" autocomplete="off">
+            <span class="file-tree-modal-input-hint"></span>
+          </div>
+        </div>
+        <div class="file-tree-modal-footer">
+          <button class="file-tree-modal-btn file-tree-modal-btn-cancel">取消</button>
+          <button class="file-tree-modal-btn file-tree-modal-btn-confirm">确认</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  /**
+   * 显示输入弹窗（新建文件/文件夹、重命名）
+   * @returns {Promise<string|null>} 输入值，取消返回 null
+   */
+  _showInputDialog({ title, label, hint, placeholder, value }) {
+    return new Promise(resolve => {
+      const overlay = this._modalEl;
+      const titleEl = overlay.querySelector('.file-tree-modal-title');
+      const bodyEl = overlay.querySelector('.file-tree-modal-body');
+      const msgEl = overlay.querySelector('.file-tree-modal-message');
+      const inputWrap = overlay.querySelector('.file-tree-modal-input-wrap');
+      const inputLabel = overlay.querySelector('.file-tree-modal-input-label');
+      const inputEl = overlay.querySelector('.file-tree-modal-input');
+      const inputHint = overlay.querySelector('.file-tree-modal-input-hint');
+      const cancelBtn = overlay.querySelector('.file-tree-modal-btn-cancel');
+      const confirmBtn = overlay.querySelector('.file-tree-modal-btn-confirm');
+
+      // 配置
+      titleEl.textContent = title || '输入';
+      msgEl.textContent = '';
+      msgEl.style.display = 'none';
+      inputWrap.style.display = '';
+      inputLabel.textContent = label || '';
+      inputEl.value = value || '';
+      inputEl.placeholder = placeholder || '';
+      inputHint.textContent = hint || '';
+      confirmBtn.textContent = '确认';
+
+      // 聚焦并全选
+      setTimeout(() => {
+        inputEl.focus();
+        inputEl.select();
+      }, 50);
+
+      // 清理
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        cancelBtn.removeEventListener('click', onCancel);
+        confirmBtn.removeEventListener('click', onConfirm);
+        inputEl.removeEventListener('keydown', onKeydown);
+      };
+
+      const onCancel = () => { cleanup(); resolve(null); };
+      const onConfirm = () => {
+        const val = inputEl.value.trim();
+        if (!val) {
+          inputEl.classList.add('error');
+          inputEl.focus();
+          return;
+        }
+        cleanup();
+        resolve(val);
+      };
+      const onKeydown = (e) => {
+        if (e.key === 'Enter') onConfirm();
+        else if (e.key === 'Escape') onCancel();
+        else inputEl.classList.remove('error');
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      confirmBtn.addEventListener('click', onConfirm);
+      inputEl.addEventListener('keydown', onKeydown);
+
+      overlay.style.display = 'flex';
+      // 触发动画
+      requestAnimationFrame(() => overlay.classList.add('show'));
+    });
+  }
+
+  /**
+   * 显示确认弹窗（删除）
+   * @returns {Promise<boolean>}
+   */
+  _showConfirmDialog({ title, message, note }) {
+    return new Promise(resolve => {
+      const overlay = this._modalEl;
+      const titleEl = overlay.querySelector('.file-tree-modal-title');
+      const bodyEl = overlay.querySelector('.file-tree-modal-body');
+      const msgEl = overlay.querySelector('.file-tree-modal-message');
+      const inputWrap = overlay.querySelector('.file-tree-modal-input-wrap');
+      const cancelBtn = overlay.querySelector('.file-tree-modal-btn-cancel');
+      const confirmBtn = overlay.querySelector('.file-tree-modal-btn-confirm');
+
+      titleEl.textContent = title || '确认';
+      msgEl.style.display = '';
+      msgEl.innerHTML = message || '';
+      inputWrap.style.display = 'none';
+      confirmBtn.textContent = '删除';
+      confirmBtn.className = 'file-tree-modal-btn file-tree-modal-btn-confirm btn-danger';
+
+      const cleanup = () => {
+        overlay.style.display = 'none';
+        cancelBtn.removeEventListener('click', onCancel);
+        confirmBtn.removeEventListener('click', onConfirm);
+        document.removeEventListener('keydown', onKeydown);
+        confirmBtn.className = 'file-tree-modal-btn file-tree-modal-btn-confirm';
+      };
+
+      const onCancel = () => { cleanup(); resolve(false); };
+      const onConfirm = () => { cleanup(); resolve(true); };
+      const onKeydown = (e) => {
+        if (e.key === 'Enter') onConfirm();
+        else if (e.key === 'Escape') onCancel();
+      };
+
+      cancelBtn.addEventListener('click', onCancel);
+      confirmBtn.addEventListener('click', onConfirm);
+      document.addEventListener('keydown', onKeydown);
+
+      overlay.style.display = 'flex';
+      requestAnimationFrame(() => overlay.classList.add('show'));
+    });
+  }
+
+  _showToast(msg) {
+    const existing = document.querySelector('.file-tree-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'file-tree-toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, 2500);
+  }
+
+  // ==================== 辅助 ====================
+
+  _copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => this._fallbackCopy(text));
+    } else {
+      this._fallbackCopy(text);
+    }
+  }
+
+  _fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); } catch (e) { console.error('复制失败:', e); }
+    document.body.removeChild(textarea);
+  }
+
+  _findDirNode(path) {
+    return this._container.querySelector(`.file-tree-node[data-is-dir][data-path="${this._escapeCss(path)}"]`);
+  }
+
+  _findFileNode(path) {
+    return this._container.querySelector(`.file-tree-node:not([data-is-dir])[data-path="${this._escapeCss(path)}"]`);
+  }
+
+  _escapeCss(value) {
+    if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
+    return value.replace(/[!"#$%&'()*+,.\/:;<=>?@[\]^`{|}~ \\]/g, '\\$&');
+  }
+
+  // ==================== Git 状态 ====================
 
   async _fetchAndApplyGitStatus() {
     if (!this._rootPath) return;
@@ -265,7 +512,6 @@ export class FileTree {
       this._gitStatus = await resp.json();
       this._applyGitStatusClasses();
     } catch (e) {
-      // git 不可用时静默降级
       this._gitStatus = { available: false };
     }
   }
@@ -277,18 +523,14 @@ export class FileTree {
     const rootPath = this._rootPath ? this._rootPath.replace(/\\/g, '/').replace(/\/$/, '') : '';
     for (const node of nodes) {
       const filePath = node.dataset.path;
-      // 将绝对路径转为相对路径，匹配后端 git status 的 key
       let relativePath = filePath;
       if (rootPath && relativePath.startsWith(rootPath + '/')) {
         relativePath = relativePath.slice(rootPath.length + 1);
       }
       const status = files[relativePath];
-      // 清除旧状态
       node.classList.remove('status-modified', 'status-added', 'status-deleted');
-      // 移除旧 badge
       const oldBadge = node.querySelector('.file-tree-status-badge');
       if (oldBadge) oldBadge.remove();
-
       if (status === 'M') {
         node.classList.add('status-modified');
         const badge = document.createElement('span');
@@ -311,7 +553,7 @@ export class FileTree {
     }
   }
 
-  // ========== 内部：渲染 ==========
+  // ==================== 渲染 ====================
 
   async _renderTree(dirPath, parentEl) {
     let entries;
@@ -322,10 +564,8 @@ export class FileTree {
       this._onError(err);
       return;
     }
-
     if (!entries || !entries.entries) return;
 
-    // 排序：目录在前，文件在后，各自按字母排序
     const sorted = [...entries.entries].sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return a.name.localeCompare(b.name);
@@ -336,7 +576,6 @@ export class FileTree {
       const nodeEl = document.createElement('div');
       nodeEl.className = 'file-tree-node';
       nodeEl.dataset.path = fullPath;
-
       if (entry.isDirectory) {
         this._renderDirNode(entry, fullPath, nodeEl, parentEl);
       } else {
@@ -349,13 +588,11 @@ export class FileTree {
     nodeEl.dataset.isDir = 'true';
     const isExpanded = this._expandedDirs.has(fullPath);
 
-    // Toggle arrow
     const toggleEl = document.createElement('span');
     toggleEl.className = 'file-tree-toggle' + (isExpanded ? ' expanded' : '');
-    toggleEl.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 4 10 8 6 12"/></svg>';
+    toggleEl.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 4 10 8 6 12"/></svg>';
     nodeEl.appendChild(toggleEl);
 
-    // Folder icon
     const iconEl = document.createElement('span');
     iconEl.className = 'file-tree-icon folder';
     iconEl.innerHTML = isExpanded
@@ -368,12 +605,10 @@ export class FileTree {
     nameEl.textContent = entry.name;
     nodeEl.appendChild(nameEl);
 
-    // Children container
     const childrenEl = document.createElement('div');
     childrenEl.className = 'file-tree-children';
     childrenEl.style.display = isExpanded ? '' : 'none';
 
-    // Toggle expand/collapse
     const toggleDir = async () => {
       const expanded = this._expandedDirs.has(fullPath);
       if (expanded) {
@@ -401,7 +636,6 @@ export class FileTree {
       this._showContextMenu(e, fullPath, true);
     });
 
-    // 拖拽支持：从文件树拖文件夹到聊天输入框
     nodeEl.draggable = true;
     nodeEl.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', fullPath);
@@ -414,14 +648,12 @@ export class FileTree {
   }
 
   _renderFileNode(entry, fullPath, nodeEl, parentEl) {
-    // File node — no toggle arrow
     const spacer = document.createElement('span');
     spacer.className = 'file-tree-toggle';
     spacer.style.visibility = 'hidden';
     spacer.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 4 10 8 6 12"/></svg>';
     nodeEl.appendChild(spacer);
 
-    // File icon — Material Icon Theme SVG
     const { iconFile } = getFileIconInfo(entry.name);
     const iconEl = document.createElement('img');
     iconEl.className = 'file-tree-icon file';
@@ -436,15 +668,13 @@ export class FileTree {
     nameEl.textContent = entry.name;
     nodeEl.appendChild(nameEl);
 
-    // 拖拽支持：从文件树拖文件到聊天输入框
     nodeEl.draggable = true;
     nodeEl.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', fullPath);
       e.dataTransfer.setData('text/x-hippo-type', 'file');
       e.dataTransfer.effectAllowed = 'copy';
-      // 小拖拽图标
       const dragImg = document.createElement('span');
-      dragImg.textContent = '📄';
+      dragImg.textContent = '\uD83D\uDCC4';
       dragImg.style.position = 'absolute';
       dragImg.style.top = '-100px';
       document.body.appendChild(dragImg);

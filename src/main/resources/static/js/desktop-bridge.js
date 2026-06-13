@@ -248,6 +248,22 @@ const HippoDesktop = (() => {
       return send('showItemInFolder', { path });
     },
 
+    createFile(path) {
+      return send('createFile', { path });
+    },
+
+    createDir(path) {
+      return send('createDir', { path });
+    },
+
+    rename(oldPath, newPath) {
+      return send('rename', { oldPath, newPath });
+    },
+
+    deleteFile(path) {
+      return send('deleteFile', { path });
+    },
+
     // ===== 窗口控制 =====
     minimizeWindow() {
       return send('windowMinimize');
