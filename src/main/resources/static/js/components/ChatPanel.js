@@ -295,30 +295,41 @@ export class ChatPanel {
   }
   
   /**
-   * 获取合并后的输入内容：引用卡片（代码块） + textarea 文字
-   * 自动适配 hero / session 态
+   * 获取输入框中的用户键入文字（不再拼接引用卡片内容）
    */
   _getCombinedInput() {
-    const refsBar = this._getActiveRefsBar();
     const input = this._getActiveInput();
-    const typed = input?.value.trim() || '';
+    return input?.value.trim() || '';
+  }
 
-    const chips = refsBar ? [...refsBar.querySelectorAll('.input-ref-chip')] : [];
-    const refTexts = chips.map(c => {
+  /**
+   * 从引用卡片栏提取结构化 refs 数组
+   * @returns {Array<{type:'file'|'text', path:string|null, startLine:number|null, endLine:number|null, text:string|null}>}
+   */
+  _getRefs() {
+    const refsBar = this._getActiveRefsBar();
+    if (!refsBar) return [];
+    const chips = [...refsBar.querySelectorAll('.input-ref-chip')];
+    return chips.map(c => {
       if (c.dataset.refType === 'file' && c.dataset.filePath) {
-        const hasLines = c.dataset.startLine && c.dataset.endLine;
-        // 文件引用 → @path 或 @path:line-line 格式
-        return hasLines
-          ? `@${c.dataset.filePath}:${c.dataset.startLine}-${c.dataset.endLine}`
-          : `@${c.dataset.filePath}`;
+        return {
+          type: 'file',
+          path: c.dataset.filePath,
+          startLine: c.dataset.startLine ? Number(c.dataset.startLine) : null,
+          endLine: c.dataset.endLine ? Number(c.dataset.endLine) : null,
+          text: null
+        };
       }
-      // 纯文本 → 代码块
+      // 纯文本引用
       const full = c.title || c.textContent.replace('×', '').trim();
-      return '```\n' + full + '\n```';
+      return {
+        type: 'text',
+        path: null,
+        startLine: null,
+        endLine: null,
+        text: full
+      };
     });
-
-    if (refTexts.length === 0) return typed;
-    return refTexts.join('\n') + (typed ? '\n\n' + typed : '');
   }
 
   /**
@@ -423,6 +434,9 @@ export class ChatPanel {
 
     this._healStuckToolCards();
 
+    // 在清空之前提取当前引用的 refs（结构化数据传给后端）
+    const currentRefs = (!overrideContent && !editMessageId) ? this._getRefs() : [];
+
     if (!overrideContent && !editMessageId && this.elements.messageInput) {
       this.elements.messageInput.value = '';
       this.elements.messageInput.style.height = 'auto';
@@ -480,6 +494,7 @@ export class ChatPanel {
     await session.start({
       sessionId: appState.currentSessionId,
       content,
+      refs: currentRefs,
       signal: this.currentAbortController?.signal,
       systemPrompt: appState.getSystemPrompt(),
       editMessageId: editMessageId || null,

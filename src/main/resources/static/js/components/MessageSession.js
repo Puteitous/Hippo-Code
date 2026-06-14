@@ -254,7 +254,7 @@ export class MessageSession {
     });
   }
 
-  async start({ sessionId, content, signal, systemPrompt, editMessageId, useExecuteRequest, onMessageId, onRetry }) {
+  async start({ sessionId, content, refs, signal, systemPrompt, editMessageId, useExecuteRequest, onMessageId, onRetry }) {
     this._onMessageId = onMessageId || null;
 
     this._segments = [];
@@ -283,11 +283,11 @@ export class MessageSession {
     try {
       if (useExecuteRequest) {
         await this._chatService.executeRequest(
-          sessionId, content, chunkHandler, signal, null, null
+          sessionId, content, chunkHandler, signal, null, null, refs
         );
       } else {
         await this._chatService.sendMessage(
-          sessionId, content, chunkHandler, signal, systemPrompt, editMessageId || null
+          sessionId, content, chunkHandler, signal, systemPrompt, editMessageId || null, refs
         );
       }
 

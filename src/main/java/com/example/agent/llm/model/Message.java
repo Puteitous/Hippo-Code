@@ -35,6 +35,9 @@ public class Message {
     @JsonProperty("tool_success")
     private Boolean toolSuccess;
 
+    /** 用户消息附带的结构化引用列表 */
+    private List<Ref> refs;
+
     public Message() {
         this.id = java.util.UUID.randomUUID().toString();
     }
@@ -224,6 +227,14 @@ public class Message {
 
     public void setToolSuccess(Boolean toolSuccess) {
         this.toolSuccess = toolSuccess;
+    }
+
+    public List<Ref> getRefs() {
+        return refs;
+    }
+
+    public void setRefs(List<Ref> refs) {
+        this.refs = refs;
     }
 
     public boolean isToolSuccess() {
