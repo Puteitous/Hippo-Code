@@ -470,6 +470,19 @@
     cursor: default;
 }
 
+/* ── 可点击跳转的引用卡片 ─────────────────── */
+.input-ref-chip-navigable {
+    cursor: pointer !important;
+    transition: background var(--transition-fast);
+}
+.input-ref-chip-navigable:hover {
+    background: #e5e7eb;
+}
+
+[data-theme="dark"] .input-ref-chip-navigable:hover {
+    background: #37373f;
+}
+
 .input-ref-chip-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -569,6 +582,11 @@
     pointer-events: none;
     background: var(--bg-code);
     border-color: transparent;
+}
+
+.message.user .input-ref-chip-navigable {
+    cursor: pointer !important;
+    pointer-events: auto;
 }
 
 .message.user .input-ref-chip .input-ref-chip-close {

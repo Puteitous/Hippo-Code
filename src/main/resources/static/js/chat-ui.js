@@ -95,7 +95,7 @@ export class ChatUI {
       const refsBar = document.createElement('div');
       refsBar.className = 'message-user-refs';
       refs.forEach(ref => {
-        refsBar.appendChild(this._createRefChip(ref));
+        refsBar.appendChild(this._createRefChip(ref, true));
       });
       msgDiv.appendChild(refsBar);
     }
@@ -433,8 +433,10 @@ export class ChatUI {
 
   /**
    * 根据 ref 对象创建引用卡片 DOM
+   * @param {Object} ref - { type, path, startLine, endLine, text }
+   * @param {boolean} [navigable=false] - 是否可点击跳转（历史消息卡片）
    */
-  _createRefChip(ref) {
+  _createRefChip(ref, navigable = false) {
     const chip = document.createElement('span');
     chip.className = 'input-ref-chip';
     if (ref.type === 'file' && ref.path) {
@@ -443,13 +445,21 @@ export class ChatUI {
       const hasLines = ref.startLine != null && ref.endLine != null;
       chip.innerHTML = `<img src="icons/${iconFile}" class="input-ref-chip-icon" draggable="false"> <span class="input-ref-chip-text">${fileName}</span>${hasLines ? `<span class="input-ref-chip-lines">${ref.startLine}-${ref.endLine}</span>` : ''}`;
       chip.title = hasLines ? `${ref.path}:${ref.startLine}-${ref.endLine}` : ref.path;
+      if (navigable) {
+        chip.classList.add('input-ref-chip-navigable');
+        chip.dataset.filePath = ref.path;
+        chip.dataset.startLine = ref.startLine ?? '';
+        chip.dataset.endLine = ref.endLine ?? '';
+      }
     } else if (ref.type === 'text' && ref.text) {
       const textSpan = document.createElement('span');
       textSpan.className = 'input-ref-chip-text';
       textSpan.textContent = ref.text.length > 80 ? ref.text.slice(0, 80) + '…' : ref.text;
       chip.appendChild(textSpan);
     }
-    chip.style.pointerEvents = 'none';
+    if (!chip.classList.contains('input-ref-chip-navigable')) {
+      chip.style.pointerEvents = 'none';
+    }
     return chip;
   }
 

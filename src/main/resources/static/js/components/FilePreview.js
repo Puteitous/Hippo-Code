@@ -102,6 +102,40 @@ export class FilePreview {
     this._updateSaveBtn();
   }
 
+  /**
+   * 滚动到指定行并聚焦，可选选中范围并居中
+   * @param {number} line - 1-based 起始行号
+   * @param {number} [endLine] - 1-based 结束行号（可选），提供则选中起始到结束行范围
+   */
+  scrollToLine(line, endLine) {
+    if (!this._view) return;
+    const fromLine = Math.max(0, line - 1);
+    const docLine = this._view.state.doc.line(fromLine + 1);
+    if (!docLine) return;
+
+    let selection;
+    if (endLine && endLine > line) {
+      const toLine = Math.min(endLine, this._view.state.doc.lines);
+      const endDocLine = this._view.state.doc.line(toLine);
+      selection = { anchor: docLine.from, head: endDocLine.to };
+    } else {
+      selection = { anchor: docLine.from };
+    }
+
+    this._view.dispatch({ selection });
+
+    // 将目标行定位到视口上方约 1/4 处
+    requestAnimationFrame(() => {
+      const lineBlock = this._view.lineBlockAt(docLine.from);
+      if (lineBlock) {
+        const scrollDOM = this._view.scrollDOM;
+        scrollDOM.scrollTop = lineBlock.top - scrollDOM.clientHeight * 0.25;
+      }
+    });
+
+    this._view.focus();
+  }
+
   // ==================== CodeMirror ====================
 
   _initEditor(content, filePath) {

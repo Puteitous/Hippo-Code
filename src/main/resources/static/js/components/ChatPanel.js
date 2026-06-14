@@ -97,6 +97,17 @@ export class ChatPanel {
         if (input) input.focus();
       }
     });
+
+    // 引用卡片点击跳转（同时覆盖输入区和历史消息区的卡片）
+    document.addEventListener('click', (e) => {
+      const chip = e.target.closest('.input-ref-chip-navigable');
+      if (!chip) return;
+      const filePath = chip.dataset.filePath;
+      if (!filePath) return;
+      const startLine = chip.dataset.startLine ? parseInt(chip.dataset.startLine) : null;
+      const endLine = chip.dataset.endLine && chip.dataset.endLine !== 'undefined' ? parseInt(chip.dataset.endLine) : null;
+      window.HippoWorkspace?.navigateToFile?.(filePath, startLine, endLine);
+    });
   }
   
   bindEvents() {
@@ -302,9 +313,11 @@ export class ChatPanel {
     const chips = refsBar ? [...refsBar.querySelectorAll('.input-ref-chip')] : [];
     const refTexts = chips.map(c => {
       if (c.dataset.refType === 'file' && c.dataset.filePath) {
-        const hasLines = c.dataset.startLine && c.dataset.endLine;
+        const sl = c.dataset.startLine;
+        const el = c.dataset.endLine;
+        const hasLines = sl && el && sl !== 'undefined' && el !== 'undefined';
         return hasLines
-          ? `@${c.dataset.filePath}:${c.dataset.startLine}-${c.dataset.endLine}`
+          ? `@${c.dataset.filePath}:${sl}-${el}`
           : `@${c.dataset.filePath}`;
       }
       // 纯文本 → 代码块
@@ -337,8 +350,9 @@ export class ChatPanel {
       chip.title = hasLines ? `${filePath}:${startLine}-${endLine}` : filePath;
       chip.dataset.refType = 'file';
       chip.dataset.filePath = filePath;
-      chip.dataset.startLine = startLine;
-      chip.dataset.endLine = endLine;
+      if (startLine != null) chip.dataset.startLine = startLine;
+      if (endLine != null) chip.dataset.endLine = endLine;
+      chip.classList.add('input-ref-chip-navigable');
     } else {
       const textSpan = document.createElement('span');
       textSpan.className = 'input-ref-chip-text';
@@ -349,7 +363,8 @@ export class ChatPanel {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'input-ref-chip-close';
     closeBtn.innerHTML = '×';
-    closeBtn.addEventListener('click', () => {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       chip.remove();
       // 卡片清空后隐藏栏
       if (bar.children.length === 0) bar.style.display = 'none';
@@ -1441,7 +1456,7 @@ export class ChatPanel {
               const refsBar = document.createElement('div');
               refsBar.className = 'message-user-refs';
               refs.forEach(ref => {
-                refsBar.appendChild(this.chatUI._createRefChip(ref));
+                refsBar.appendChild(this.chatUI._createRefChip(ref, true));
               });
               userMsgDiv.appendChild(refsBar);
             }

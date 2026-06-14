@@ -340,6 +340,25 @@ const HippoWorkspace = (() => {
     renderRecentFolders() {
       _renderRecentFolders();
     },
+
+    /**
+     * 导航到文件（切换文件视图、打开文件、跳转行号）
+     * @param {string} filePath - 绝对或相对路径
+     * @param {number} [startLine] - 1-based 起始行号
+     * @param {number} [endLine] - 1-based 结束行号，提供则选中范围
+     */
+    navigateToFile(filePath, startLine, endLine) {
+      let absPath = filePath;
+      // 相对路径 → 拼接工作区根路径
+      if (absPath && !absPath.startsWith('/') && !absPath.match(/^[a-zA-Z]:/)) {
+        absPath = _currentRoot ? _currentRoot + '/' + absPath : absPath;
+      }
+      handleFileSelect(absPath);
+      if (startLine != null) {
+        // 等文件加载渲染完成后滚动到指定行
+        setTimeout(() => filePreview.scrollToLine(startLine, endLine), 100);
+      }
+    },
   };
 
   // ========== 侧栏视图切换 ==========
