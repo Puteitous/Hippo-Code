@@ -49,6 +49,7 @@ export function renderEditFileCard(tool) {
         </div>
         <div class="file-action-bar">
           <span class="file-action-status pending">${pendingSvg} 已生效</span>
+          <button class="file-action-btn view-btn">查看变更</button>
           <button class="file-action-btn undo-btn">撤销</button>
         </div>` : ''}
         ${isError && tool.error ? `<div class="editfile-error">${escapeHtml(tool.error)}</div>` : ''}

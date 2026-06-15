@@ -17,6 +17,9 @@ import {
   highlightActiveLine,
   rectangularSelection,
   crosshairCursor,
+  Decoration,
+  gutter,
+  GutterMarker,
 } from '@codemirror/view'
 
 // 从 @codemirror/state 引入
@@ -81,7 +84,11 @@ export {
   EditorView,
   keymap,
   EditorState,
+  StateField,
   Compartment,
+  Decoration,
+  gutter,
+  GutterMarker,
   search,
   searchKeymap,
   SearchQuery,

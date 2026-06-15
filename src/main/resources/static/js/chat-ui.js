@@ -289,6 +289,17 @@ export class ChatUI {
         this.handleUndo(card);
       });
     }
+
+    const viewBtn = card.querySelector('.view-btn');
+    if (viewBtn) {
+      viewBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const filePath = card.dataset.filePath;
+        if (filePath && window.HippoWorkspace?.navigateToFile) {
+          window.HippoWorkspace.navigateToFile(filePath);
+        }
+      });
+    }
   }
 
   async handleUndo(card) {

@@ -1002,6 +1002,25 @@
     transform: rotate(90deg);
 }
 
+/* ── Timeline 查看变更按钮 ── */
+.tool-timeline-view-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-primary);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    user-select: none;
+    transition: all var(--transition-fast);
+}
+
+.tool-timeline-view-btn:hover {
+    background: var(--hover-bg, rgba(128,128,128,0.1));
+}
+
 .tool-timeline-detail {
     max-height: 0;
     overflow: hidden;

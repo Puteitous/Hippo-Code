@@ -32908,10 +32908,13 @@ var basicSetup = (() => {
 })();
 export {
   Compartment,
+  Decoration,
   EditorState,
   EditorView,
+  GutterMarker,
   SearchCursor,
   SearchQuery,
+  StateField,
   basicSetup,
   closeSearchPanel,
   css,
@@ -32919,6 +32922,7 @@ export {
   findPrevious,
   getSearchQuery,
   go,
+  gutter,
   html,
   java,
   javascript,

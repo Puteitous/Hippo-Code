@@ -181,6 +181,16 @@ export function renderToolTimelineRow(tool) {
 
   const toolSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2a4 4 0 0 0-3.5 5.7L2 12.2 3.8 14l4.5-4.5A4 4 0 1 0 10 2z"/><line x1="10" y1="6" x2="12" y2="4"/></svg>';
 
+  // 查看变更按钮（edit_file/write_file 成功时显示）
+  let viewBtnHtml = '';
+  if (status === 'success' && (name === 'edit_file' || name === 'write_file')) {
+    const args = parseToolArgs(tool.args);
+    const fp = args.path || '';
+    if (fp) {
+      viewBtnHtml = `<span class="tool-timeline-view-btn" onclick="event.stopPropagation();window.HippoWorkspace?.navigateToFile('${escapeHtml(fp)}')">查看</span>`;
+    }
+  }
+
   return `
     <div class="tool-timeline-item" data-tool-name="${escapeHtml(name)}" data-tool-status="${status}">
       <div class="tool-timeline-row" onclick="window.toggleToolTimeline(this)">
@@ -188,6 +198,7 @@ export function renderToolTimelineRow(tool) {
         <span class="tool-timeline-name">${escapeHtml(name)}</span>
         <span class="tool-timeline-summary">${escapeHtml(truncateText(summary, 60))}</span>
         <span class="tool-timeline-status ${status}">${statusSvg}</span>
+        ${viewBtnHtml}
         <span class="tool-timeline-arrow">▶</span>
       </div>
       <div class="tool-timeline-detail">${detailHTML}</div>

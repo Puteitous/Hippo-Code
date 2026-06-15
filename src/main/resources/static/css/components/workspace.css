@@ -1335,3 +1335,27 @@
     color: var(--text-muted);
     font-size: var(--font-size-sm);
 }
+
+/* ══════════════════════════════════════════════════
+   Diff 标记（编辑器内联）
+   由 FilePreviewDiff.js 插件渲染
+   ══════════════════════════════════════════════════ */
+
+/* ── Diff 行背景色 + 左侧色条 ── */
+.cm-diff-line-added {
+    background: rgba(45, 164, 78, 0.08) !important;
+    border-left: 3px solid #2da44e !important;
+}
+
+.cm-diff-line-modified {
+    background: rgba(212, 148, 51, 0.08) !important;
+    border-left: 3px solid #d49433 !important;
+}
+
+[data-theme="dark"] .cm-diff-line-added {
+    background: rgba(45, 164, 78, 0.15) !important;
+}
+
+[data-theme="dark"] .cm-diff-line-modified {
+    background: rgba(212, 148, 51, 0.15) !important;
+}

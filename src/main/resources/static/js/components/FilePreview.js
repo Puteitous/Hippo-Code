@@ -14,6 +14,7 @@ import { EditorView, keymap, EditorState, Compartment, basicSetup, oneDark,
   rust, php, go, sass } from '../vendor/codemirror.js'
 import { SearchPanel } from './search-panel.js'
 import { renderMarkdown } from '../markdown-renderer.js'
+import { createDiffExtension } from './FilePreviewDiff.js'
 
 export class FilePreview {
   constructor({ container, onError, onDirtyChange }) {
@@ -36,6 +37,10 @@ export class FilePreview {
     this._mdPreviewEl = null;
     /** @private 当前编辑的图像内容（预览切换时重新渲染使用） */
     this._contentForPreview = '';
+    /** @private Compartment 用于动态切换 diff 扩展 */
+    this._diffCompartment = new Compartment();
+    /** @private AI 修改前的文件原始内容（用于 diff 对比） */
+    this._originalContent = null;
 
     // 绑定搜索按钮
     this._registerSearchButton();
@@ -90,6 +95,8 @@ export class FilePreview {
     this._mdPreviewMode = false;
     this._updateSaveBtn();
     this._updateMdToggleBtn();
+    // 异步获取原始内容用于 diff 标记（不影响打开速度）
+    this._fetchOriginalContent(filePath);
   }
 
   async reload() {
@@ -107,8 +114,15 @@ export class FilePreview {
       await window.HippoDesktop.writeFile(this._currentPath, content);
       this._content = content;
       this._dirty = false;
+      this._originalContent = null; // 保存后清空原始内容基准，diff 标记自动清除
       this._onDirtyChange(this._currentPath, false);
       this._updateSaveBtn();
+      // 重新配置 diff 扩展为空（清除 gutter 标记和行背景色）
+      if (this._view) {
+        this._view.dispatch({
+          effects: this._diffCompartment.reconfigure([]),
+        });
+      }
     } catch (err) {
       this._showError('保存失败: ' + err.message);
     }
@@ -119,6 +133,7 @@ export class FilePreview {
     this._currentPath = null;
     this._content = '';
     this._dirty = false;
+    this._originalContent = null;
     delete this._container.dataset.currentPath;
     this._updateSaveBtn();
   }
@@ -157,6 +172,29 @@ export class FilePreview {
     this._view.focus();
   }
 
+  /** @private 获取 AI 修改前的文件原始内容，用于 diff 标记 */
+  async _fetchOriginalContent(filePath) {
+    try {
+      const resp = await fetch(`/api/diff/original?path=${encodeURIComponent(filePath)}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.content === undefined || data.content === null) return;
+
+      this._originalContent = data.content;
+
+      // 激活 diff 扩展
+      if (this._view) {
+        this._view.dispatch({
+          effects: this._diffCompartment.reconfigure(
+            createDiffExtension(this._originalContent)
+          ),
+        });
+      }
+    } catch (e) {
+      console.debug('FilePreview: no original content for', filePath);
+    }
+  }
+
   // ==================== CodeMirror ====================
 
   _initEditor(content, filePath) {
@@ -176,6 +214,7 @@ export class FilePreview {
         basicSetup,
         lang,
         this._themeCompartment.of(isDark ? oneDark : []),
+        this._diffCompartment.of([]), // 暂不启用 diff，等 _fetchOriginalContent 完成后激活
         saveKeyBinding,
         EditorView.theme({
           '&': { height: '100%' },
