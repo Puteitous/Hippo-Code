@@ -19,6 +19,7 @@ export class RenderPipeline {
     this._pendingIsTextOnly = false;
     this._renderVersion = 0;
     this._renderScheduled = false;
+    this._flushing = false;
     this._destroyed = false;
   }
 
@@ -45,6 +46,11 @@ export class RenderPipeline {
   }
 
   scheduleRender(segments, currentText) {
+    // flush() 正在强制渲染期间，跳过 throttle 调度避免冲突
+    if (this._flushing) {
+      return;
+    }
+
     const fp = this._computeFingerprint(segments, currentText);
     if (!this._fingerprintChanged(fp)) {
       return;
@@ -76,9 +82,11 @@ export class RenderPipeline {
     if (segments) {
       this._pendingRender = { segments, currentText, _isTextOnly: false };
     }
-    if (this._renderScheduled) {
+    // 已有 flush 在执行中，只更新数据不触发渲染，doRender 结束后会自动处理新的 pendingRender
+    if (this._flushing) {
       return;
     }
+    // flush 是强制渲染，不检查 _renderScheduled
     if (this._renderThrottleTimer) {
       clearTimeout(this._renderThrottleTimer);
       this._renderThrottleTimer = null;
@@ -87,11 +95,17 @@ export class RenderPipeline {
       this._pendingRender._isTextOnly = false;
       this._lastRenderTime = Date.now();
       this._lastFingerprint = null; // flush 是强制渲染，跳过指纹去重
+      this._flushing = true; // 标记 flush 正在渲染，屏蔽并发的 scheduleRender 和 flush
       this.doRender();
     }
   }
 
   async renderFinal(segments, currentText) {
+    // flush 正在渲染中时，跳过 renderFinal，由 flush 结束后自动处理 pendingRender
+    if (this._flushing) {
+      this._pendingRender = { segments, currentText };
+      return;
+    }
     if (this._renderThrottleTimer) {
       clearTimeout(this._renderThrottleTimer);
       this._renderThrottleTimer = null;
@@ -115,8 +129,9 @@ export class RenderPipeline {
     if (_isTextOnly && this._streamingAnchor && this._streamingAnchor.isConnected &&
         this._lastSegmentCount === segments.length) {
       if (currentText) {
-        this._streamingAnchor.innerHTML = await renderMarkdown(currentText);
-        if (this._destroyed) return;
+        const md = await renderMarkdown(currentText);
+        if (this._destroyed || renderVersion !== this._renderVersion) return;
+        this._streamingAnchor.innerHTML = md;
       } else {
         this._streamingAnchor.innerHTML = '';
       }
@@ -220,6 +235,14 @@ export class RenderPipeline {
     });
 
     this._notifyAfterRender(container);
+
+    // 如果在渲染期间有新的 flush 数据到达（被 _flushing 拦截），立即处理下一批
+    if (this._pendingRender) {
+      this._flushing = false;
+      this.flush();
+    } else {
+      this._flushing = false;
+    }
   }
 
   _notifyAfterRender(container) {
