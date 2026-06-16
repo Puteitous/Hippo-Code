@@ -488,6 +488,14 @@ body.desktop-window {
     white-space: nowrap;
 }
 
+.chat-history-category {
+    padding: 5px 12px 3px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.3px;
+}
+
 .chat-history-empty {
     padding: 20px 12px;
     text-align: center;

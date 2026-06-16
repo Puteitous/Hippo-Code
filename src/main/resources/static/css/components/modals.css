@@ -559,6 +559,23 @@
     font-size: var(--font-size-md);
 }
 
+.diff-rollback-warning {
+    margin: 8px 12px;
+    padding: 8px 12px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    color: #664d03;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+
+[data-theme="dark"] .diff-rollback-warning {
+    background: #332b00;
+    border-color: #664d03;
+    color: #ffd970;
+}
+
 [data-theme="dark"] .diff-timeline {
     background: var(--bg-code);
 }

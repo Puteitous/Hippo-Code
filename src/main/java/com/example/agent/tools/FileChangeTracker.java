@@ -309,6 +309,17 @@ public class FileChangeTracker {
         changesBySession.clear();
     }
 
+    /**
+     * 删除指定会话的变更记录（内存），会话被删除时调用。
+     * 磁盘文件随会话目录一并删除，无需单独处理。
+     */
+    public static synchronized void removeSessionChanges(String sessionId) {
+        if (sessionId != null && !sessionId.isEmpty()) {
+            changesBySession.remove(sessionId);
+            logger.info("已清除会话变更记录: sessionId={}", sessionId);
+        }
+    }
+
     public static synchronized void clear() {
         clearSessionChanges();
         if (testBaseDir != null) {

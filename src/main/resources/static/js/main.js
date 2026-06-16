@@ -409,32 +409,63 @@ function updateHistoryDropdown() {
   if (!listEl) return;
 
   const sessions = sessionManager.sessions || [];
-  if (sessions.length === 0) {
+
+  // 处理虚拟会话（新建未持久化，仅在发送过消息后显示）
+  const currentInList = currentSessionId && sessions.some(s => s.id === currentSessionId);
+  const allSessions = [...sessions];
+  if (!currentInList && currentSessionId && sessionManager.sessionNames?.[currentSessionId]) {
+    allSessions.unshift({
+      id: currentSessionId,
+      createdAt: String(Date.now()),
+      _isVirtual: true
+    });
+  }
+
+  if (allSessions.length === 0) {
     listEl.innerHTML = '<div class="chat-history-empty">暂无历史会话</div>';
     return;
   }
 
   listEl.innerHTML = '';
   const fragment = document.createDocumentFragment();
+  const grouped = sessionManager.groupSessionsByTime(allSessions);
+  let totalCount = 0;
+  const MAX_ITEMS = 40;
 
-  for (const s of sessions.slice(0, 30)) {
-    const name = sessionManager.sessionNames?.[s.id] || s.title || ('会话 ' + s.id.replace('web-', '').slice(-6));
-    const item = document.createElement('div');
-    item.className = 'chat-history-item' + (s.id === currentSessionId ? ' active' : '');
+  for (const [category, categorySessions] of Object.entries(grouped)) {
+    if (categorySessions.length === 0) continue;
+    if (totalCount >= MAX_ITEMS) break;
 
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'history-item-name';
-    nameSpan.textContent = name;
+    const header = document.createElement('div');
+    header.className = 'chat-history-category';
+    header.textContent = category;
+    fragment.appendChild(header);
 
-    item.appendChild(nameSpan);
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      switchSession(s.id);
-      const dropdown = document.getElementById('chatHistoryDropdown');
-      if (dropdown) dropdown.style.display = 'none';
-    });
+    for (const s of categorySessions) {
+      if (totalCount >= MAX_ITEMS) break;
+      totalCount++;
 
-    fragment.appendChild(item);
+      const name = s._isVirtual
+        ? (sessionManager.sessionNames?.[currentSessionId] || ('会话 ' + currentSessionId.replace('web-', '').slice(-6)))
+        : (sessionManager.sessionNames?.[s.id] || s.title || ('会话 ' + s.id.replace('web-', '').slice(-6)));
+
+      const item = document.createElement('div');
+      item.className = 'chat-history-item' + (s.id === currentSessionId ? ' active' : '');
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'history-item-name';
+      nameSpan.textContent = name;
+      item.appendChild(nameSpan);
+
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchSession(s.id);
+        const dropdown = document.getElementById('chatHistoryDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+      });
+
+      fragment.appendChild(item);
+    }
   }
 
   listEl.appendChild(fragment);

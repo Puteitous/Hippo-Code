@@ -103,13 +103,18 @@ public class FileApiHandler implements HttpHandler {
 
         List<FileChangeTracker.FileChange> changes = FileChangeTracker.getAllChanges(filePath);
         if (changes.isEmpty()) {
-            sendJson(exchange, 200, objectMapper.writeValueAsString(Map.of("changes", List.of())));
+            Map<String, Object> emptyResponse = new HashMap<>();
+            emptyResponse.put("filePath", filePath);
+            emptyResponse.put("allChanges", List.of());
+            emptyResponse.put("targetIndex", -1);
+            sendJson(exchange, 200, objectMapper.writeValueAsString(emptyResponse));
             return;
         }
 
         if (allChanges) {
             List<Map<String, Object>> allChangesList = new ArrayList<>();
             int targetIndex = changes.size() - 1;
+            boolean toolCallIdMatched = false;
             for (int ci = 0; ci < changes.size(); ci++) {
                 FileChangeTracker.FileChange c = changes.get(ci);
                 Map<String, Object> changeItem = new HashMap<>();
@@ -123,8 +128,13 @@ public class FileApiHandler implements HttpHandler {
                 changeItem.put("wordDiff", buildWordDiffList(original, modified));
                 if (toolCallId != null && !toolCallId.isEmpty() && toolCallId.equals(c.toolCallId)) {
                     targetIndex = ci;
+                    toolCallIdMatched = true;
                 }
                 allChangesList.add(changeItem);
+            }
+            // toolCallId 传了但没找到 → 已被回滚，标记 -1 让前端降级
+            if (toolCallId != null && !toolCallId.isEmpty() && !toolCallIdMatched) {
+                targetIndex = -1;
             }
             Map<String, Object> response = new HashMap<>();
             response.put("filePath", filePath);

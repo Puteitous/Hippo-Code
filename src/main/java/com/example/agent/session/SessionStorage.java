@@ -1,5 +1,6 @@
 package com.example.agent.session;
 
+import com.example.agent.tools.FileChangeTracker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
@@ -307,6 +308,9 @@ public class SessionStorage {
         if (sessionId == null || sessionId.isEmpty()) {
             return false;
         }
+
+        // 清理 FileChangeTracker 内存缓存
+        FileChangeTracker.removeSessionChanges(sessionId);
 
         String safeSessionId = sanitizeSessionId(sessionId);
         Path sessionDir = getSessionDir(safeSessionId);

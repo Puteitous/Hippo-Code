@@ -144,6 +144,9 @@ public class SessionApiHandler implements HttpHandler {
         Conversation conversation = sessions.remove(sessionId);
         jsonlReader.removeFromCache(sessionId);
 
+        // 清理 FileChangeTracker 内存缓存
+        FileChangeTracker.removeSessionChanges(sessionId);
+
         // 调用 ConversationService.destroy 清理组件（参照 CLI 实现）
         if (conversation != null) {
             ConversationService conversationService = com.example.agent.core.di.ServiceLocator.getOrNull(ConversationService.class);

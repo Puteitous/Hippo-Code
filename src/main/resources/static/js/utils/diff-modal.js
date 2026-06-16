@@ -96,8 +96,27 @@ export class DiffModalManager {
       this.allChanges = data.allChanges || [];
       this.renderTimeline();
       if (this.allChanges.length > 0) {
-        const targetIndex = data.targetIndex != null ? data.targetIndex : this.allChanges.length - 1;
+        let targetIndex = data.targetIndex != null ? data.targetIndex : this.allChanges.length - 1;
+        if (targetIndex < 0) {
+          // 指定变更已被回滚，降级到最后一个
+          targetIndex = this.allChanges.length - 1;
+          this.showRollbackWarning();
+        }
         this.selectChange(targetIndex);
+      } else {
+        // 无变更记录
+        if (this.contentPanel) {
+          this.contentPanel.innerHTML = '';
+          if (toolCallId) {
+            this.showRollbackWarning();
+          }
+          const emptyDiv = document.createElement('div');
+          emptyDiv.className = 'diff-empty';
+          emptyDiv.textContent = toolCallId
+            ? '该变更已被回滚，暂无变更记录可查看'
+            : '无变更记录';
+          this.contentPanel.appendChild(emptyDiv);
+        }
       }
     } catch (e) {
       if (this.contentPanel) {
@@ -195,6 +214,16 @@ export class DiffModalManager {
     }
 
     this.contentPanel.scrollTop = 0;
+  }
+
+  showRollbackWarning() {
+    // 在内容面板顶部插入提示条
+    const warning = document.createElement('div');
+    warning.className = 'diff-rollback-warning';
+    warning.textContent = '此变更已被回滚，以下显示该文件当前最新的变更列表';
+    if (this.contentPanel) {
+      this.contentPanel.prepend(warning);
+    }
   }
 
   getToolLabel(toolName) {
