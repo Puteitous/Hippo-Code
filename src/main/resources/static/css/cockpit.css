@@ -477,8 +477,9 @@ body.desktop-window {
 }
 
 .chat-history-item.active {
-    color: var(--accent);
+    color: var(--text-primary);
     background: var(--bg-active);
+    font-weight: 600;
 }
 
 .chat-history-item .history-item-name {

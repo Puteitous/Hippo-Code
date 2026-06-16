@@ -12,6 +12,7 @@
  */
 
 import { ConfirmDialog } from '../utils/modal.js';
+import { getFileIconInfo } from '../utils/file-icons.js';
 
 export class FileTabs {
   /**
@@ -119,10 +120,14 @@ export class FileTabs {
     tabEl.className = 'file-tab';
     tabEl.dataset.path = filePath;
 
-    // Icon
-    const iconEl = document.createElement('span');
+    // Icon — 使用与文件树一致的 Material Icon Theme 图标
+    const fileName = displayName || this._getDisplayName(filePath);
+    const { iconFile } = getFileIconInfo(fileName);
+    const iconEl = document.createElement('img');
     iconEl.className = 'file-tab-icon';
-    iconEl.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5l-3-3.5z"/><path d="M10 1.5V5h3.5"/></svg>';
+    iconEl.src = 'icons/' + iconFile;
+    iconEl.draggable = false;
+    iconEl.alt = '';
     tabEl.appendChild(iconEl);
 
     // Name

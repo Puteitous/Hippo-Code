@@ -25,6 +25,8 @@
   --bg-sidebar:    #f8f9fa;
   --bg-chat:       #ffffff;
   --bg-code:       #f3f4f6;
+  --bg-hover:      #f0f1f3;
+  --bg-active:     #e5e7eb;
 
   --border:        #e5e7eb;
   --text-primary:  #111827;
@@ -105,6 +107,8 @@
   --bg-sidebar:    #212127;
   --bg-chat:       #1a1a20;
   --bg-code:       #2a2a32;
+  --bg-hover:      #2e2e36;
+  --bg-active:     #383840;
 
   --border:        #37373f;
   --text-primary:  #e8e8ee;

@@ -183,14 +183,7 @@
     flex-shrink: 0;
     width: 14px;
     height: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.file-tab-icon svg {
-    width: 13px;
-    height: 13px;
+    object-fit: contain;
 }
 
 .file-tab-name {
