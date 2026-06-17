@@ -13,9 +13,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Base64;
 
 /**
  * 文件系统操作 Bridge Handler — 处理前端发起的文件 CRUD 和目录浏览请求。
@@ -120,10 +122,11 @@ public class FileHandler extends CefMessageRouterHandlerAdapter {
             callback.failure(404, "File not found: " + path);
             return;
         }
-        String content = Files.readString(file);
+        byte[] bytes = Files.readAllBytes(file);
         ObjectNode result = MAPPER.createObjectNode();
         result.put("path", path);
-        result.put("content", content);
+        result.put("content", Base64.getEncoder().encodeToString(bytes));
+        result.put("encoding", "base64");
         callback.success(MAPPER.writeValueAsString(result));
     }
 
@@ -138,6 +141,14 @@ public class FileHandler extends CefMessageRouterHandlerAdapter {
             callback.failure(400, "content is required");
             return;
         }
+
+        // 解码 base64（对称于前端编码，确保增补字符/emoji 不损坏）
+        String encoding = json.has("encoding") ? json.get("encoding").asText() : "";
+        if ("base64".equals(encoding)) {
+            byte[] bytes = Base64.getDecoder().decode(content);
+            content = new String(bytes, StandardCharsets.UTF_8);
+        }
+
         Path file = Paths.get(path);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);

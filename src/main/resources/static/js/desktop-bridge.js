@@ -190,11 +190,26 @@ const HippoDesktop = (() => {
     },
 
     readFile(path) {
-      return send('readFile', { path });
+      return send('readFile', { path }).then(result => {
+        // JCEF bridge 对 U+10000 以上字符传输有 bug
+        // 使用 base64 绕过编码问题
+        if (result.encoding === 'base64') {
+          const binary = atob(result.content);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          result.content = new TextDecoder('utf-8').decode(bytes);
+        }
+        return result;
+      });
     },
 
     writeFile(path, content) {
-      return send('writeFile', { path, content });
+      // JCEF bridge 对 U+10000 以上字符传输有 bug，用 base64 绕过
+      const encoded = new TextEncoder().encode(content);
+      const base64 = btoa(String.fromCharCode(...encoded));
+      return send('writeFile', { path, content: base64, encoding: 'base64' });
     },
 
     openFileDialog() {
