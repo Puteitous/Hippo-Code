@@ -16,7 +16,7 @@ import { EditorView, keymap, EditorState, Compartment, basicSetup, oneDark,
 import { SearchPanel } from './search-panel.js'
 import { renderMarkdown } from '../markdown-renderer.js'
 import { createDiffExtension } from './FilePreviewDiff.js'
-import { BinaryPreview, isImageFile, isPdfFile, isSpreadsheetFile, isDocxFile } from './file-binary-preview.js'
+import { BinaryPreview, isImageFile, isPdfFile, isSpreadsheetFile, isDocxFile, isPptxFile } from './file-binary-preview.js'
 
 /**
  * 文本/代码文件 → CodeMirror 6 编辑器（可编辑，支持 Ctrl+S 保存）。
@@ -126,6 +126,16 @@ export class FilePreview {
       this._destroyEditor();
       this._binaryViewType = 'docx';
       this._binaryPreview.showDocx(filePath);
+      this._updateSaveBtn();
+      this._updateMdToggleBtn();
+      return;
+    }
+
+    // ── PPTX 文件 → 委托 BinaryPreview ──
+    if (isPptxFile(filePath)) {
+      this._destroyEditor();
+      this._binaryViewType = 'pptx';
+      this._binaryPreview.showPptx(filePath);
       this._updateSaveBtn();
       this._updateMdToggleBtn();
       return;

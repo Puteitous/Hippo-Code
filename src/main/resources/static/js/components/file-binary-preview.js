@@ -1,12 +1,15 @@
 /**
  * BinaryPreview — 二进制文件预览组件
  *
- * 负责图片/PDF、表格（XLSX/XLS/CSV）、DOCX 等二进制文件的只读预览。
+ * 负责图片/PDF、表格（XLSX/XLS/CSV）、DOCX、PPTX 等二进制文件的只读预览。
  * 被 FilePreview 委托调用。
  *
  * 依赖的外部库（通过 &lt;script&gt; 标签在 HTML 中加载）：
  *   - js/vendor/xlsx.js（SheetJS）
  *   - js/vendor/mammoth.js
+ *   - js/vendor/jszip.min.js（ZIP 解压，PPTX 依赖）
+ *   - js/vendor/chart.umd.min.js（Chart.js，PPTX 图表渲染）
+ *   - js/vendor/pptx-preview.js（PptxViewJS）
  */
 
 // ==================== 静态检测函数 ====================
@@ -29,6 +32,10 @@ export function isSpreadsheetFile(filePath) {
 
 export function isDocxFile(filePath) {
   return filePath && filePath.toLowerCase().endsWith('.docx');
+}
+
+export function isPptxFile(filePath) {
+  return filePath && filePath.toLowerCase().endsWith('.pptx');
 }
 
 // ==================== 工具函数 ====================
@@ -141,6 +148,12 @@ export class BinaryPreview {
     const img = viewport.querySelector('.img-zoomable');
     const levelEl = this._container.querySelector('.img-zoom-level');
     if (!img || !viewport) return;
+
+    // 清理之前的 ResizeObserver（防止泄漏）
+    if (viewport._imgResizeObserver) {
+      viewport._imgResizeObserver.disconnect();
+      delete viewport._imgResizeObserver;
+    }
 
     let scale = 1;
     let translateX = 0;
@@ -262,6 +275,13 @@ export class BinaryPreview {
         }
       });
     });
+
+    // 窗口缩放时重新自适应（使用 ResizeObserver）
+    const resizeObserver = new ResizeObserver(() => {
+      fitToViewport();
+    });
+    resizeObserver.observe(viewport);
+    viewport._imgResizeObserver = resizeObserver;
   }
 
   // ==================== 表格预览（XLSX / XLS / CSV）====================
@@ -456,6 +476,237 @@ export class BinaryPreview {
           <line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
         <p>文档解析失败: ${escapeHtml(err.message)}</p>
+      </div>`;
+      this._onError(err);
+    }
+  }
+
+  // ==================== PPTX 预览 ====================
+
+  /** 通过 PptxViewJS 将 PPTX 渲染为带翻页的幻灯片预览 */
+  async showPptx(filePath) {
+    const encodedPath = encodeURIComponent(filePath);
+    const url = `/api/file/raw?path=${encodedPath}`;
+
+    let _pptxScale = 1;
+    const MIN_SCALE = 0.25;
+    const MAX_SCALE = 4;
+    const ZOOM_STEP = 0.25;
+
+    const renderSlide = async (viewer, canvas, slideIndex, currentPageEl) => {
+      try {
+        await viewer.renderSlide(slideIndex, canvas);
+        if (currentPageEl) {
+          currentPageEl.textContent = `${slideIndex + 1} / ${totalSlides}`;
+        }
+      } catch (err) {
+        console.error('BinaryPreview: pptx render slide failed', slideIndex, err);
+      }
+    };
+
+    const applyZoom = (canvas, scaleEl) => {
+      const canvasEl = canvas;
+      canvasEl.style.transform = `scale(${_pptxScale})`;
+      if (scaleEl) {
+        scaleEl.textContent = `${Math.round(_pptxScale * 100)}%`;
+      }
+    };
+
+    let totalSlides = 1;
+    let currentSlideIndex = 0;
+    let viewer = null;
+
+    try {
+      // 加载状态
+      this._container.innerHTML = `<div class="file-binary-preview loading">加载 PPTX 文件中...</div>`;
+
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        await this._showHttpError(resp, filePath);
+        return;
+      }
+      const arrayBuffer = await resp.arrayBuffer();
+
+      // 初始化 PptxViewJS viewer
+      viewer = new PptxViewJS.PPTXViewer({});
+      await viewer.loadFile(new File([arrayBuffer], filePath.split('/').pop() || 'presentation.pptx'));
+
+      totalSlides = viewer.slideCount || 1;
+      currentSlideIndex = 0;
+      _pptxScale = 1;
+
+      // 构建 UI
+      const container = this._container;
+      container.innerHTML = '';
+
+      // 缩放工具栏
+      const zoomToolbar = document.createElement('div');
+      zoomToolbar.className = 'pptx-zoom-toolbar';
+      zoomToolbar.innerHTML = `
+        <button class="pptx-zoom-btn" data-action="zoom-out" title="缩小">−</button>
+        <span class="pptx-zoom-level">100%</span>
+        <button class="pptx-zoom-btn" data-action="zoom-in" title="放大">+</button>
+        <button class="pptx-zoom-btn pptx-zoom-reset" data-action="reset" title="重置">⟲</button>
+      `;
+      container.appendChild(zoomToolbar);
+
+      // 幻灯片容器
+      const slideWrap = document.createElement('div');
+      slideWrap.className = 'pptx-slide-container';
+      const canvas = document.createElement('canvas');
+      canvas.className = 'pptx-canvas';
+      slideWrap.appendChild(canvas);
+      container.appendChild(slideWrap);
+
+      // 自适应屏幕：根据容器尺寸设置 Canvas 分辨率（默认 16:9）
+      const fitCanvasToContainer = () => {
+        const wrapRect = slideWrap.getBoundingClientRect();
+        const availW = Math.max(200, wrapRect.width - 8);
+        const availH = Math.max(150, wrapRect.height - 8);
+        // PPT 标准宽高比 16:9
+        let w, h;
+        if (availW / availH > 16 / 9) {
+          h = availH;
+          w = h * 16 / 9;
+        } else {
+          w = availW;
+          h = w * 9 / 16;
+        }
+        // 使用 devicePixelRatio 保证高清显示
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        canvas.style.width = `${Math.round(w)}px`;
+        canvas.style.height = `${Math.round(h)}px`;
+      };
+      fitCanvasToContainer();
+
+      // 窗口 resize 时重新适配
+      const resizeObserver = new ResizeObserver(() => {
+        fitCanvasToContainer();
+        renderSlide(viewer, canvas, currentSlideIndex, currentPageEl);
+      });
+      resizeObserver.observe(slideWrap);
+
+      // 翻页导航 — 全部用字符串构建，避免 innerHTML += 导致引用失效
+      const navBar = document.createElement('div');
+      navBar.className = 'pptx-navbar';
+      navBar.innerHTML = `
+        <button class="pptx-nav-btn" data-action="prev" title="上一页 (←)">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="10 3 5 8 10 13"/>
+          </svg>
+          上一页
+        </button>
+        <span class="pptx-current-page">1 / ${totalSlides}</span>
+        <button class="pptx-nav-btn" data-action="next" title="下一页 (→)">
+          下一页
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 3 11 8 6 13"/>
+          </svg>
+        </button>
+      `;
+
+      // 单页 PPT 隐藏导航
+      if (totalSlides <= 1) {
+        navBar.style.display = 'none';
+      }
+
+      container.appendChild(navBar);
+
+      // 获取页码元素引用（字符串构建后 querySelector 获取有效的 DOM 引用）
+      const currentPageEl = navBar.querySelector('.pptx-current-page');
+      const zoomLevelEl = zoomToolbar.querySelector('.pptx-zoom-level');
+
+      // 渲染第一页
+      await renderSlide(viewer, canvas, 0, currentPageEl);
+
+      // ── 翻页事件 ──
+      navBar.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.pptx-nav-btn');
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        if (action === 'prev' && currentSlideIndex > 0) {
+          currentSlideIndex--;
+          await renderSlide(viewer, canvas, currentSlideIndex, currentPageEl);
+        } else if (action === 'next' && currentSlideIndex < totalSlides - 1) {
+          currentSlideIndex++;
+          await renderSlide(viewer, canvas, currentSlideIndex, currentPageEl);
+        }
+      });
+
+      // ── 缩放事件 ──
+      zoomToolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.pptx-zoom-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        if (action === 'zoom-in') {
+          _pptxScale = Math.min(MAX_SCALE, _pptxScale * (1 + ZOOM_STEP));
+        } else if (action === 'zoom-out') {
+          _pptxScale = Math.max(MIN_SCALE, _pptxScale * (1 - ZOOM_STEP));
+        } else if (action === 'reset') {
+          _pptxScale = 1;
+        }
+        applyZoom(canvas, zoomLevelEl);
+      });
+
+      // ── 滚轮缩放 ──
+      slideWrap.addEventListener('wheel', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -1 : 1;
+          const newScale = _pptxScale * (1 + delta * ZOOM_STEP);
+          _pptxScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+          applyZoom(canvas, zoomLevelEl);
+        }
+      }, { passive: false });
+
+      // ── 键盘快捷键 ← → ──
+      const keyHandler = (e) => {
+        if (e.key === 'ArrowLeft' && currentSlideIndex > 0) {
+          currentSlideIndex--;
+          renderSlide(viewer, canvas, currentSlideIndex, currentPageEl);
+        } else if (e.key === 'ArrowRight' && currentSlideIndex < totalSlides - 1) {
+          currentSlideIndex++;
+          renderSlide(viewer, canvas, currentSlideIndex, currentPageEl);
+        } else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+          e.preventDefault();
+          _pptxScale = Math.min(MAX_SCALE, _pptxScale * (1 + ZOOM_STEP));
+          applyZoom(canvas, zoomLevelEl);
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+          e.preventDefault();
+          _pptxScale = Math.max(MIN_SCALE, _pptxScale * (1 - ZOOM_STEP));
+          applyZoom(canvas, zoomLevelEl);
+        } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+          e.preventDefault();
+          _pptxScale = 1;
+          applyZoom(canvas, zoomLevelEl);
+        }
+      };
+      document.addEventListener('keydown', keyHandler);
+
+      // 清理
+      const cleanupObserver = new MutationObserver(() => {
+        if (!document.body.contains(container)) {
+          document.removeEventListener('keydown', keyHandler);
+          resizeObserver.disconnect();
+          cleanupObserver.disconnect();
+        }
+      });
+      cleanupObserver.observe(document.body, { childList: true, subtree: true });
+      canvas._pptxKeyHandler = keyHandler;
+      canvas._pptxCleanupObserver = cleanupObserver;
+
+    } catch (err) {
+      console.error('BinaryPreview: pptx parse failed', filePath, err);
+      this._container.innerHTML = `<div class="file-preview-placeholder">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <p>PPTX 解析失败: ${escapeHtml(err.message)}</p>
       </div>`;
       this._onError(err);
     }
