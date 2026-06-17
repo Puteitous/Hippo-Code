@@ -1,0 +1,318 @@
+/* ==========================================
+   预览面板专用样式
+   与 FilePreview.js 配合使用（图片/PDF/表格/DOCX）
+   ========================================== */
+
+/* ========== 二进制文件预览（图片 + PDF） ========== */
+
+.file-binary-preview {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.file-binary-preview.image {
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 20px;
+}
+
+.file-binary-preview.image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.file-binary-preview.pdf {
+  flex-direction: column;
+}
+
+.file-binary-preview.pdf iframe {
+  flex: 1;
+  border: none;
+  width: 100%;
+  height: 100%;
+}
+
+/* ========== 表格预览（XLSX / XLS / CSV） ========== */
+
+.file-spreadsheet-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* 顶部信息栏 */
+.spreadsheet-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  flex-shrink: 0;
+}
+
+.spreadsheet-info .file-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.spreadsheet-info .sheet-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Sheet 标签栏 */
+.spreadsheet-sheet-tabs {
+  display: flex;
+  overflow-x: auto;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  padding: 0 4px;
+}
+
+.sheet-tab {
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  user-select: none;
+  transition: color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.sheet-tab:hover {
+  color: var(--text-secondary);
+}
+
+.sheet-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: #007acc;
+}
+
+/* 顶部信息栏文件大小 */
+.spreadsheet-size {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+}
+
+.spreadsheet-size-warn {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--warning-text, #b8860b);
+  font-family: var(--font-mono, monospace);
+  cursor: help;
+}
+
+[data-theme="dark"] .spreadsheet-size-warn {
+  color: #d4a017;
+}
+
+/* 行数超限提示 */
+.spreadsheet-overflow-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  margin: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-code);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+
+/* 表格容器 */
+.spreadsheet-table-wrap {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.spreadsheet-table-wrap table {
+  border-collapse: collapse;
+  width: auto;
+  font-size: 13px;
+}
+
+.spreadsheet-table-wrap th,
+.spreadsheet-table-wrap td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  white-space: nowrap;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spreadsheet-table-wrap th {
+  background: var(--bg-sidebar);
+  font-weight: 600;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.spreadsheet-table-wrap td {
+  color: var(--text-primary);
+}
+
+.spreadsheet-table-wrap tr:nth-child(even) td {
+  background: var(--bg-code);
+}
+
+.spreadsheet-table-wrap .num-cell {
+  text-align: center;
+}
+
+.spreadsheet-table-wrap .text-cell {
+  text-align: left;
+}
+
+/* 空 sheet 提示 */
+.spreadsheet-empty {
+  padding: 40px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* ========== DOCX 文档预览 ========== */
+
+.file-docx-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.docx-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  flex-shrink: 0;
+}
+
+.docx-info .file-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.docx-info .docx-warning {
+  font-size: 12px;
+  cursor: help;
+}
+
+.docx-info .docx-warning.light {
+  color: #b8860b;
+}
+
+[data-theme="dark"] .docx-info .docx-warning.light {
+  color: #d4a017;
+}
+
+.docx-content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 30px 40px;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.docx-content h1 { font-size: 1.6em; margin: 0.6em 0 0.3em; }
+.docx-content h2 { font-size: 1.4em; margin: 0.5em 0 0.25em; }
+.docx-content h3 { font-size: 1.2em; margin: 0.4em 0 0.2em; }
+.docx-content p  { margin: 0.6em 0; }
+.docx-content ul,
+.docx-content ol { margin: 0.4em 0; padding-left: 2em; }
+.docx-content li { margin: 0.2em 0; }
+.docx-content blockquote {
+  border-left: 3px solid var(--accent);
+  margin: 0.6em 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  background: var(--bg-code);
+  border-radius: 0 4px 4px 0;
+}
+.docx-content table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  font-size: 0.9em;
+}
+.docx-content th,
+.docx-content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+}
+.docx-content th {
+  background: var(--bg-sidebar);
+  font-weight: 600;
+}
+.docx-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ========== 错误/占位预览 ========== */
+
+.file-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  color: var(--error-text);
+  padding: 40px;
+  text-align: center;
+}
+
+.file-preview-placeholder svg {
+  opacity: 0.6;
+}
+
+.file-preview-placeholder p {
+  font-size: 14px;
+  max-width: 400px;
+  word-break: break-word;
+}
+
+/* 错误提示中的"在文件管理器中查看"按钮 */
+.file-preview-open-folder-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.file-preview-open-folder-btn:hover {
+  background: var(--bg-code);
+  border-color: var(--accent);
+}
