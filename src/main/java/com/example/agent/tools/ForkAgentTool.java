@@ -25,10 +25,11 @@ public class ForkAgentTool implements ToolExecutor {
     public String getDescription() {
         String agentMenu = subAgentManager.getFullAgentMenu();
         
-        return "创建一个专家子 Agent 来执行独立的后台任务。这是降低 Token 成本的关键优化。\n\n" +
+        return "创建一个专家子 Agent 来执行独立的后台任务，适用于代码搜索分析、独立子任务、并行调研等场景。\n\n" +
                agentMenu + "\n" +
-               "子 Agent 拥有独立的上下文，可以并行执行代码搜索、分析、验证等任务。" +
-               "适用于可以并行化的独立子任务。推荐省略 subagent_type 使用缓存优化模式。";
+               "支持同步（wait_for_result=true，阻塞等待结果）和异步（默认，后台执行）两种模式。" +
+               "子 Agent 拥有独立上下文，不会污染主对话历史。推荐省略 subagent_type 使用缓存优化模式。\n\n" +
+               "⚠️ 约束：Sub-Agent 中禁止写文件、执行 bash 命令、ask_user 交互。简单的一两步任务直接用主 Agent 完成，无需创建子 Agent。默认超时 5 分钟。";
     }
 
     @Override

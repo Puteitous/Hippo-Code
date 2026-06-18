@@ -48,7 +48,7 @@ public class ClasspathPromptLoader implements PromptLoader {
         if (prompts.isEmpty()) {
             throw new IllegalStateException(
                 "No prompts loaded! Please check resources/prompts/prompts.yaml exists " +
-                "and base_chat.md / base_coding.md are properly configured"
+                "and the referenced prompt files (core/role.md, mode/coding.md, etc.) are properly configured"
             );
         }
 

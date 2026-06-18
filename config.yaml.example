@@ -40,6 +40,11 @@ tools:
     # Brave Search 免费注册: https://brave.com/search/api/（月 2,000 次）
     # Tavily 免费注册: https://tavily.com/（月 1,000 basic + 100 advanced）
 
+  subagent:
+    # Sub-Agent 并行任务（默认关闭，与 prompts.yaml 中 FEATURE_SUBAGENT 联动）
+    # 启用后注册 fork_agent / fork_agents / list_subagents / cancel_subagent 工具
+    enabled: false
+
 session:
   auto_save: true
   max_history: 50

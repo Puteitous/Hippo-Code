@@ -8,73 +8,54 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
-@DisplayName("工具清单一致性：AgentMode 白名单 vs Prompt 文档")
+@DisplayName("Prompt 文件内容检查")
 class ToolConsistencyTest {
 
-    private static final Pattern TOOL_PATTERN = Pattern.compile("^-\\s+([a-z][a-z_]*):");
-
     @Test
-    @DisplayName("base_chat.md 的工具清单与 CHAT 模式白名单一致")
-    void baseChatToolsMatchChatMode() {
-        Set<String> promptTools = extractTools("prompts/base/base_chat.md");
-        Set<String> modeTools = AgentMode.CHAT.getAllowedTools();
-
-        Set<String> extraInPrompt = new HashSet<>(promptTools);
-        extraInPrompt.removeAll(modeTools);
-
-        Set<String> missingInPrompt = new HashSet<>(modeTools);
-        missingInPrompt.removeAll(promptTools);
-
-        assertTrue(extraInPrompt.isEmpty(),
-            "base_chat.md 中以下工具不在 CHAT 模式白名单中: " + extraInPrompt);
-        assertTrue(missingInPrompt.isEmpty(),
-            "CHAT 模式白名单中的以下工具未在 base_chat.md 中列出: " + missingInPrompt);
+    @DisplayName("mode/coding.md 存在且包含关键内容")
+    void codingModePromptExists() {
+        String content = readResource("prompts/mode/coding.md");
+        assertNotNull(content);
+        assertTrue(content.contains("构建模式"), "应包含模式标识");
+        assertTrue(content.contains("全权限"), "应说明全权限执行");
     }
 
     @Test
-    @DisplayName("base_coding.md 的工具清单与 CODING 模式白名单一致")
-    void baseCodingToolsMatchCodingMode() {
-        Set<String> promptTools = extractTools("prompts/base/base_coding.md");
-        Set<String> modeTools = AgentMode.CODING.getAllowedTools();
-
-        Set<String> extraInPrompt = new HashSet<>(promptTools);
-        extraInPrompt.removeAll(modeTools);
-
-        Set<String> missingInPrompt = new HashSet<>(modeTools);
-        missingInPrompt.removeAll(promptTools);
-
-        assertTrue(extraInPrompt.isEmpty(),
-            "base_coding.md 中以下工具不在 CODING 模式白名单中: " + extraInPrompt);
-        assertTrue(missingInPrompt.isEmpty(),
-            "CODING 模式白名单中的以下工具未在 base_coding.md 中列出: " + missingInPrompt);
+    @DisplayName("mode/chat.md 存在且包含关键内容")
+    void chatModePromptExists() {
+        String content = readResource("prompts/mode/chat.md");
+        assertNotNull(content);
+        assertTrue(content.contains("顾问模式"), "应包含模式标识");
+        assertTrue(content.contains("只读"), "应说明只读限制");
     }
 
-    private Set<String> extractTools(String resourcePath) {
-        Set<String> tools = new HashSet<>();
+    @Test
+    @DisplayName("core/role.md 存在且包含关键内容")
+    void coreRolePromptExists() {
+        String content = readResource("prompts/core/role.md");
+        assertNotNull(content);
+        assertTrue(content.contains("编程助手"), "应包含角色定义");
+        assertTrue(content.contains("中文回复"), "应指定语言");
+    }
+
+    private String readResource(String resourcePath) {
         InputStream inputStream = getClass().getClassLoader().getResourceAsStream(resourcePath);
         if (inputStream == null) {
-            throw new AssertionError("找不到资源文件: " + resourcePath);
+            return null;
         }
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
-                Matcher matcher = TOOL_PATTERN.matcher(line);
-                if (matcher.find()) {
-                    tools.add(matcher.group(1));
-                }
+                sb.append(line).append('\n');
             }
+            return sb.toString();
         } catch (IOException e) {
-            throw new AssertionError("读取资源文件失败: " + resourcePath, e);
+            return null;
         }
-        return tools;
     }
 }

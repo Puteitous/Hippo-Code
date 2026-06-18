@@ -157,6 +157,10 @@
     word-break: break-word;
 }
 
+.message.user .message-content {
+    white-space: pre-wrap;
+}
+
 /* ========== 气泡外操作按钮 ========== */
 .message-actions {
     display: flex;

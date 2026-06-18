@@ -1,7 +1,6 @@
 package com.example.agent.prompt;
 
 import com.example.agent.prompt.model.Prompt;
-import com.example.agent.prompt.model.PromptType;
 import com.example.agent.prompt.model.TaskMode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,16 +23,27 @@ class PromptLibraryTest {
     void shouldInitializeSuccessfully() {
         Collection<Prompt> prompts = library.getAllPrompts();
         assertFalse(prompts.isEmpty());
-        System.out.println("Loaded " + prompts.size() + " prompts");
+        System.out.println("Loaded " + prompts.size() + " prompts:");
+        prompts.forEach(p -> System.out.println("  - " + p.getType() + " (priority=" + p.getPriority() + ", enabled=" + p.isEnabled() + ")"));
     }
 
     @Test
-    void shouldLoadBaseCodingPrompt() {
-        Prompt prompt = library.getBasePrompt(TaskMode.CODING);
+    void shouldBuildCodingModePrompt() {
+        String prompt = library.getBasePrompt(TaskMode.CODING);
         assertNotNull(prompt);
-        assertEquals(PromptType.BASE_CODING, prompt.getType());
-        assertTrue(prompt.getContent().length() > 0);
-        System.out.println("Base prompt tokens: " + prompt.getEstimatedTokens());
+        assertTrue(prompt.length() > 0);
+        assertTrue(prompt.contains("编程助手"));
+        assertTrue(prompt.contains("构建模式"));
+        System.out.println("Coding mode prompt length: " + prompt.length());
+    }
+
+    @Test
+    void shouldBuildChatModePrompt() {
+        String prompt = library.getBasePrompt(TaskMode.CHAT);
+        assertNotNull(prompt);
+        assertTrue(prompt.length() > 0);
+        assertTrue(prompt.contains("顾问模式"));
+        System.out.println("Chat mode prompt length: " + prompt.length());
     }
 
     @Test

@@ -22,8 +22,8 @@ public class ListSubAgentsTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        return "查询所有 Sub-Agent 子任务的执行状态和结果。可以查看正在执行的任务、已完成的任务、以及各任务的执行详情和结果摘要。" +
-               "适用于批量检查和管理子任务执行进度。";
+        return "查询所有 Sub-Agent 子任务的执行状态和结果。可以查看正在执行、已完成、失败等状态的任务，以及各任务的执行详情和结果摘要。" +
+               "适用于批量检查和管理子任务执行进度。配合 cancel_subagent 使用。";
     }
 
     @Override

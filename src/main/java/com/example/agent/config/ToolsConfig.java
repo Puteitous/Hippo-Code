@@ -16,6 +16,7 @@ public class ToolsConfig {
 
     private BashToolConfig bash = new BashToolConfig();
     private FileToolConfig file = new FileToolConfig();
+    private SubAgentToolConfig subagent = new SubAgentToolConfig();
 
     @JsonProperty("web_search")
     private WebSearchConfig webSearch = new WebSearchConfig();
@@ -193,11 +194,36 @@ public class ToolsConfig {
         this.file = file;
     }
 
+    public SubAgentToolConfig getSubagent() {
+        return subagent;
+    }
+
+    public void setSubagent(SubAgentToolConfig subagent) {
+        this.subagent = subagent;
+    }
+
+    public boolean isSubAgentEnabled() {
+        return subagent != null && subagent.isEnabled();
+    }
+
     public WebSearchConfig getWebSearch() {
         return webSearch;
     }
 
     public void setWebSearch(WebSearchConfig webSearch) {
         this.webSearch = webSearch;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SubAgentToolConfig {
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 }

@@ -92,11 +92,15 @@ public final class CoreModule {
         ServiceLocator.registerSingleton(com.example.agent.subagent.SubAgentManager.class, subAgentManager);
         logger.info("✅ [Level 3] 工具层: SubAgentManager");
 
-        toolRegistry.register(new ForkAgentTool(subAgentManager));
-        toolRegistry.register(new ForkAgentsTool(subAgentManager));
-        toolRegistry.register(new ListSubAgentsTool(subAgentManager));
-        toolRegistry.register(new CancelSubAgentTool(subAgentManager));
-        logger.info("✅ [Level 3] 工具层: 4 个 SubAgent 工具");
+        if (config.getTools().isSubAgentEnabled()) {
+            toolRegistry.register(new ForkAgentTool(subAgentManager));
+            toolRegistry.register(new ForkAgentsTool(subAgentManager));
+            toolRegistry.register(new ListSubAgentsTool(subAgentManager));
+            toolRegistry.register(new CancelSubAgentTool(subAgentManager));
+            logger.info("✅ [Level 3] 工具层: 4 个 SubAgent 工具");
+        } else {
+            logger.info("🔇 [Level 3] 工具层: SubAgent 工具已禁用");
+        }
 
         ConcurrentToolExecutor concurrentToolExecutor = new ConcurrentToolExecutor(toolRegistry, objectMapper);
         ServiceLocator.registerSingleton(ConcurrentToolExecutor.class, concurrentToolExecutor);

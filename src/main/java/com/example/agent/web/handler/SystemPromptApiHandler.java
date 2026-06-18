@@ -3,8 +3,6 @@ package com.example.agent.web.handler;
 import com.example.agent.core.di.ServiceLocator;
 import com.example.agent.prompt.PromptLibrary;
 import com.example.agent.prompt.PromptService;
-import com.example.agent.prompt.model.Prompt;
-import com.example.agent.prompt.model.PromptType;
 import com.example.agent.prompt.model.TaskMode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;

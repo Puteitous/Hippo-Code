@@ -23,12 +23,4 @@ public enum TaskMode {
     public String getDisplayName() {
         return displayName;
     }
-
-    public PromptType getDefaultBasePromptType() {
-        return switch (this) {
-            case CHAT -> PromptType.BASE_CHAT;
-            case RESEARCH -> PromptType.BASE_RESEARCH;
-            default -> PromptType.BASE_CODING;
-        };
-    }
 }

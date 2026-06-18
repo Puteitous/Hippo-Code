@@ -1,6 +1,5 @@
 package com.example.agent.prompt;
 
-import com.example.agent.prompt.model.Prompt;
 import com.example.agent.prompt.model.TaskMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,8 +40,7 @@ public class PromptService {
     }
 
     public String getBasePrompt(TaskMode mode) {
-        Prompt prompt = library.getBasePrompt(mode);
-        return prompt != null ? prompt.getContent() : library.getFallbackPrompt();
+        return library.getBasePrompt(mode);
     }
 
     public void setEnabled(boolean enabled) {

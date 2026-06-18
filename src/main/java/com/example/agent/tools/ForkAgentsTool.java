@@ -32,11 +32,12 @@ public class ForkAgentsTool implements ToolExecutor {
     public String getDescription() {
         String agentMenu = subAgentManager.getFullAgentMenu();
         
-        return "🚀 批量创建多个专家子 Agent 并行执行独立任务。这是极致的成本优化！\n\n" +
+        return "🚀 批量创建多个专家子 Agent 并行执行独立任务，适用于大规模并行代码分析、多文件读取、分模块扫描等场景。\n\n" +
                agentMenu + "\n" +
                "一次可以同时启动 2-10 个 Sub-Agent，各自执行不同的子任务。" +
-               "所有子 Agent 共享同一个 180K tokens 缓存前缀，边际成本近乎为零！\n" +
-               "适用于大规模并行代码分析、多文件读取、分模块扫描等场景。**推荐省略 subagent_type 以获得最大缓存收益！**";
+               "所有子 Agent 共享同一个 180K tokens 缓存前缀，边际成本近乎为零！\n\n" +
+               "支持通过 depends_on_index 声明任务依赖关系（DAG 执行），配合 wait_for_all 等待全部完成。\n\n" +
+               "⚠️ 约束：每个 Sub-Agent 中禁止写文件、执行 bash 命令、ask_user 交互。简单的一两步任务直接用主 Agent 完成。默认超时 5 分钟。";
     }
 
     @Override
