@@ -5,11 +5,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
-    <artifactId>Hippo-code</artifactId>
+    <artifactId>HippoBuddy</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Hippo code</name>
+    <name>HippoBuddy</name>
     <description>A simple command-line AI Agent</description>
 
     <properties>

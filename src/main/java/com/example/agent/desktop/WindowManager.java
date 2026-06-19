@@ -38,7 +38,7 @@ public class WindowManager {
      */
     public WindowManager(Runnable onWindowClosing) {
         this.onWindowClosing = onWindowClosing;
-        this.mainFrame = new JFrame("Hippo Code");
+        this.mainFrame = new JFrame("HippoBuddy");
         mainFrame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         mainFrame.setUndecorated(true);
         mainFrame.setBackground(new Color(0xED, 0xEF, 0xF2));

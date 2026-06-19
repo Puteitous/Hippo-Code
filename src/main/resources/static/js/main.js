@@ -513,7 +513,7 @@ async function switchSession(sessionId) {
       chatContainer.innerHTML = `
         <div class="empty-state">
           <div class="empty-hero-logo"><span class="hippo-char">🦛</span></div>
-          <h1 class="empty-hero-title">Hippo Code</h1>
+          <h1 class="empty-hero-title">HippoBuddy</h1>
           <p class="empty-hero-subtitle">你的 AI 编码助手</p>
           <div class="empty-hero-input-area">
             <div class="hero-input-wrapper">
@@ -560,7 +560,7 @@ async function switchSession(sessionId) {
     chatContainer.innerHTML = `
       <div class="empty-state">
         <div class="empty-hero-logo"><span class="hippo-char">🦛</span></div>
-        <h1 class="empty-hero-title">Hippo Code</h1>
+        <h1 class="empty-hero-title">HippoBuddy</h1>
         <p class="empty-hero-subtitle">你的 AI 编码助手</p>
         <div class="empty-hero-input-area">
           <div class="hero-input-wrapper">

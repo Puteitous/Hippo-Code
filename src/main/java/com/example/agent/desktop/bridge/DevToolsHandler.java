@@ -76,7 +76,7 @@ public class DevToolsHandler extends CefMessageRouterHandlerAdapter {
 
         SwingUtilities.invokeLater(() -> {
             try {
-                JDialog dialog = new JDialog(parentFrame, "Hippo Code - DevTools", false);
+                JDialog dialog = new JDialog(parentFrame, "HippoBuddy - DevTools", false);
                 // HIDE_ON_CLOSE 而非 DISPOSE_ON_CLOSE：关闭只隐藏，保留 CEF 浏览器实例
                 dialog.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
                 dialog.setSize(960, 640);

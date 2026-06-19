@@ -1,6 +1,6 @@
-<h1 align="center">🦛 Hippo Code</h1>
+<h1 align="center">🦛 HippoBuddy</h1>
 
-<p align="center">Java 21 AI Coding Assistant · Multi-LLM · DAG Orchestration · Multi-Agent Parallelism</p>
+<p align="center">Native Desktop · Multi-Tab Workspace · AI Desktop Buddy</p>
 
 <p align="center">
   <a href="../README.md">简体中文</a> ｜ English
@@ -9,32 +9,42 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white" alt="Java 21">
   <img src="https://img.shields.io/badge/Maven-3.9-C71A36?logo=apache-maven&logoColor=white" alt="Maven">
-  <img src="https://img.shields.io/github/actions/workflow/status/Puteitous/Hippo-Code/ci.yml?branch=main&label=CI&logo=github" alt="CI">
-  <img src="https://img.shields.io/github/v/release/Puteitous/Hippo-Code?logo=github" alt="Release">
-  <img src="https://img.shields.io/github/stars/Puteitous/Hippo-Code?style=flat&logo=github" alt="Stars">
+  <img src="https://img.shields.io/github/v/release/Puteitous/HippoBuddy?logo=github" alt="Release">
+  <img src="https://img.shields.io/github/stars/Puteitous/HippoBuddy?style=flat&logo=github" alt="Stars">
   <img src="https://img.shields.io/badge/license-MIT-555555" alt="License">
-  <img src="https://img.shields.io/badge/platform-CLI%20%7C%20Web%20%7C%20Desktop-555555" alt="Platform">
-  <img src="https://img.shields.io/github/last-commit/Puteitous/Hippo-Code" alt="Last Commit">
+  <img src="https://img.shields.io/badge/platform-Desktop%20%7C%20Web%20%7C%20CLI-555555" alt="Platform">
+  <img src="https://img.shields.io/github/last-commit/Puteitous/HippoBuddy" alt="Last Commit">
 </p>
 
 <p align="center">
-  <img src="../image-1.png" alt="Hippo Code Screenshot" width="420">
-  <img src="../image.png" alt="Hippo Code Screenshot" width="420">
+  <img src="../image-1.png" alt="HippoBuddy Screenshot" width="420">
+  <img src="../image.png" alt="HippoBuddy Screenshot" width="420">
 </p>
 
-Hippo Code is a Java 21-based AI coding assistant that supports multiple LLM providers, multi-agent parallel execution, and MCP/LSP protocol integration. It runs in three modes: terminal CLI, Web Dashboard, and Desktop window.
+HippoBuddy is a **workspace-centric** AI desktop buddy. Open a folder and collaborate with an Agent to write code, edit files, run scripts, organize documents, and analyze projects. Supports DeepSeek / Claude / GPT and other mainstream models. All data stays local.
+
+> Not an IDE. Not an automation bot. It's the buddy at your desk working with you.
 
 ---
 
-## Features
+## What It Can Do
 
-- **DAG Task Orchestration** — Auto-analyze tool dependencies, hybrid parallel/sequential execution
-- **Multi-Agent System** — Main Agent decomposes tasks, sub-agents execute independently in parallel
-- **10+ Security Interceptors** — Dangerous command whitelist, concurrent edit detection, Diff confirmation, and more
-- **Long-Term Memory** — Auto-extract key information during conversations, cross-session knowledge association
-- **MCP / LSP Protocols** — Dynamic tool registration, code navigation (go-to-definition/references/hover)
-- **Multi-LLM Providers** — Unified interface for OpenAI / Ollama / DashScope
-- **Three Runtimes** — Terminal CLI / Web Dashboard / Desktop Window
+- **Code with AI** — Agent understands your project context, generates, modifies, and refactors code
+- **File Operations** — Read, write, edit, delete files with rollback and diff review
+- **Run Commands** — Execute shell commands in the terminal, view output, iterate
+- **Read Documents** — Preview Markdown, Word, Excel, PDF and more
+- **Analyze Projects** — Understand project structure, suggest architecture, generate docs
+- **Remember Across Sessions** — Long-term memory, auto-extracts key information
+
+## Key Features
+
+- **Multi-Tab Workspace** — File preview, chat, and tool panels coexist independently
+- **Multi-Model Switching** — DeepSeek / Claude / GPT / Ollama local models, no vendor lock-in
+- **Interactive Collaboration** — Watch the Agent work, intervene anytime, not a black box
+- **Visible File Changes** — Every modification is diff-able, revertible, reviewable
+- **Secure by Design** — Confirmation dialogs for risky operations, concurrent edit detection, sandbox
+- **Desktop Native** — Local filesystem access, frameless window, drag-and-drop
+- **Three Runtimes** — Desktop window / Web Dashboard / Terminal CLI share the same core
 
 ---
 

@@ -13,9 +13,26 @@ public class WorkspaceManager {
     
     private static final Logger logger = LoggerFactory.getLogger(WorkspaceManager.class);
     
-    private static Path HIPPO_ROOT = Paths.get(".hippo");
+    private static Path HIPPO_ROOT = determineHippoRoot();
     private static String CURRENT_PROJECT_KEY = sanitizePath(getCurrentWorkingDir());
     
+    /**
+     * 确定 Hippo 数据根目录。
+     * <p>
+     * 优先级：
+     * <ol>
+     *   <li>系统属性 {@code hippo.data.dir} — 桌面端由 {@code DesktopApplication} 自动设置</li>
+     *   <li>默认：当前工作目录下的 {@code .hippo} — CLI 端行为不变</li>
+     * </ol>
+     */
+    private static Path determineHippoRoot() {
+        String dataDir = System.getProperty("hippo.data.dir");
+        if (dataDir != null && !dataDir.isBlank()) {
+            return Paths.get(dataDir).toAbsolutePath();
+        }
+        return Paths.get(".hippo").toAbsolutePath();
+    }
+
     public static void overrideBasePath(Path basePath) {
         HIPPO_ROOT = basePath.resolve(".hippo");
         // 重新计算 project key，因为临时目录的 path 可能不同

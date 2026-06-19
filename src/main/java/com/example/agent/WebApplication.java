@@ -63,7 +63,7 @@ public final class WebApplication {
         final int port = portArg > 0 ? portArg : config.getWeb().getPort();
 
         logger.info("========================================");
-        logger.info("  Hippo Code Web 服务启动");
+        logger.info("  HippoBuddy Web 服务启动");
         logger.info("  端口: {}", port);
         logger.info("========================================");
 

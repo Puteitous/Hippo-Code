@@ -14,7 +14,7 @@ public class ConsolidationPromptBuilder {
     private static final String DREAM_PROMPT_TEMPLATE = """
         # Dream: Memory Consolidation
 
-        你是 Hippo Code 的记忆整合专家。你的任务是将单会话的、过程性的 Session Memory
+        你是 HippoBuddy 的记忆整合专家。你的任务是将单会话的、过程性的 Session Memory
         提炼为跨会话的、结构化的长期记忆。
 
         ## 🎯 核心原则

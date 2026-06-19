@@ -23,7 +23,7 @@ public class AgentUi {
     }
 
     public void updateTerminalTitle(AgentMode mode) {
-        String title = String.format("[%s %s] Hippo Code", mode.getIcon(), mode.getDisplayName());
+        String title = String.format("[%s %s] HippoBuddy", mode.getIcon(), mode.getDisplayName());
         terminal.writer().print("\033]0;" + title + "\007");
         terminal.writer().flush();
     }
@@ -31,7 +31,7 @@ public class AgentUi {
     public void printWelcome() {
         println();
         println(ConsoleStyle.boldCyan("╔═════════════════════════════════════════════╗"));
-        println(ConsoleStyle.boldCyan("║       Hippo Code - AI 编程助手               ║"));
+        println(ConsoleStyle.boldCyan("║       HippoBuddy - AI 编程助手               ║"));
         println(ConsoleStyle.boldCyan("╚═════════════════════════════════════════════╝"));
         println();
         printModeInfo(AgentMode.CODING);

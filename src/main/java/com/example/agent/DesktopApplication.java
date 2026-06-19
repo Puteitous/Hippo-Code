@@ -79,8 +79,11 @@ public final class DesktopApplication {
     }
 
     public static void main(String[] args) {
+        // 0. 设置桌面端数据目录（在引用 WorkspaceManager 之前）
+        initDataDir();
+
         logger.info("========================================");
-        logger.info("  Hippo Code Desktop 启动");
+        logger.info("  HippoBuddy Desktop 启动");
         logger.info("========================================");
 
         // 0. 启动前清理上次残留的 jcef_helper 进程
@@ -113,6 +116,41 @@ public final class DesktopApplication {
                 });
         // main() 在此自然结束，但 JVM 由 Swing EDT / JCEF 非守护线程保活，
         // 不会退出。窗口关闭时由回调中的 System.exit(0) 终止。
+    }
+
+    /**
+     * 初始化桌面端数据目录。
+     * <p>
+     * 优先级（高 → 低）：
+     * <ol>
+     *   <li>JVM 参数 {@code -Dhippo.data.dir=...}（用户手工指定）</li>
+     *   <li>操作系统用户数据目录（自动检测）</li>
+     * </ol>
+     * <p>
+     * 该方法必须在任何引用 {@code WorkspaceManager} 的代码之前调用，
+     * 因为在类加载期间 {@code WorkspaceManager} 会读取 {@code hippo.data.dir} 系统属性。
+     */
+    private static void initDataDir() {
+        // 如果已通过 JVM 参数指定，不覆盖
+        if (System.getProperty("hippo.data.dir") != null) {
+            return;
+        }
+
+        String os = System.getProperty("os.name").toLowerCase();
+        String dataDir;
+        if (os.contains("win")) {
+            dataDir = System.getenv("APPDATA") + "/HippoBuddy";
+        } else if (os.contains("mac")) {
+            dataDir = System.getProperty("user.home") + "/Library/Application Support/HippoBuddy";
+        } else {
+            String xdgData = System.getenv("XDG_DATA_HOME");
+            if (xdgData != null && !xdgData.isBlank()) {
+                dataDir = xdgData + "/HippoBuddy";
+            } else {
+                dataDir = System.getProperty("user.home") + "/.local/share/HippoBuddy";
+            }
+        }
+        System.setProperty("hippo.data.dir", dataDir);
     }
 
     /**
