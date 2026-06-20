@@ -1,5 +1,12 @@
 import { escapeHtml } from './utils.js';
 
+/** 反转义 HTML 实体（&amp; &lt; &gt; &quot; &#39; 等），用于清理 marked 对公式内容的转义 */
+function unescapeHtml(text) {
+  const el = document.createElement('div');
+  el.innerHTML = text;
+  return el.textContent || el.innerText || '';
+}
+
 let markedInstance = null;
 let hljsInstance = null;
 
@@ -109,7 +116,79 @@ export async function renderMarkdown(text) {
   if (!_cachedMarked) {
     _cachedMarked = await initMarkdownRenderer({ enableHighlight: true });
   }
-  return _cachedMarked.parse(text);
+  let html = _cachedMarked.parse(text);
+
+  // 若 KaTeX 已加载，对 $...$ / $$...$$ 公式做后渲染
+  // 注意：这里在 HTML 字符串层面用正则替换，而非 DOM 层面，
+  // 因为 marked 的 breaks:true 会将 \n 转为 <br>，导致 auto-render
+  // 的 DOM 文本节点扫描无法识别跨 <br> 的 $$...$$ 公式块。
+  if (window.katex) {
+    // 保护代码块和已渲染的 katex 区域，避免误伤
+    const protectedBlocks = [];
+    let idx = 0;
+    html = html.replace(/(<pre[^>]*>[\s\S]*?<\/pre>)|(<code[^>]*>[\s\S]*?<\/code>)|(<span class="katex[^"]*"[^>]*>[\s\S]*?<\/span>)/gi, (match) => {
+      const key = `\x00KATEX_PROTECT_${idx++}\x00`;
+      protectedBlocks.push({ key, match });
+      return key;
+    });
+
+    // 行间公式 $$...$$（可跨行）
+    html = html.replace(/\$\$([\s\S]*?)\$\$/g, (_, expr) => {
+      try {
+        // 去掉 marked 因 breaks:true 插入的 <br>，并反转义 &amp; 等实体
+        let clean = unescapeHtml(expr.replace(/<br\s*\/?>/gi, ' ').trim());
+        // marked 在 GFM 模式下会将 \\（LaTeX 换行）解释为转义反斜杠，输出单 \ 
+        // 把 \ 后跟空白（原 \\\n 的产物）恢复为 \\，这样 KaTeX 才能识别换行
+        clean = clean.replace(/\\(?=\s)/g, '\\\\');
+        // marked 也会吞掉 \[ 和 \] 中的反斜杠，同样恢复
+        clean = clean.replace(/\\([\[\]])/g, '\\\\$1');
+        const result = window.katex.renderToString(clean, { displayMode: true, throwOnError: false });
+        return result;
+      } catch (e) {
+        return `$$${expr}$$`;
+      }
+    });
+    // 行内公式 $...$（不跨行，避免误伤 $$）
+    html = html.replace(/(?<!\$)\$([^\n$]+?)\$(?!\$)/g, (_, expr) => {
+      try {
+        let clean = unescapeHtml(expr.replace(/<br\s*\/?>/gi, ' ').trim());
+        clean = clean.replace(/\\(?=\s)/g, '\\\\');
+        clean = clean.replace(/\\([\[\]])/g, '\\\\$1');
+        return window.katex.renderToString(clean, { displayMode: false, throwOnError: false });
+      } catch (e) {
+        return `$${expr}$`;
+      }
+    });
+    // 行间公式 \[...\]（LLM 常用替代 $$ 的写法）
+    html = html.replace(/\\\[([\s\S]*?)\\\]/g, (_, expr) => {
+      try {
+        let clean = unescapeHtml(expr.replace(/<br\s*\/?>/gi, ' ').trim());
+        clean = clean.replace(/\\(?=\s)/g, '\\\\');
+        clean = clean.replace(/\\([\[\]])/g, '\\\\$1');
+        return window.katex.renderToString(clean, { displayMode: true, throwOnError: false });
+      } catch (e) {
+        return `[${expr}]`;
+      }
+    });
+    // 行内公式 \(...\)
+    html = html.replace(/\\\(([\s\S]*?)\\\)/g, (_, expr) => {
+      try {
+        let clean = unescapeHtml(expr.replace(/<br\s*\/?>/gi, ' ').trim());
+        clean = clean.replace(/\\(?=\s)/g, '\\\\');
+        clean = clean.replace(/\\([\[\]])/g, '\\\\$1');
+        return window.katex.renderToString(clean, { displayMode: false, throwOnError: false });
+      } catch (e) {
+        return `(${expr})`;
+      }
+    });
+
+    // 恢复受保护区域
+    for (const { key, match } of protectedBlocks) {
+      html = html.replace(key, match);
+    }
+  }
+
+  return html;
 }
 
 export function copyCode(codeId) {
