@@ -1472,6 +1472,273 @@
     font-size: var(--font-size-sm);
 }
 
+/* ── 代码块 header 按钮组（复制 + 预览等） ── */
+.code-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+/* ══════════════════════════════════════════════════
+   Mermaid 图表预览
+   ══════════════════════════════════════════════════ */
+
+/* ── 预览按钮（复用 copy-btn 样式） ── */
+.mermaid-preview-btn {
+    font-size: var(--font-size-xs);
+    padding: 2px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    line-height: 1.4;
+}
+
+.mermaid-preview-btn:hover {
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+/* ── 图表预览容器 ── */
+.mermaid-preview-container {
+    padding: 16px 16px 12px;
+    overflow: auto;
+    background: var(--bg-app);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 60px;
+    animation: mermaidFadeIn 0.25s ease-out;
+}
+
+@keyframes mermaidFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mermaid-preview-container svg {
+    max-width: 100%;
+    height: auto;
+    animation: mermaidSvgFadeIn 0.3s ease-out;
+}
+
+@keyframes mermaidSvgFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ── 缩放工具栏 ── */
+.mermaid-zoom-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    margin-bottom: 8px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    align-self: flex-end;
+}
+
+.mermaid-zoom-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.mermaid-zoom-btn:hover {
+    border-color: var(--border);
+    background: var(--bg-sidebar);
+    color: var(--text-primary);
+}
+
+.mermaid-zoom-level {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    min-width: 36px;
+    text-align: center;
+    font-family: var(--font-mono);
+    user-select: none;
+}
+
+/* ── 缩放包裹层 ── */
+.mermaid-zoom-wrap {
+    width: 100%;
+    overflow: hidden;
+    cursor: default;
+}
+
+.mermaid-zoom-wrap svg {
+    max-width: none;
+    display: block;
+    animation: mermaidSvgFadeIn 0.3s ease-out;
+}
+
+/* ── 缩放工具栏分隔符 ── */
+.mermaid-zoom-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 2px;
+}
+
+/* ── 全屏模式 ── */
+.mermaid-preview-container:fullscreen {
+    padding: 24px;
+    background: var(--bg-app, #fff);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-preview-container:fullscreen .mermaid-zoom-toolbar {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 10001;
+}
+
+.mermaid-preview-container:fullscreen .mermaid-zoom-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+}
+
+/* 全屏图标切换：全屏时变为"退出全屏"图标 */
+.mermaid-preview-container:fullscreen .mermaid-fullscreen-icon {
+    transform: scale(-1, 1); /* 镜像翻转 */
+}
+
+/* ── 导出下拉菜单 ── */
+.mermaid-export-group {
+    position: relative;
+}
+
+.mermaid-export-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 110px;
+    background: var(--bg-panel, #fff);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.mermaid-export-menu.show {
+    display: block;
+}
+
+.mermaid-export-menu-item {
+    display: block;
+    width: 100%;
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    white-space: nowrap;
+}
+
+.mermaid-export-menu-item:hover {
+    background: var(--bg-code);
+}
+
+.mermaid-export-menu-item:first-child {
+    border-bottom: 1px solid var(--border);
+}
+
+/* 深色主题适配 */
+[data-theme="dark"] .mermaid-export-menu {
+    background: #2d2d2d;
+    border-color: #404040;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .mermaid-export-menu-item:hover {
+    background: #3a3a3a;
+}
+
+/* ── 加载中状态 ── */
+.mermaid-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 60px;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+}
+
+/* 加载中旋转圆环 */
+.mermaid-loading::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: mermaidSpin 0.6s linear infinite;
+}
+
+@keyframes mermaidSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── 错误状态 ── */
+.mermaid-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-height: 60px;
+    justify-content: center;
+    color: var(--error-text, #c62828);
+    font-size: var(--font-size-sm);
+}
+
+.mermaid-error svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.mermaid-error-detail {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    max-width: 400px;
+    text-align: center;
+    word-break: break-all;
+}
+
 /* ══════════════════════════════════════════════════
    Diff 标记（编辑器内联）
    由 FilePreviewDiff.js 插件渲染

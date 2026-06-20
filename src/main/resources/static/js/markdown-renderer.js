@@ -77,10 +77,16 @@ export async function initMarkdownRenderer(options = {}) {
       lineNumsText = lineNumsText.replace(/\n$/, '');
 
       const codeId = 'code-' + Math.random().toString(36).substr(2, 9);
+      const mermaidBtn = language === 'mermaid'
+        ? '<button class="mermaid-preview-btn" onclick="window.initMermaidPreview(this)">预览</button>'
+        : '';
       return `<div class="code-block-wrapper">
         <div class="code-block-header">
           <span class="code-lang">${lang}</span>
-          <button class="copy-btn" onclick="window.copyCode('${codeId}')">复制</button>
+          <div class="code-header-actions">
+            <button class="copy-btn" onclick="window.copyCode('${codeId}')">复制</button>
+            ${mermaidBtn}
+          </div>
         </div>
         <div class="code-block-body">
           <div class="code-ln-nums"><pre>${lineNumsText}</pre></div>
