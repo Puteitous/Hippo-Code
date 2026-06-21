@@ -23,6 +23,8 @@ public class FileChangeTracker {
     private static final Logger logger = LoggerFactory.getLogger(FileChangeTracker.class);
 
     private static final Map<String, Map<String, List<FileChange>>> changesBySession = new ConcurrentHashMap<>();
+    /** 记录每个会话的加载时间（ms），用于判断变更是否为历史加载的 */
+    private static final Map<String, Long> sessionLoadedAt = new ConcurrentHashMap<>();
     private static final int MAX_CHANGES_PER_FILE = 20;
     private static final int MAX_TOTAL_CHANGES = 500;
     private static final String STORAGE_FILE = "changes.jsonl";
@@ -107,6 +109,7 @@ public class FileChangeTracker {
                 }
             }
             changesBySession.put(sessionId, sessionChanges);
+            sessionLoadedAt.put(sessionId, System.currentTimeMillis());
             logger.info("已加载会话变更记录: sessionId={}, {}条", sessionId, lines.size());
         } catch (IOException e) {
             logger.warn("加载会话变更记录失败: sessionId={}", sessionId, e);
@@ -306,6 +309,19 @@ public class FileChangeTracker {
      */
     public static synchronized void clearSessionChanges() {
         changesBySession.clear();
+        sessionLoadedAt.clear();
+    }
+
+    /**
+     * 判断一个变更是否为从磁盘加载的历史变更（vs 当前会话中新增的变更）。
+     * <p>
+     * 当变更的 timestamp 早于其所属会话的 loadSessionChanges 加载时间时，
+     * 说明它是之前记录的、从磁盘加载进来的，而非当前会话周期内新产生的。
+     */
+    public static boolean isHistoricalChange(FileChange change) {
+        if (change == null) return false;
+        Long loadTime = sessionLoadedAt.get(change.sessionId);
+        return loadTime != null && change.timestamp < loadTime;
     }
 
     /**
@@ -337,6 +353,7 @@ public class FileChangeTracker {
 
     static synchronized void resetForTest() {
         changesBySession.clear();
+        sessionLoadedAt.clear();
         testBaseDir = null;
         initialized.set(false);
         currentSessionId.remove();

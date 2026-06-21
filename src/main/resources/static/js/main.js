@@ -491,6 +491,12 @@ async function createNewSession() {
   }
   try { localStorage.setItem('hippo-last-session-id', currentSessionId); } catch(e) {}
   updateHistoryDropdown();
+  // 清空前会话的文件变更（通知后端切换上下文，变更记录归零）
+  try {
+    await chatService.getSessionMessages(currentSessionId);
+  } catch(e) {}
+  if (fileChangeManager) fileChangeManager._lastChangeSnapshot = null;
+  fileChangeManager?.updateFileChanges();
 }
 
 async function switchSession(sessionId) {
@@ -557,8 +563,9 @@ async function switchSession(sessionId) {
     tokenMonitor.scheduleUpdate();
     metricsPanel.updateMetrics();
     // 刷新文件变更列表（后端已在 handleGetMessages 中加载了目标会话的变更）
+    // 重置文件变更快照，确保不会触发不必要的文件树刷新
+    if (fileChangeManager) fileChangeManager._lastChangeSnapshot = null;
     fileChangeManager?.updateFileChanges();
-    EventBus.emit('file:changes-updated');
   } catch (e) {
     chatContainer.classList.remove('switching');
     chatContainer.innerHTML = `

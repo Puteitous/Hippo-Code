@@ -147,11 +147,18 @@ public class DiffOriginalHandler implements HttpHandler {
     /**
      * 从 AI 变更记录中取最后一次变更的原始内容。
      * 新建文件也返回空字符串（diff 插件会标记所有行为新增）。
+     * <p>
+     * 如果变更是从磁盘加载的历史记录（非 git 项目恢复旧会话），
+     * 则跳过 diff 展示，避免编辑器中出现不必要的行标记。
      */
     private static String tryAiTracker(Path absPath) {
         try {
             FileChangeTracker.FileChange change = FileChangeTracker.getLastChange(absPath.toString());
             if (change != null) {
+                // 非 git 项目的历史变更（从磁盘加载）→ 跳过 preview diff
+                if (FileChangeTracker.isHistoricalChange(change)) {
+                    return null;
+                }
                 return change.originalContent != null ? change.originalContent : "";
             }
         } catch (Exception e) {
