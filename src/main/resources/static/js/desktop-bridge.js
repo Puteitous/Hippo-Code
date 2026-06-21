@@ -24,9 +24,14 @@ const HippoDesktop = (() => {
         return;
       }
 
-      // openFileDialog 使用 executeJavaScript 回调（避免 CEF 异步查询超时问题）
+      // openFileDialog / saveFileDialog 使用 executeJavaScript 回调（避免 CEF 异步查询超时问题）
       if (action === 'openFileDialog') {
         window._onOpenFolderResult = (result) => {
+          resolve(result);
+        };
+      }
+      if (action === 'saveFileDialog') {
+        window._onSaveFileDialogResult = (result) => {
           resolve(result);
         };
       }
@@ -34,8 +39,8 @@ const HippoDesktop = (() => {
       window.cefQuery({
         request: JSON.stringify({ action, ...payload }),
         onSuccess: (response) => {
-          // openFileDialog 会先收到 {"status":"pending"}，忽略它，等待 executeJavaScript 回调
-          if (action === 'openFileDialog') return;
+          // openFileDialog / saveFileDialog 会先收到 {"status":"pending"}，忽略它，等待 executeJavaScript 回调
+          if (action === 'openFileDialog' || action === 'saveFileDialog') return;
           try {
             resolve(JSON.parse(response));
           } catch {
@@ -43,8 +48,8 @@ const HippoDesktop = (() => {
           }
         },
         onFailure: (errCode, errMsg) => {
-          // openFileDialog 的 onFailure 也忽略（真正的错误由超时处理兜底）
-          if (action === 'openFileDialog') return;
+          // openFileDialog / saveFileDialog 的 onFailure 也忽略（真正的错误由超时处理兜底）
+          if (action === 'openFileDialog' || action === 'saveFileDialog') return;
           reject(new Error(errMsg || `Error ${errCode}`));
         }
       });
@@ -200,6 +205,23 @@ const HippoDesktop = (() => {
 
     openFileDialog() {
       return send('openFileDialog');
+    },
+
+    /**
+     * 打开系统"另存为"对话框，将 base64 内容保存到用户选择的路径。
+     * 绕过 CEF 下载机制（blob URL 导航在 JCEF 中可能闪退）。
+     *
+     * @param {string} base64Content - 文件的 base64 编码内容
+     * @param {string} suggestedName - 建议文件名（含扩展名）
+     * @param {string} mimeType - MIME 类型（用于文件过滤器）
+     * @returns {Promise<{path: string|null, size?: number}>}
+     */
+    saveFileDialog(base64Content, suggestedName, mimeType) {
+      return send('saveFileDialog', {
+        content: base64Content,
+        suggestedName,
+        mimeType,
+      });
     },
 
     // ===== 工作区 =====

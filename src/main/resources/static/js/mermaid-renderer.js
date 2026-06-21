@@ -15,6 +15,20 @@ function _escapeHtml(str) {
   return div.innerHTML;
 }
 
+/** 简易 Toast（不依赖外部模块，mermaid-renderer.js 是普通 script 加载） */
+function _showToast(message, type) {
+  // 复用已有的 toast-bottom 样式
+  const el = document.createElement('div');
+  el.className = 'toast-bottom';
+  el.textContent = (type === 'success' ? '✓ ' : type === 'error' ? '✕ ' : '◉ ') + message;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 3000);
+}
+
 /** 全屏切换 */
 function _toggleFullscreen(container) {
   if (document.fullscreenElement) {
@@ -48,7 +62,31 @@ function _getCleanSvgString(svgEl) {
  * @param {string} mimeType - MIME 类型
  */
 async function _downloadBlob(blob, suggestedName, mimeType) {
-  // 优先使用 File System Access API（JCEF 桌面端 / Chrome 原生支持）
+  // JCEF 环境下：showSaveFilePicker 和 blob URL 导航都可能在 native 层
+  // segfault（JS try/catch 无法拦截），完全绕过 CEF 下载机制，
+  // 改用 Java bridge 弹出原生系统另存为对话框。
+  if (window.HippoDesktop?.isAvailable) {
+    try {
+      const buf = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64 = btoa(binary);
+      const result = await window.HippoDesktop.saveFileDialog(base64, suggestedName, mimeType);
+      if (result?.path) {
+        const fileName = suggestedName.replace(/[^\w.-]/g, '_');
+        _showToast('已保存: ' + fileName, 'success');
+      }
+      return;
+    } catch (e) {
+      console.warn('HippoDesktop.saveFileDialog 失败，跳过下载', e);
+      return;
+    }
+  }
+
+  // 优先使用 File System Access API（Chrome 原生支持）
   if ('showSaveFilePicker' in window) {
     try {
       const ext = suggestedName.split('.').pop();
@@ -145,13 +183,26 @@ function _svgToPngBlob(svgStr, w, h) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
+      // 部分浏览器中 tainted canvas 的 toBlob 不调回调也不抛异常，
+      // 用超时兜底，避免 Promise 永不休止。
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      }, 3000);
       try {
         canvas.toBlob((pngBlob) => {
-          resolve(pngBlob); // taint 时不会走到这里
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          resolve(pngBlob); // taint 时 pngBlob 为 null
         }, 'image/png');
       } catch (e) {
-        // canvas taint（SVG 含 foreignObject）导致 toBlob 抛出 DOMException
-        console.warn('Mermaid PNG canvas taint:', e.message);
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
         resolve(null);
       }
     };
@@ -374,8 +425,17 @@ async function _renderMermaid(container, code, id) {
           String(now.getHours()).padStart(2, '0') +
           String(now.getMinutes()).padStart(2, '0') +
           String(now.getSeconds()).padStart(2, '0');
-        if (format === 'png') _downloadPng(svgEl, filename).catch(console.error);
-        else if (format === 'svg') _downloadSvg(svgEl, filename).catch(console.error);
+        if (format === 'png') {
+          // Mermaid SVG 常含 foreignObject（如节点中的 HTML 文本），
+          // 只要含 foreignObject 的 SVG 画到 canvas 上就一定会 taint，
+          // 导致 toBlob 失败。提前检测，直接走 SVG 导出，避免无谓的尝试。
+          const hasForeignObject = svgEl.querySelector('foreignObject');
+          if (hasForeignObject) {
+            _downloadSvg(svgEl, filename).catch(console.error);
+          } else {
+            _downloadPng(svgEl, filename).catch(console.error);
+          }
+        } else if (format === 'svg') _downloadSvg(svgEl, filename).catch(console.error);
         return;
       }
       // 点击工具栏其他区域关闭菜单
