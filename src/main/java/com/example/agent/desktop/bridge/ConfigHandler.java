@@ -40,6 +40,9 @@ public class ConfigHandler extends CefMessageRouterHandlerAdapter {
                 case "clearCurrentFolder":
                     handleClearCurrentFolder(callback);
                     return true;
+                case "isDefaultWorkspace":
+                    handleIsDefaultWorkspace(callback);
+                    return true;
                 default:
                     return false;
             }
@@ -70,5 +73,10 @@ public class ConfigHandler extends CefMessageRouterHandlerAdapter {
         WorkspaceContext.save();
         callback.success(MAPPER.writeValueAsString(
                 MAPPER.createObjectNode().put("path", "")));
+    }
+
+    private void handleIsDefaultWorkspace(CefQueryCallback callback) throws Exception {
+        callback.success(MAPPER.writeValueAsString(
+                MAPPER.createObjectNode().put("isDefault", WorkspaceContext.isDefaultWorkspace())));
     }
 }

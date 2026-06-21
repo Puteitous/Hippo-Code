@@ -211,6 +211,10 @@ const HippoDesktop = (() => {
       return send('clearCurrentFolder').catch(() => {});
     },
 
+    isDefaultWorkspace() {
+      return send('isDefaultWorkspace');
+    },
+
     // ===== DevTools =====
     openDevTools() {
       return send('openDevTools');
@@ -353,10 +357,13 @@ const HippoDesktop = (() => {
 
     // 检查 WorkspaceManager 是否可用
     if (ws && ws.isAvailable) {
-      // 恢复上次工作区
-      api.getCurrentFolder().then((result) => {
-        if (result && result.path) {
-          ws.openWorkspace(result.path);
+      // 恢复上次工作区，同时获取是否为默认工作区
+      Promise.all([
+        api.getCurrentFolder(),
+        api.isDefaultWorkspace()
+      ]).then(([folderResult, defaultResult]) => {
+        if (folderResult && folderResult.path) {
+          ws.openWorkspace(folderResult.path, defaultResult?.isDefault);
         }
       }).catch(() => {});
     } else {

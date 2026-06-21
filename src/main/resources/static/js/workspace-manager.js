@@ -261,12 +261,14 @@ const HippoWorkspace = (() => {
     get currentPath() { return _currentRoot; },
     get fileTabs() { return fileTabs; },
 
-    async openWorkspace(path) {
+    async openWorkspace(path, isDefault) {
       if (!path) return;
       _currentRoot = path.replace(/\\/g, '/');
 
-      // 保存到最近文件夹
-      _saveRecentFolder(_currentRoot);
+      // 保存到最近文件夹（默认工作区不加入最近列表）
+      if (!isDefault) {
+        _saveRecentFolder(_currentRoot);
+      }
       _renderRecentFolders();
 
       // 持久化到 workspace.txt，确保重启后可恢复
@@ -277,8 +279,13 @@ const HippoWorkspace = (() => {
       // 显示视图切换器和工作区指示器
       if (els.viewSwitcher) els.viewSwitcher.style.display = '';
       if (els.workspaceIndicator && els.workspacePath) {
-        els.workspacePath.textContent = path;
-        els.workspacePath.title = path;
+        if (isDefault) {
+          els.workspacePath.textContent = '默认工作区';
+          els.workspacePath.title = path;
+        } else {
+          els.workspacePath.textContent = path;
+          els.workspacePath.title = path;
+        }
         els.workspaceIndicator.style.display = '';
       }
 
@@ -302,13 +309,28 @@ const HippoWorkspace = (() => {
       // closeAll 内部会检查脏文件并弹窗，用户取消则中止
       if (fileTabs.count > 0 && !(await fileTabs.closeAll())) return;
 
+      // 重置后端到默认工作区
+      if (window.HippoDesktop?.clearCurrentFolder) {
+        await window.HippoDesktop.clearCurrentFolder();
+      }
+
+      // 重新加载默认工作区
+      if (window.HippoDesktop?.isDefaultWorkspace) {
+        const defaultResult = await window.HippoDesktop.isDefaultWorkspace();
+        const folderResult = await window.HippoDesktop.getCurrentFolder();
+        if (folderResult?.path) {
+          await api.openWorkspace(folderResult.path, defaultResult?.isDefault ?? true);
+          return;
+        }
+      }
+
+      // fallback: 隐藏指示器
       _currentRoot = null;
       _currentView = 'sessions';
       fileTree.clear();
       hidePreview();
       if (els.fileTreeEmpty) els.fileTreeEmpty.style.display = '';
       if (els.workspaceIndicator) els.workspaceIndicator.style.setProperty('display', 'none', 'important');
-      // 清除保存的工作区会话
       try { localStorage.removeItem('hippo-workspace-session'); } catch(e) {}
       switchView('sessions');
     },
@@ -456,10 +478,6 @@ const HippoWorkspace = (() => {
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
       api.clearWorkspace();
-      // 同步清除后端状态
-      if (window.HippoDesktop && window.HippoDesktop.clearCurrentFolder) {
-        window.HippoDesktop.clearCurrentFolder();
-      }
     });
   }
 

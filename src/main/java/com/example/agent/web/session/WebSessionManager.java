@@ -383,8 +383,13 @@ public class WebSessionManager implements SessionManager {
 
         String workspacePath = WorkspaceContext.getCurrentFolder();
         if (workspacePath != null && !workspacePath.isBlank()) {
-            prompt += "\n\n## 当前工作区\n用户已选择以下文件夹作为当前工作区。Agent 的所有文件操作（readFile/writeFile/editFile 等）应以此目录为根目录：\n"
-                    + workspacePath;
+            if (WorkspaceContext.isDefaultWorkspace()) {
+                prompt += "\n\n## 工作目录\n用户未选择项目文件夹。你可以在当前工作目录下直接创建文件和目录，无需切换目录。\n"
+                        + "当前工作目录: " + workspacePath;
+            } else {
+                prompt += "\n\n## 当前工作区\n用户已选择以下文件夹作为当前工作区。Agent 的所有文件操作（readFile/writeFile/editFile 等）应以此目录为根目录：\n"
+                        + workspacePath;
+            }
         }
 
         return prompt;

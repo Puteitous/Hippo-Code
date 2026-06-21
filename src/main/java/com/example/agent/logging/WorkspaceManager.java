@@ -3,6 +3,7 @@ package com.example.agent.logging;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -192,6 +193,26 @@ public class WorkspaceManager {
     
     public static Path getUserMemoryDir() {
         return HIPPO_ROOT.resolve("memory");
+    }
+    
+    /**
+     * 返回默认工作区目录。
+     * <p>
+     * 当用户未选择工作区时，文件操作将使用此目录作为根目录。
+     * 目录不存在时会自动创建。
+     * </p>
+     */
+    public static Path getDefaultWorkspaceDir() {
+        Path dir = HIPPO_ROOT.resolve("default-workspace");
+        if (!Files.exists(dir)) {
+            try {
+                Files.createDirectories(dir);
+                logger.info("创建默认工作区目录: {}", dir);
+            } catch (IOException e) {
+                logger.warn("创建默认工作区目录失败: {}", dir, e);
+            }
+        }
+        return dir;
     }
     
     // =========================================================

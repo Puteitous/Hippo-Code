@@ -300,34 +300,7 @@ function bindGlobalEvents() {
   // 聊天面板头部 - 新建会话
   document.getElementById('chatNewBtn')?.addEventListener('click', createNewSession);
   
-  // 工作区清除按钮（workspace-manager 的守卫可能让它的绑定不生效）
-  document.getElementById('workspaceClear')?.addEventListener('click', () => {
-    const indicator = document.getElementById('workspaceIndicator');
-    if (indicator) indicator.style.setProperty('display', 'none', 'important');
-    const fileTreeEmpty = document.getElementById('fileTreeEmpty');
-    if (fileTreeEmpty) fileTreeEmpty.style.display = '';
-    const sessionList = document.getElementById('sessionList');
-    if (sessionList) sessionList.style.display = '';
-    // 切换到会话视图
-    const viewBtns = document.querySelectorAll('[data-view]');
-    for (const btn of viewBtns) {
-      btn.classList.toggle('active', btn.dataset.view === 'sessions');
-    }
-    document.getElementById('sessionPanel')?.classList.remove('view-files');
-    // 关闭预览
-    const previewPanel = document.getElementById('previewPanel');
-    if (previewPanel) previewPanel.classList.add('hidden');
-    const chatPanelHeader = document.getElementById('chatPanelHeader');
-    if (chatPanelHeader) chatPanelHeader.style.display = 'none';
-    const chatPanel = document.querySelector('.chat-panel');
-    if (chatPanel) chatPanel.classList.remove('collapsed');
-    const chatShowBtn = document.getElementById('chatShowBtn');
-    if (chatShowBtn) chatShowBtn.style.display = 'none';
-    // 同步后端
-    if (window.HippoDesktop?.clearCurrentFolder) {
-      window.HippoDesktop.clearCurrentFolder();
-    }
-  });
+  // 工作区清除由 workspace-manager.js 处理，此处不再重复绑定
   
   // 聊天面板头部 - 历史会话下拉点击外部关闭
   document.addEventListener('click', (e) => {

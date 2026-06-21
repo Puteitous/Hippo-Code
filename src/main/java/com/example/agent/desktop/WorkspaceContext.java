@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public final class WorkspaceContext {
 
@@ -26,20 +27,17 @@ public final class WorkspaceContext {
     }
 
     public static void clear() {
-        currentFolder = null;
+        // 重置为默认工作区，确保 currentFolder 永不为 null
+        currentFolder = WorkspaceManager.getDefaultWorkspaceDir().toString();
+        logger.debug("工作区已重置为默认: {}", currentFolder);
     }
 
     public static void save() {
         try {
             Path file = getConfigPath();
             Files.createDirectories(file.getParent());
-            if (currentFolder != null && !currentFolder.isBlank()) {
-                Files.writeString(file, currentFolder);
-                logger.debug("工作区配置已保存: {}", currentFolder);
-            } else {
-                Files.deleteIfExists(file);
-                logger.debug("工作区配置已清除");
-            }
+            Files.writeString(file, currentFolder);
+            logger.debug("工作区配置已保存: {}", currentFolder);
         } catch (IOException e) {
             logger.warn("保存工作区配置失败", e);
         }
@@ -59,7 +57,19 @@ public final class WorkspaceContext {
         } catch (IOException e) {
             logger.warn("加载工作区配置失败", e);
         }
-        currentFolder = null;
+        // 无已保存的工作区 → 使用默认工作区并持久化
+        currentFolder = WorkspaceManager.getDefaultWorkspaceDir().toString();
+        save();
+        logger.info("使用默认工作区: {}", currentFolder);
+    }
+
+    /**
+     * 判断当前是否处于默认工作区（用户未主动选择工作区）。
+     */
+    public static boolean isDefaultWorkspace() {
+        if (currentFolder == null) return false;
+        Path defaultDir = WorkspaceManager.getDefaultWorkspaceDir();
+        return defaultDir.equals(Paths.get(currentFolder).toAbsolutePath().normalize());
     }
 
     private static Path getConfigPath() {

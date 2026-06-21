@@ -167,6 +167,9 @@ body.desktop-window {
     line-height: 1;
     flex-shrink: 0;
     transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .workspace-indicator .workspace-clear:hover {
