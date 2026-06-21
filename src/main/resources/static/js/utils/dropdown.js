@@ -28,7 +28,7 @@
  */
 
 export class CustomDropdown {
-  constructor({ trigger, items = [], selectedValue, onSelect, placement = 'bottom-left' }) {
+  constructor({ trigger, items = [], selectedValue, onSelect, placement = 'bottom-left', offsetX = 0 }) {
     if (!trigger) throw new Error('CustomDropdown: trigger is required');
     
     this._trigger = trigger;
@@ -36,6 +36,7 @@ export class CustomDropdown {
     this._selectedValue = selectedValue;
     this._onSelect = onSelect;
     this._placement = placement;
+    this._offsetX = offsetX;
     this._isOpen = false;
     this._menu = null;
     this._highlightIdx = -1;
@@ -172,7 +173,8 @@ export class CustomDropdown {
     const triggerRect = this._trigger.getBoundingClientRect();
     const menu = this._menu;
 
-    // 宽度由 CSS 固定，不再动态设置
+    // 宽度与 trigger 保持一致
+    menu.style.width = Math.max(180, triggerRect.width) + 'px';
 
     if (this._placement === 'bottom-right') {
       menu.style.left = '0px';
@@ -188,7 +190,7 @@ export class CustomDropdown {
       menu.style.right = (window.innerWidth - triggerRect.right) + 'px';
       menu.style.left = 'auto';
     } else {
-      menu.style.left = (triggerRect.left - 8) + 'px';
+      menu.style.left = (triggerRect.left + this._offsetX) + 'px';
       menu.style.right = 'auto';
     }
 

@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * LLM 配置读取/保存 API（GET/PUT /api/config/llm）。
@@ -38,7 +39,7 @@ public class ConfigApiHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS");
         exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
 
         if ("OPTIONS".equals(exchange.getRequestMethod())) {
@@ -59,6 +60,13 @@ public class ConfigApiHandler implements HttpHandler {
                 case "PUT":
                     if ("/api/config/llm".equals(path)) {
                         handlePut(exchange);
+                    } else {
+                        sendError(exchange, 404, "Not Found");
+                    }
+                    break;
+                case "DELETE":
+                    if ("/api/config/llm/history".equals(path)) {
+                        handleDeleteHistory(exchange);
                     } else {
                         sendError(exchange, 404, "Not Found");
                     }
@@ -175,6 +183,43 @@ public class ConfigApiHandler implements HttpHandler {
 
         ObjectNode resp = MAPPER.createObjectNode();
         resp.put("success", true);
+        sendJson(exchange, 200, MAPPER.writeValueAsString(resp));
+    }
+
+    /**
+     * DELETE /api/config/llm/history
+     * 从历史记录中删除指定模型快照。
+     * 请求体: { "provider": "...", "model": "..." }
+     */
+    private void handleDeleteHistory(HttpExchange exchange) throws IOException {
+        byte[] reqBytes = exchange.getRequestBody().readAllBytes();
+        JsonNode json = MAPPER.readTree(reqBytes);
+
+        String provider = json.has("provider") ? json.get("provider").asText() : "";
+        String model = json.has("model") ? json.get("model").asText() : "";
+
+        if (provider.isEmpty() || model.isEmpty()) {
+            sendError(exchange, 400, "provider 和 model 不能为空");
+            return;
+        }
+
+        Config config = Config.getInstance();
+        LlmConfig llm = config.getLlm();
+        List<ModelSnapshot> history = llm.getModelHistory();
+        String targetKey = provider + ":" + model;
+
+        boolean removed = history.removeIf(s -> s.getKey().equals(targetKey));
+        if (removed) {
+            llm.setModelHistory(history);
+            persistConfig(llm);
+            logger.info("已从历史记录删除模型: {}", targetKey);
+        } else {
+            logger.warn("未找到要删除的模型: {}", targetKey);
+        }
+
+        ObjectNode resp = MAPPER.createObjectNode();
+        resp.put("success", true);
+        resp.put("removed", removed);
         sendJson(exchange, 200, MAPPER.writeValueAsString(resp));
     }
 

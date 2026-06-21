@@ -1,6 +1,7 @@
 import { truncateText } from './utils.js';
 import { ChatService } from './chat-service.js';
 import { showBottomToast } from './utils/toast.js';
+import { ConfirmDialog } from './utils/modal.js';
 
 export class SessionManager {
   constructor(listContainer, onSessionSwitch) {
@@ -498,7 +499,7 @@ export class SessionManager {
     event.stopPropagation();
     const sessionName = this.sessionNames[sessionId] || ('会话 ' + sessionId.replace('web-', '').slice(-6));
 
-    const confirmed = confirm(`确定要删除会话 "${sessionName}" 吗？\n\n此操作无法撤销！`);
+    const confirmed = await ConfirmDialog.confirmDelete(`确定要删除会话 "${sessionName}" 吗？此操作无法撤销！`);
     if (!confirmed) return;
 
     try {

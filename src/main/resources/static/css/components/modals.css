@@ -728,6 +728,22 @@ details[open] .config-advanced-summary::before {
 
 .config-advanced-body {
     padding-top: 10px;
+    overflow: hidden;
+}
+
+details[open] .config-advanced-body {
+    animation: configFadeIn 0.2s ease-out;
+}
+
+@keyframes configFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .config-label-hint {
@@ -875,6 +891,116 @@ select.config-input option {
     transform: scale(0.98);
 }
 
+/* ── 已添加模型列表（在可折叠 details 中） ── */
+.config-history-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-code);
+    border-radius: 10px;
+    padding: 0 6px;
+    min-width: 18px;
+    text-align: center;
+    line-height: 18px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.config-history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-history-empty {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    padding: 8px 4px;
+    text-align: center;
+}
+
+.config-history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    border: 1px solid transparent;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.config-history-item:hover {
+    background: var(--bg-hover);
+}
+
+.config-history-item.active {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.config-history-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+}
+
+.config-history-item-provider {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+.config-history-item-model {
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    font-weight: 500;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.config-history-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+}
+
+.config-history-item:hover .config-history-item-actions {
+    opacity: 1;
+}
+
+.config-history-item-actions button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.config-history-item-edit:hover {
+    color: var(--accent);
+    background: var(--bg-code);
+}
+
+.config-history-item-delete:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+}
+
 /* ========== 确认弹窗 ========== */
 
 .confirm-dialog-overlay {
@@ -898,11 +1024,32 @@ select.config-input option {
     animation: modalSlideIn 0.2s ease-out;
 }
 
+.confirm-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.confirm-dialog-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.confirm-dialog-icon-danger {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
 .confirm-dialog-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 6px;
 }
 
 .confirm-dialog-message {

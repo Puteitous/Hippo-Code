@@ -73,7 +73,26 @@ export class ConfirmDialog {
     });
   }
 
-  _show({ title, message, actions }) {
+  /**
+   * 确认删除弹窗（带警告图标）
+   * @param {string} message - 提示文本
+   * @param {string} [confirmText='删除']
+   * @param {string} [cancelText='取消']
+   * @returns {Promise<boolean>}
+   */
+  static confirmDelete(message, confirmText = '删除', cancelText = '取消') {
+    return new ConfirmDialog()._show({
+      icon: 'delete',
+      title: '确认删除',
+      message,
+      actions: [
+        { text: cancelText, value: false, variant: 'secondary' },
+        { text: confirmText, value: true, variant: 'danger', focus: true },
+      ],
+    });
+  }
+
+  _show({ title, message, actions, icon }) {
     return new Promise((resolve) => {
       this._resolve = resolve;
 
@@ -88,7 +107,14 @@ export class ConfirmDialog {
       dialog.className = 'confirm-dialog';
 
       let html = '';
-      if (title) {
+      if (icon === 'delete') {
+        html += `<div class="confirm-dialog-header">
+          <div class="confirm-dialog-icon confirm-dialog-icon-danger">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          ${title ? `<div class="confirm-dialog-title">${this._escape(title)}</div>` : ''}
+        </div>`;
+      } else if (title) {
         html += `<div class="confirm-dialog-title">${this._escape(title)}</div>`;
       }
       html += `<div class="confirm-dialog-message">${message}</div>`;

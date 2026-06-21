@@ -18,7 +18,8 @@
 .dd-menu {
   position: fixed;
   z-index: 10050;
-  width: 220px;
+  min-width: 220px;
+  width: auto;
   max-height: 320px;
   background: var(--bg-app);
   border: 1px solid var(--border);

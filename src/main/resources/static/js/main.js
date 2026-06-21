@@ -27,6 +27,7 @@ import { RollbackPanel } from './components/RollbackPanel.js';
 import { initSelectionActions } from './components/selection-actions.js';
 import { ActivityBar } from './components/ActivityBar.js';
 import { CustomDropdown } from './utils/dropdown.js';
+import { ConfirmDialog } from './utils/modal.js';
 
 // ========== 全局状态 ==========
 let currentSessionId = null;
@@ -876,6 +877,8 @@ const configApiKey = document.getElementById('configApiKey');
 const configBaseUrl = document.getElementById('configBaseUrl');
 const configApiKeyToggle = document.getElementById('configApiKeyToggle');
 const configMaxTokens = document.getElementById('configMaxTokens');
+const configHistoryList = document.getElementById('configHistoryList');
+const configHistoryCount = document.getElementById('configHistoryCount');
 
 /** Provider 可选列表 */
 const PROVIDER_ITEMS = [
@@ -925,6 +928,9 @@ async function loadConfig() {
       configApiKey.value = '';
       delete configApiKey.dataset.masked;
     }
+
+    // 渲染已添加模型列表
+    loadModelHistoryList(data);
   } catch (e) {
     console.warn('加载模型配置失败:', e);
     showToast('加载模型配置失败', 'error');
@@ -981,6 +987,8 @@ async function saveConfig() {
     showToast('模型配置已保存', 'success');
     // 同步更新快速选择器
     loadQuickModelConfig();
+    // 重新加载完整数据以刷新历史列表
+    loadConfig();
     closeConfigModal();
   } catch (e) {
     showToast('保存失败: ' + e.message, 'error');
@@ -1040,6 +1048,119 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ========== 已添加模型管理 ==========
+
+/** 渲染已添加模型列表 */
+function loadModelHistoryList(data) {
+  if (!configHistoryList) return;
+  const history = data.modelHistory || [];
+  configHistoryCount.textContent = history.length;
+
+  if (history.length === 0) {
+    configHistoryList.innerHTML = '<div class="config-history-empty">暂无已添加的模型</div>';
+    return;
+  }
+
+  let html = '';
+  const currentCombo = (data.provider || '') + ':' + (data.model || '');
+  for (const snap of history) {
+    const key = snap.provider + ':' + snap.model;
+    const isActive = key === currentCombo;
+    html += `
+      <div class="config-history-item${isActive ? ' active' : ''}" title="${snap.provider} · ${snap.model}">
+        <div class="config-history-item-info">
+          <span class="config-history-item-provider">${escHtml(snap.provider)}</span>
+          <span class="config-history-item-model">${escHtml(snap.model)}</span>
+        </div>
+        <div class="config-history-item-actions">
+          <button class="config-history-item-edit" data-provider="${escHtml(snap.provider)}" data-model="${escHtml(snap.model)}" title="载入到表单编辑">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="config-history-item-delete" data-provider="${escHtml(snap.provider)}" data-model="${escHtml(snap.model)}" title="删除">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+      </div>`;
+  }
+  configHistoryList.innerHTML = html;
+
+  // 绑定编辑按钮事件
+  configHistoryList.querySelectorAll('.config-history-item-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editModelFromHistory(btn.dataset.provider, btn.dataset.model);
+    });
+  });
+
+  // 绑定删除按钮事件
+  configHistoryList.querySelectorAll('.config-history-item-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      deleteModelFromHistory(btn.dataset.provider, btn.dataset.model);
+    });
+  });
+}
+
+/** 将历史模型加载到表单中编辑 */
+function editModelFromHistory(provider, model) {
+  // 先重新获取最新数据
+  fetch('/api/config/llm')
+    .then(r => r.json())
+    .then(data => {
+      const history = data.modelHistory || [];
+      const snap = history.find(s => s.provider === provider && s.model === model);
+      if (!snap) {
+        showToast('未找到该模型的完整配置', 'error');
+        return;
+      }
+      // 填充到表单
+      if (providerDropdown) providerDropdown.setSelectedValue(snap.provider);
+      configModel.value = snap.model || '';
+      configBaseUrl.value = snap.baseUrl || '';
+      configMaxTokens.value = snap.maxTokens || '';
+      if (snap.apiKeyMasked) {
+        configApiKey.value = snap.apiKeyMasked;
+        configApiKey.dataset.masked = 'true';
+      } else {
+        configApiKey.value = '';
+        delete configApiKey.dataset.masked;
+      }
+      showToast('已载入模型: ' + provider + ' · ' + model + '，可直接修改后保存', 'info');
+    })
+    .catch(e => {
+      showToast('加载模型详情失败: ' + e.message, 'error');
+    });
+}
+
+/** 从历史记录中删除模型 */
+async function deleteModelFromHistory(provider, model) {
+  const confirmed = await ConfirmDialog.confirmDelete('确定从已添加列表中删除「' + provider + ' · ' + model + '」吗？');
+  if (!confirmed) return;
+
+  try {
+    const resp = await fetch('/api/config/llm/history', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model })
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    showToast('已删除: ' + provider + ' · ' + model, 'success');
+    // 刷新配置弹窗和状态栏下拉
+    loadConfig();
+    loadQuickModelConfig();
+  } catch (e) {
+    showToast('删除失败: ' + e.message, 'error');
+  }
+}
+
+/** 简单的 HTML 转义 */
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // ========== 快速模型切换（状态栏） ==========
 const modelQuickSelectTrigger = document.getElementById('modelQuickSelect');
 const MODEL_CONFIG_CACHE_KEY = 'hippo_model_config';
@@ -1078,6 +1199,7 @@ function applyModelConfigToDropdown(data) {
       trigger: modelQuickSelectTrigger,
       items,
       selectedValue: provider && model ? currentCombo : '',
+      offsetX: -9,
       onSelect: (item) => {
         if (item.value === ADD_MODEL_VALUE) {
           openConfigModal();
