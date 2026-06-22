@@ -345,23 +345,6 @@ export class ChatService {
     }
   }
 
-  /**
-   * 获取快照列表
-   * @param {string} sessionId
-   * @returns {Promise<{snapshots: Array}>}
-   */
-  async getSnapshots(sessionId) {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/sessions/${sessionId}/snapshots`);
-      if (!response.ok) {
-        return { snapshots: [] };
-      }
-      return response.json();
-    } catch {
-      return { snapshots: [] };
-    }
-  }
-
   stopGeneration(abortController) {
     if (abortController) {
       abortController.abort();

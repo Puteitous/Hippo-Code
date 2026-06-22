@@ -22,7 +22,6 @@ import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.BashTool;
 import com.example.agent.tools.DeleteFileTool;
 import com.example.agent.tools.FileChangeTracker;
-import com.example.agent.snapshot.FileSnapshotManager;
 import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.web.session.PendingBashConfirmation;
@@ -322,16 +321,6 @@ public class WebAgentOrchestrator {
 
             boolean allToolsCompleted = executeToolCalls(toolCalls, conversation, sseWriter, sessionId);
 
-            if (allToolsCompleted) {
-                // 工具全部执行完成，重新创建快照以捕获工具执行后的实际文件状态
-                // 注意：makeSnapshot（在 addAssistantMessage 中）在工具执行前就调用过了
-                String userMsgId = getConversationService().findLastUserMessageId(conversation);
-                if (userMsgId != null) {
-                    FileSnapshotManager.removeSnapshot(sessionId, userMsgId);
-                    FileSnapshotManager.makeSnapshot(sessionId, userMsgId);
-                }
-            }
-
             toolRegistry.getBlockerChain().onTurnComplete();
 
             List<Message> history = getConversationService().getHistory(conversation);
@@ -403,7 +392,6 @@ public class WebAgentOrchestrator {
             try {
                 RequestContext.set(RequestContext.ContextType.WEB);
                 FileChangeTracker.setCurrentSessionId(sessionId);
-                FileSnapshotManager.setCurrentSessionId(sessionId);
 
                 // 对 bash 工具做预检查：三级安全模型 + session auto-allow
                 if ("bash".equals(toolName)) {
@@ -637,7 +625,6 @@ public class WebAgentOrchestrator {
                     + "\",\"args\":" + arguments + "}");
             } finally {
                 FileChangeTracker.clearCurrentSessionId();
-                FileSnapshotManager.clearCurrentSessionId();
                 RequestContext.clear();
             }
         }

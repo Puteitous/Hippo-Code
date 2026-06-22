@@ -221,6 +221,11 @@ public class FileChangeTracker {
     /**
      * 根据 toolCallId 回滚到指定变更，移除该变更及其之后的所有变更。
      * 如果 toolCallId 为空，回滚最后一次变更。
+     *
+     * 查找策略：优先按 toolCallId 全局搜索（路径无关），
+     * 降级到按 filePath + toolCallId 匹配。
+     * 这确保从 conversation.jsonl 解析的路径（可能为原始相对路径）
+     * 也能正确定位到已在 FileChangeTracker 中存储的变更。
      */
     public static boolean rollbackByToolCallId(String filePath, String toolCallId) {
         ensureInitialized();
@@ -228,23 +233,38 @@ public class FileChangeTracker {
             return rollback(filePath);
         }
 
-        List<FileChange> allChanges = getAllChanges(filePath);
-        FileChange target = null;
-        for (FileChange c : allChanges) {
-            if (toolCallId.equals(c.toolCallId)) {
-                target = c;
-                break;
+        // 1) 优先按 toolCallId 全局查找（路径无关，与预览逻辑一致）
+        FileChange target = getChangeByToolCallId(toolCallId);
+        logger.info("rollbackByToolCallId: 按 toolCallId 查找={}, target={}", toolCallId, target != null ? "找到" : "未找到");
+        // 2) 降级：按 filePath + toolCallId 查找
+        if (target == null) {
+            logger.info("rollbackByToolCallId: 降级按 filePath={} + toolCallId={} 查找", filePath, toolCallId);
+            List<FileChange> allChanges = getAllChanges(filePath);
+            logger.info("rollbackByToolCallId: getAllChanges({}) 返回 {} 条", filePath, allChanges.size());
+            for (FileChange c : allChanges) {
+                logger.info("rollbackByToolCallId: 变更记录的 toolCallId={}, storedFilePath={}", c.toolCallId, c.filePath);
+                if (toolCallId.equals(c.toolCallId)) {
+                    target = c;
+                    break;
+                }
             }
         }
-        if (target == null) return false;
+        if (target == null) {
+            logger.warn("rollbackByToolCallId: 未找到目标变更, filePath={}, toolCallId={}", filePath, toolCallId);
+            return false;
+        }
+        logger.info("rollbackByToolCallId: 找到目标变更, newFile={}, filePath={}, originalContent长度={}", target.newFile, target.filePath, target.originalContent != null ? target.originalContent.length() : 0);
 
         try {
             if (target.newFile) {
+                logger.info("rollbackByToolCallId: 新建文件, 删除文件: {}", target.filePath);
                 Files.deleteIfExists(Path.of(target.filePath));
             } else if (target.originalBytes != null) {
+                logger.info("rollbackByToolCallId: 非UTF-8文件, 写回原始字节: {}", target.filePath);
                 Files.write(Path.of(target.filePath), target.originalBytes,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } else {
+                logger.info("rollbackByToolCallId: 写回原始内容: {}", target.filePath);
                 Files.writeString(Path.of(target.filePath), target.originalContent, StandardCharsets.UTF_8);
             }
 
@@ -496,6 +516,85 @@ public class FileChangeTracker {
         } catch (Exception e) {
             return path.toLowerCase();
         }
+    }
+
+    /**
+     * 按 toolCallId 查找变更记录（跨所有会话、所有文件）。
+     */
+    public static FileChange getChangeByToolCallId(String toolCallId) {
+        if (toolCallId == null || toolCallId.isEmpty()) return null;
+        ensureInitialized();
+        int sessionCount = 0;
+        int changeCount = 0;
+        for (Map<String, List<FileChange>> sessionChanges : changesBySession.values()) {
+            sessionCount++;
+            for (List<FileChange> changes : sessionChanges.values()) {
+                for (FileChange c : changes) {
+                    changeCount++;
+                    if (toolCallId.equals(c.toolCallId)) {
+                        logger.debug("getChangeByToolCallId: 找到 toolCallId={}, filePath={}", toolCallId, c.filePath);
+                        return c;
+                    }
+                }
+            }
+        }
+        logger.debug("getChangeByToolCallId: 未找到 toolCallId={}, 搜索了 {} 个会话, {} 条变更", toolCallId, sessionCount, changeCount);
+        return null;
+    }
+
+    // ===== Rollback result types =====
+
+    public static class RollbackResult {
+        private final boolean success;
+        private final String error;
+        private final List<String> restoredFiles;
+
+        private RollbackResult(boolean success, String error, List<String> restoredFiles) {
+            this.success = success;
+            this.error = error;
+            this.restoredFiles = restoredFiles;
+        }
+
+        public static RollbackResult success(List<String> restoredFiles) {
+            return new RollbackResult(true, null, restoredFiles);
+        }
+
+        public static RollbackResult failure(String error) {
+            return new RollbackResult(false, error, List.of());
+        }
+
+        public boolean isSuccess() { return success; }
+        public String getError() { return error; }
+        public List<String> getRestoredFiles() { return restoredFiles; }
+    }
+
+    public static class PreviewFile {
+        private final String filePath;
+        private final String action;
+        private final int insertions;
+        private final int deletions;
+
+        public PreviewFile(String filePath, String action, int insertions, int deletions) {
+            this.filePath = filePath;
+            this.action = action;
+            this.insertions = insertions;
+            this.deletions = deletions;
+        }
+
+        public String getFilePath() { return filePath; }
+        public String getAction() { return action; }
+        public int getInsertions() { return insertions; }
+        public int getDeletions() { return deletions; }
+    }
+
+    public static class PreviewResult {
+        private final List<PreviewFile> files;
+
+        public PreviewResult(List<PreviewFile> files) {
+            this.files = files;
+        }
+
+        public List<PreviewFile> getFiles() { return files; }
     }
 
     public static class FileChange {

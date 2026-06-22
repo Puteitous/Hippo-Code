@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.snapshot.FileSnapshotManager;
+import com.example.agent.tools.PathSecurityUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -179,12 +179,6 @@ public class DeleteFileTool implements ToolExecutor {
                     originalBytes,
                     "",
                     "delete_file",
-                    false
-                );
-
-                // 记录到快照追踪（以便会话级回滚）
-                FileSnapshotManager.trackCurrentSessionFile(
-                    file.toAbsolutePath().toString(),
                     false
                 );
 

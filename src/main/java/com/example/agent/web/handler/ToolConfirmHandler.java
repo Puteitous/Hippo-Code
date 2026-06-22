@@ -6,9 +6,9 @@ import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.domain.truncation.TruncationService;
 import com.example.agent.llm.exception.LlmException;
 import com.example.agent.service.TokenEstimatorFactory;
-import com.example.agent.snapshot.FileSnapshotManager;
 import com.example.agent.tools.BashTool;
 import com.example.agent.tools.DeleteFileTool;
+import com.example.agent.tools.FileChangeTracker;
 import com.example.agent.tools.ToolExecutionException;
 import com.example.agent.tools.ToolExecutor;
 import com.example.agent.tools.ToolRegistry;
@@ -181,20 +181,19 @@ public class ToolConfirmHandler implements HttpHandler {
                     }
                 };
                 BashTool.setCurrentToolCallId(pending.toolCallId);
+                FileChangeTracker.setCurrentToolCallId(pending.toolCallId);
                 String result;
                 try {
                     result = executor.execute(arguments, progressCallback);
                 } finally {
                     BashTool.clearCurrentToolCallId();
+                    FileChangeTracker.clearCurrentToolCallId();
                 }
 
                 String truncatedResult = truncationService.truncateToolOutput(pending.toolName, result);
 
                 conversationService.addToolResult(
                     conversation, pending.toolCallId, pending.toolName, truncatedResult, true);
-
-                // 工具执行后重新创建快照，捕获实际文件状态
-                reSnapshotAfterTool(sessionId, conversation, conversationService);
 
                 String cleanArgs = pending.arguments.replace("\r", "").replace("\n", "");
                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
@@ -276,13 +275,16 @@ public class ToolConfirmHandler implements HttpHandler {
                     throw new ToolExecutionException("未知的工具: " + pending.toolName);
                 }
 
-                String result = executor.execute(pending.arguments);
+                FileChangeTracker.setCurrentToolCallId(pending.toolCallId);
+                String result;
+                try {
+                    result = executor.execute(pending.arguments);
+                } finally {
+                    FileChangeTracker.clearCurrentToolCallId();
+                }
 
                 conversationService.addToolResult(
                     conversation, pending.toolCallId, pending.toolName, result, true);
-
-                // 工具执行后重新创建快照，捕获实际文件状态
-                reSnapshotAfterTool(sessionId, conversation, conversationService);
 
                 sseWriter.sendSseEvent("tool_result", "{\"id\":\"" + SseWriter.escapeJson(pending.toolCallId)
                     + "\",\"name\":\"" + SseWriter.escapeJson(pending.toolName)
@@ -348,25 +350,4 @@ public class ToolConfirmHandler implements HttpHandler {
         return command.toLowerCase();
     }
 
-    /**
-     * 工具执行后重新创建快照，确保快照能反映实际文件状态。
-     * 确认机制的工具（bash 确认、delete_file 确认）在用户确认后才执行，
-     * 此时需要更新快照，否则后续回滚预览会不准确。
-     */
-    private void reSnapshotAfterTool(String sessionId, Conversation conversation,
-                                      ConversationService conversationService) {
-        try {
-            FileSnapshotManager.setCurrentSessionId(sessionId);
-            String userMsgId = conversationService.findLastUserMessageId(conversation);
-            if (userMsgId != null) {
-                FileSnapshotManager.removeSnapshot(sessionId, userMsgId);
-                FileSnapshotManager.makeSnapshot(sessionId, userMsgId);
-                logger.info("确认工具执行后已重新创建快照: sessionId={}, messageId={}", sessionId, userMsgId);
-            }
-        } catch (Exception e) {
-            logger.warn("确认后重新创建快照失败: sessionId={}", sessionId, e);
-        } finally {
-            FileSnapshotManager.clearCurrentSessionId();
-        }
     }
-}

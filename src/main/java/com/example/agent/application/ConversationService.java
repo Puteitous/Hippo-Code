@@ -27,7 +27,6 @@ import java.nio.file.Paths;
 import com.example.agent.session.SessionData;
 import com.example.agent.session.SessionTranscript;
 import com.example.agent.tools.ToolArgumentSanitizer;
-import com.example.agent.snapshot.FileSnapshotManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -491,13 +490,6 @@ public class ConversationService {
                 components.transcript.appendUserMessage(message);
             } else if (message.isAssistant()) {
                 components.transcript.appendAssistantMessage(message, conversation.getLastKnownUsage());
-                String snapshotSessionId = conversation.getSessionId();
-                if (snapshotSessionId != null) {
-                    String userMsgId = findLastUserMessageId(conversation);
-                    if (userMsgId != null) {
-                        FileSnapshotManager.makeSnapshot(snapshotSessionId, userMsgId);
-                    }
-                }
             } else if (message.isTool()) {
                 components.transcript.appendToolResult(message, message.getName(), 0, toolSuccess);
             } else if (message.isSystem()) {

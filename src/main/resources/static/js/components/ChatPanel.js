@@ -1688,7 +1688,7 @@ export class ChatPanel {
       }
     }
 
-    this.smartScroll();
+    this.chatUI.scrollToBottom();
   }
 
   /**

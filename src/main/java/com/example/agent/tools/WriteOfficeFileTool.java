@@ -1,6 +1,5 @@
 package com.example.agent.tools;
 
-import com.example.agent.snapshot.FileSnapshotManager;
 import com.example.agent.tools.office.*;
 import com.example.agent.tools.office.PptxWriter.SlideDef;
 import com.example.agent.tools.office.PptxWriter.SlideDef.TableDef;
@@ -137,10 +136,6 @@ public class WriteOfficeFileTool implements ToolExecutor {
                 case DOCX -> writeDocx(path, data);
                 case PPTX -> writePptx(path, data);
             };
-
-            // 跟踪文件变更
-            FileSnapshotManager.trackCurrentSessionFile(
-                    path.toAbsolutePath().toString(), !exists);
 
             String action = exists ? "覆盖" : "创建";
             String relativePath = PathSecurityUtils.getRelativePath(path);

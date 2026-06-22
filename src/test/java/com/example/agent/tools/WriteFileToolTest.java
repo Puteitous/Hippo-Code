@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import com.example.agent.snapshot.FileSnapshotManager;
 import com.example.agent.tools.FileChangeTracker;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -324,8 +323,7 @@ class WriteFileToolTest {
     void testWriteNewFileRecordsChange() throws Exception {
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
-             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -352,8 +350,7 @@ class WriteFileToolTest {
     void testOverwriteExistingFileRecordsChange() throws Exception {
         try (MockedStatic<PathSecurityUtils> securityUtilsMock = mockStatic(PathSecurityUtils.class);
              MockedStatic<Files> filesMock = mockStatic(Files.class);
-             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class);
-             MockedStatic<FileSnapshotManager> snapshotMock = mockStatic(FileSnapshotManager.class)) {
+             MockedStatic<FileChangeTracker> trackerMock = mockStatic(FileChangeTracker.class)) {
 
             securityUtilsMock.when(() -> PathSecurityUtils.validateAndResolve(anyString())).thenReturn(mockPath);
             securityUtilsMock.when(() -> PathSecurityUtils.getRelativePath(any())).thenReturn("test.txt");
@@ -362,7 +359,7 @@ class WriteFileToolTest {
             when(mockPath.toAbsolutePath()).thenReturn(mockPath);
             filesMock.when(() -> Files.exists(mockParentPath)).thenReturn(true);
             filesMock.when(() -> Files.exists(mockPath)).thenReturn(true);
-            filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn("original content");
+            filesMock.when(() -> Files.readString(eq(mockPath), any())).thenReturn("Original content");
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
 
