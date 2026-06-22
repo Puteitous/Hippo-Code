@@ -63,6 +63,47 @@ public class FileChangeTracker {
         return id != null ? id : "";
     }
 
+    /**
+     * 创建工具执行上下文，自动管理 ThreadLocal 的设置和清理。
+     * 使用 try-with-resources 确保不会遗漏 clear：
+     * <pre>
+     * try (var ctx = FileChangeTracker.withContext(sessionId, toolCallId)) {
+     *     executor.execute(arguments);
+     * }
+     * // ctx.close() 自动清理 sessionId + toolCallId
+     * </pre>
+     * sessionId 或 toolCallId 为 null/空时，对应的 ThreadLocal 不会设/清。
+     */
+    public static RunContext withContext(String sessionId, String toolCallId) {
+        boolean hasSession = sessionId != null && !sessionId.isEmpty();
+        boolean hasToolCall = toolCallId != null && !toolCallId.isEmpty();
+        if (hasSession) {
+            currentSessionId.set(sessionId);
+        }
+        if (hasToolCall) {
+            currentToolCallId.set(toolCallId);
+        }
+        return new RunContext(hasSession, hasToolCall);
+    }
+
+    /**
+     * 工具执行上下文，配合 {@link #withContext(String, String)} 使用。
+     * close() 自动清理 withContext 中设置的 ThreadLocal。
+     */
+    public static class RunContext implements AutoCloseable {
+        private final boolean hasSession;
+        private final boolean hasToolCall;
+        private RunContext(boolean hasSession, boolean hasToolCall) {
+            this.hasSession = hasSession;
+            this.hasToolCall = hasToolCall;
+        }
+        @Override
+        public void close() {
+            if (hasToolCall) currentToolCallId.remove();
+            if (hasSession) currentSessionId.remove();
+        }
+    }
+
     public static synchronized void init() {
         if (initialized.get()) return;
         initialized.set(true);
@@ -102,7 +143,7 @@ public class FileChangeTracker {
                 try {
                     FileChange change = FileChange.fromJson(line);
                     sessionChanges
-                        .computeIfAbsent(change.filePath, k -> new CopyOnWriteArrayList<>())
+                        .computeIfAbsent(normalizePath(change.filePath), k -> new CopyOnWriteArrayList<>())
                         .add(change);
                 } catch (Exception e) {
                     logger.warn("跳过损坏的变更记录: {}", e.getMessage());
@@ -159,7 +200,8 @@ public class FileChangeTracker {
         FileChange change = new FileChange(filePath, originalContent, newContent, toolName, System.currentTimeMillis(), newFile, sessionId, originalBytes, toolCallId);
 
         Map<String, List<FileChange>> sessionChanges = getOrCreateSessionChanges(sessionId);
-        List<FileChange> list = sessionChanges.computeIfAbsent(filePath, k -> new CopyOnWriteArrayList<>());
+        String normalizedKey = normalizePath(filePath);
+        List<FileChange> list = sessionChanges.computeIfAbsent(normalizedKey, k -> new CopyOnWriteArrayList<>());
         list.add(change);
         while (list.size() > MAX_CHANGES_PER_FILE) {
             list.remove(0);
@@ -235,14 +277,10 @@ public class FileChangeTracker {
 
         // 1) 优先按 toolCallId 全局查找（路径无关，与预览逻辑一致）
         FileChange target = getChangeByToolCallId(toolCallId);
-        logger.info("rollbackByToolCallId: 按 toolCallId 查找={}, target={}", toolCallId, target != null ? "找到" : "未找到");
         // 2) 降级：按 filePath + toolCallId 查找
         if (target == null) {
-            logger.info("rollbackByToolCallId: 降级按 filePath={} + toolCallId={} 查找", filePath, toolCallId);
             List<FileChange> allChanges = getAllChanges(filePath);
-            logger.info("rollbackByToolCallId: getAllChanges({}) 返回 {} 条", filePath, allChanges.size());
             for (FileChange c : allChanges) {
-                logger.info("rollbackByToolCallId: 变更记录的 toolCallId={}, storedFilePath={}", c.toolCallId, c.filePath);
                 if (toolCallId.equals(c.toolCallId)) {
                     target = c;
                     break;
@@ -253,25 +291,25 @@ public class FileChangeTracker {
             logger.warn("rollbackByToolCallId: 未找到目标变更, filePath={}, toolCallId={}", filePath, toolCallId);
             return false;
         }
-        logger.info("rollbackByToolCallId: 找到目标变更, newFile={}, filePath={}, originalContent长度={}", target.newFile, target.filePath, target.originalContent != null ? target.originalContent.length() : 0);
+        logger.debug("rollbackByToolCallId: 找到目标变更, newFile={}, filePath={}", target.newFile, target.filePath);
 
         try {
             if (target.newFile) {
-                logger.info("rollbackByToolCallId: 新建文件, 删除文件: {}", target.filePath);
+                logger.debug("rollbackByToolCallId: 新建文件, 删除文件: {}", target.filePath);
                 Files.deleteIfExists(Path.of(target.filePath));
             } else if (target.originalBytes != null) {
-                logger.info("rollbackByToolCallId: 非UTF-8文件, 写回原始字节: {}", target.filePath);
+                logger.debug("rollbackByToolCallId: 非UTF-8文件, 写回原始字节: {}", target.filePath);
                 Files.write(Path.of(target.filePath), target.originalBytes,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } else {
-                logger.info("rollbackByToolCallId: 写回原始内容: {}", target.filePath);
+                logger.debug("rollbackByToolCallId: 写回原始内容: {}", target.filePath);
                 Files.writeString(Path.of(target.filePath), target.originalContent, StandardCharsets.UTF_8);
             }
 
             String sessionId = target.sessionId;
             Map<String, List<FileChange>> sessionChanges = changesBySession.get(sessionId);
             if (sessionChanges != null) {
-                List<FileChange> fileChanges = sessionChanges.get(target.filePath);
+                List<FileChange> fileChanges = sessionChanges.get(normalizePath(target.filePath));
                 if (fileChanges != null) {
                     int listIndex = -1;
                     for (int i = 0; i < fileChanges.size(); i++) {
@@ -312,7 +350,7 @@ public class FileChangeTracker {
             } else {
                 Files.writeString(Path.of(change.filePath), change.originalContent, StandardCharsets.UTF_8);
             }
-            List<FileChange> list = sessionChanges.get(change.filePath);
+            List<FileChange> list = sessionChanges.get(normalizePath(change.filePath));
             if (list != null && !list.isEmpty()) {
                 list.remove(list.size() - 1);
             }
@@ -396,7 +434,7 @@ public class FileChangeTracker {
                     try {
                         FileChange change = FileChange.fromJson(line);
                         rootChanges
-                            .computeIfAbsent(change.filePath, k -> new CopyOnWriteArrayList<>())
+                            .computeIfAbsent(normalizePath(change.filePath), k -> new CopyOnWriteArrayList<>())
                             .add(change);
                     } catch (Exception e) {
                         logger.warn("跳过损坏的变更记录: {}", e.getMessage());
@@ -420,7 +458,7 @@ public class FileChangeTracker {
                                 try {
                                     FileChange change = FileChange.fromJson(line);
                                     sessionChanges
-                                        .computeIfAbsent(change.filePath, k -> new CopyOnWriteArrayList<>())
+                                        .computeIfAbsent(normalizePath(change.filePath), k -> new CopyOnWriteArrayList<>())
                                         .add(change);
                                 } catch (Exception e) {
                                     logger.warn("跳过损坏的变更记录: {}", e.getMessage());
@@ -494,7 +532,7 @@ public class FileChangeTracker {
             int toRemove = total - MAX_TOTAL_CHANGES;
             for (int i = 0; i < toRemove && i < all.size(); i++) {
                 FileChange oldest = all.get(i);
-                List<FileChange> list = sessionChanges.get(oldest.filePath);
+                List<FileChange> list = sessionChanges.get(normalizePath(oldest.filePath));
                 if (list != null) {
                     list.remove(oldest);
                 }

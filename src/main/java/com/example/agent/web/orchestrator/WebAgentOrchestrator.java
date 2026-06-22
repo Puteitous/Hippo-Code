@@ -389,9 +389,8 @@ public class WebAgentOrchestrator {
                     + "\",\"args\":" + SseWriter.escapeJsonForValue(arguments) + "}");
             }
 
-            try {
+            try (var _session = FileChangeTracker.withContext(sessionId, null)) {
                 RequestContext.set(RequestContext.ContextType.WEB);
-                FileChangeTracker.setCurrentSessionId(sessionId);
 
                 // 对 bash 工具做预检查：三级安全模型 + session auto-allow
                 if ("bash".equals(toolName)) {
@@ -574,8 +573,7 @@ public class WebAgentOrchestrator {
                 }
 
                 // 设置 toolCallId 供 FileChangeTracker.recordChange 使用
-                FileChangeTracker.setCurrentToolCallId(toolCall.getId());
-                try {
+                try (var _tool = FileChangeTracker.withContext(null, toolCall.getId())) {
                     String rawResult = toolRegistry.execute(toolName, arguments);
 
                     if ("ask_user".equals(toolName)) {
@@ -610,8 +608,6 @@ public class WebAgentOrchestrator {
 
                     SessionTokenStats stats = sessionManager.getOrCreateSessionTokenStats(sessionId);
                     stats.addToolCall();
-                } finally {
-                    FileChangeTracker.clearCurrentToolCallId();
                 }
             } catch (Exception e) {
                 String errorMsg = e.getMessage();
@@ -624,7 +620,6 @@ public class WebAgentOrchestrator {
                     + "\",\"success\":false,\"error\":\"" + SseWriter.escapeJson(errorMsg)
                     + "\",\"args\":" + arguments + "}");
             } finally {
-                FileChangeTracker.clearCurrentSessionId();
                 RequestContext.clear();
             }
         }

@@ -180,14 +180,12 @@ public class ToolConfirmHandler implements HttpHandler {
                             + "\",\"line\":\"" + SseWriter.escapeJson(line) + "\"}");
                     }
                 };
-                BashTool.setCurrentToolCallId(pending.toolCallId);
-                FileChangeTracker.setCurrentToolCallId(pending.toolCallId);
                 String result;
-                try {
+                try (var _ctx = FileChangeTracker.withContext(sessionId, pending.toolCallId)) {
+                    BashTool.setCurrentToolCallId(pending.toolCallId);
                     result = executor.execute(arguments, progressCallback);
                 } finally {
                     BashTool.clearCurrentToolCallId();
-                    FileChangeTracker.clearCurrentToolCallId();
                 }
 
                 String truncatedResult = truncationService.truncateToolOutput(pending.toolName, result);
@@ -275,12 +273,9 @@ public class ToolConfirmHandler implements HttpHandler {
                     throw new ToolExecutionException("未知的工具: " + pending.toolName);
                 }
 
-                FileChangeTracker.setCurrentToolCallId(pending.toolCallId);
                 String result;
-                try {
+                try (var _ctx = FileChangeTracker.withContext(sessionId, pending.toolCallId)) {
                     result = executor.execute(pending.arguments);
-                } finally {
-                    FileChangeTracker.clearCurrentToolCallId();
                 }
 
                 conversationService.addToolResult(

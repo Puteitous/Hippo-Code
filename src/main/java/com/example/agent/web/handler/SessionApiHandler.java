@@ -10,7 +10,6 @@ import com.example.agent.llm.model.Message;
 import com.example.agent.service.TokenEstimatorFactory;
 import com.example.agent.tools.FileChangeTracker;
 import com.example.agent.web.util.ConversationJsonlReader;
-import com.example.agent.web.util.DiffComputer;
 import com.example.agent.web.util.MessageConverter;
 import com.example.agent.web.util.SessionListBuilder;
 import com.example.agent.web.util.TokenStatsResponseBuilder;
@@ -25,8 +24,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +37,7 @@ public class SessionApiHandler implements HttpHandler {
     private static final SessionListBuilder sessionListBuilder = new SessionListBuilder(jsonlReader);
     private static final MessageConverter messageConverter = new MessageConverter();
     private static final TokenStatsResponseBuilder tokenStatsResponseBuilder = new TokenStatsResponseBuilder();
+    private static final SessionRewindHandler rewindHandler = new SessionRewindHandler();
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -61,7 +59,7 @@ public class SessionApiHandler implements HttpHandler {
             // 初始化内存缓存（从日志文件恢复 Token 统计）
             com.example.agent.web.server.WebInitializer.initializeTokenCache(
                 com.example.agent.web.session.WebSessionManager.getInstance());
-            
+
             if ("GET".equals(method) && path.equals("/api/sessions")) {
                 handleListSessions(exchange);
             } else if ("GET".equals(method) && path.matches("/api/sessions/[^/]+/messages$")) {
@@ -75,10 +73,10 @@ public class SessionApiHandler implements HttpHandler {
                 handleCompactSession(exchange, sessionId);
             } else if ("POST".equals(method) && path.matches("/api/sessions/[^/]+/rewind-check$")) {
                 String sessionId = path.substring("/api/sessions/".length(), path.lastIndexOf("/rewind-check"));
-                handleRewindCheck(exchange, sessionId);
+                rewindHandler.handleRewindCheck(exchange, sessionId);
             } else if ("POST".equals(method) && path.matches("/api/sessions/[^/]+/rewind$")) {
                 String sessionId = path.substring("/api/sessions/".length(), path.lastIndexOf("/rewind"));
-                handleRewindSession(exchange, sessionId);
+                rewindHandler.handleRewindSession(exchange, sessionId);
             } else if ("DELETE".equals(method) && path.matches("/api/sessions/[^/]+$")) {
                 String sessionId = path.substring("/api/sessions/".length());
                 handleDeleteSession(exchange, sessionId);
@@ -206,10 +204,10 @@ public class SessionApiHandler implements HttpHandler {
         if (jsonl != null && Files.exists(jsonl)) {
             try {
                 List<String> lines = Files.readAllLines(jsonl);
-                
+
                 String timestamp = java.time.Instant.now().toString();
                 String uuid = java.util.UUID.randomUUID().toString();
-                
+
                 com.fasterxml.jackson.databind.node.ObjectNode titleEntry = objectMapper.createObjectNode();
                 titleEntry.put("type", "custom-title");
                 titleEntry.put("uuid", uuid);
@@ -218,13 +216,13 @@ public class SessionApiHandler implements HttpHandler {
                 titleEntry.put("version", "1.0.0");
                 titleEntry.put("cwd", System.getProperty("user.dir"));
                 titleEntry.put("title", newName);
-                
+
                 lines.add(0, objectMapper.writeValueAsString(titleEntry));
-                
+
                 Files.write(jsonl, lines, StandardCharsets.UTF_8);
-                
+
                 logger.info("重命名会话：sessionId={}, newName={}", sessionId, newName);
-                
+
                 String response = "{\"success\":true,\"message\":\"Session renamed\"}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, bytes.length);
@@ -306,336 +304,6 @@ public class SessionApiHandler implements HttpHandler {
             sendError(exchange, 500, "Failed to compact session: " + e.getMessage());
         }
         exchange.close();
-    }
-
-    /**
-     * 回滚预览（基于 FileChangeTracker）
-     * POST /api/sessions/{id}/rewind-check
-     * 请求体: {"messageId": "uuid"}
-     */
-    private void handleRewindCheck(HttpExchange exchange, String sessionId) throws IOException {
-        String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        JsonNode json = objectMapper.readTree(requestBody);
-        String messageId = json.has("messageId") ? json.get("messageId").asText() : "";
-
-        logger.info("handleRewindCheck: sessionId={}, messageId={}", sessionId, messageId);
-
-        if (messageId.isBlank()) {
-            sendJson(exchange, Map.of("files", List.of()));
-            return;
-        }
-
-        List<Map<String, Object>> previewFiles = collectFileChangesAfterMessage(sessionId, messageId);
-        logger.info("handleRewindCheck: 返回 {} 个文件", previewFiles.size());
-        sendJson(exchange, Map.of("files", previewFiles));
-    }
-
-    /**
-     * 对话级回滚（基于 FileChangeTracker）
-     * POST /api/sessions/{id}/rewind
-     * 请求体: {"messageId": "uuid"}
-     *
-     * 此操作会：
-     * 1. 从 conversation.jsonl 提取目标消息后的文件操作 toolCallId，逆序回滚
-     * 2. 截断内存中的 Conversation 消息
-     * 3. 事务性重写 JSONL 文件
-     */
-    private void handleRewindSession(HttpExchange exchange, String sessionId) throws IOException {
-        String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        JsonNode json = objectMapper.readTree(requestBody);
-        String messageId = json.has("messageId") ? json.get("messageId").asText("") : "";
-
-        logger.info("handleRewindSession: sessionId={}, messageId={}", sessionId, messageId);
-
-        if (messageId.isBlank()) {
-            sendError(exchange, 400, "messageId is required");
-            return;
-        }
-
-        Conversation conversation = com.example.agent.web.session.WebSessionManager.getInstance().getSessions().get(sessionId);
-        boolean isActiveSession = conversation != null;
-        ConversationService conversationService = null;
-        Path jsonlPath = null;
-
-        if (isActiveSession) {
-            conversationService = ServiceLocator.get(ConversationService.class);
-            jsonlPath = conversationService.flushTranscript(sessionId);
-        } else {
-            jsonlPath = jsonlReader.findJsonlFile(sessionId);
-        }
-
-        if (jsonlPath == null || !Files.exists(jsonlPath)) {
-            logger.warn("handleRewindSession: JSONL 文件不存在 sessionId={}", sessionId);
-            sendError(exchange, 404, "Session not found");
-            return;
-        }
-
-        try {
-            boolean foundMessageInJsonl = false;
-            String userMessageContent = null;
-            List<String> lines = Files.readAllLines(jsonlPath, StandardCharsets.UTF_8);
-            for (String line : lines) {
-                if (line.isBlank()) continue;
-                try {
-                    JsonNode lineNode = objectMapper.readTree(line);
-                    String uuid = lineNode.has("uuid") ? lineNode.get("uuid").asText() : "";
-                    if (messageId.equals(uuid)) {
-                        foundMessageInJsonl = true;
-                        JsonNode msgNode = lineNode.get("message");
-                        if (msgNode != null && msgNode.has("content")) {
-                            userMessageContent = msgNode.get("content").asText();
-                        }
-                        break;
-                    }
-                } catch (Exception ignored) {}
-            }
-            if (!foundMessageInJsonl) {
-                sendError(exchange, 404, "Message not found in session file");
-                return;
-            }
-
-            // 从 conversation.jsonl 提取目标消息后的文件操作 toolCallId，逆序回滚
-            int filesChanged = executeRewindRollback(jsonlPath, messageId);
-
-            truncateConversationJsonl(jsonlPath, sessionId, messageId);
-
-            if (isActiveSession) {
-                int removed = conversationService.truncateMessagesAfter(conversation, messageId);
-                logger.debug("内存截断完成: sessionId={}, 删除{}条消息", sessionId, removed);
-
-                conversationService.destroyTranscript(sessionId);
-                conversationService.ensureSessionComponents(conversation);
-            }
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "已回滚到指定轮次");
-            response.put("filesChanged", filesChanged);
-            if (userMessageContent != null) {
-                response.put("lastUserMessage", userMessageContent);
-            }
-            sendJson(exchange, response);
-
-        } catch (Exception e) {
-            logger.error("回滚失败: sessionId={}", sessionId, e);
-            sendError(exchange, 500, "回滚失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 从 conversation.jsonl 中提取目标消息后的所有文件操作 tool_call，
-     * 提取 (filePath, toolCallId) 对，逆序执行 rollbackByToolCallId。
-     */
-    private int executeRewindRollback(Path jsonlPath, String messageId) throws IOException {
-        List<String> lines = Files.readAllLines(jsonlPath, StandardCharsets.UTF_8);
-        boolean foundTarget = false;
-        // 收集所有需要回滚的 (filePath, toolCallId) 对
-        List<Map.Entry<String, String>> rollbackEntries = new ArrayList<>();
-
-        logger.info("executeRewindRollback: 开始回滚, targetMessageId={}", messageId);
-        for (String line : lines) {
-            if (line.isBlank()) continue;
-            try {
-                JsonNode lineNode = objectMapper.readTree(line);
-                String uuid = lineNode.has("uuid") ? lineNode.get("uuid").asText("") : "";
-
-                if (!foundTarget) {
-                    if (uuid.equals(messageId)) {
-                        foundTarget = true;
-                        logger.info("executeRewindRollback: 找到目标消息, uuid={}", uuid);
-                    }
-                    continue;
-                }
-
-                String type = lineNode.has("type") ? lineNode.get("type").asText("") : "";
-                if (!"assistant".equals(type)) continue;
-
-                JsonNode msgNode = lineNode.get("message");
-                if (msgNode == null) continue;
-                JsonNode toolCalls = msgNode.get("tool_calls");
-                if (toolCalls == null || !toolCalls.isArray()) continue;
-
-                for (JsonNode tc : toolCalls) {
-                    String toolName = tc.path("function").path("name").asText("");
-                    if (!isFileTool(toolName)) continue;
-
-                    String toolCallId = tc.has("id") ? tc.get("id").asText("") : "";
-                    if (toolCallId.isEmpty()) continue;
-
-                    String argsStr = tc.path("function").path("arguments").asText("");
-                    List<String> filePaths = parseFilePathsFromArgs(argsStr);
-                    logger.info("executeRewindRollback: 提取到 toolCallId={}, toolName={}, filePaths={}", toolCallId, toolName, filePaths);
-                    for (String filePath : filePaths) {
-                        rollbackEntries.add(Map.entry(filePath, toolCallId));
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
-        logger.info("executeRewindRollback: 共收集到 {} 个回滚条目", rollbackEntries.size());
-
-        // 逆序回滚
-        int count = 0;
-        for (int i = rollbackEntries.size() - 1; i >= 0; i--) {
-            Map.Entry<String, String> entry = rollbackEntries.get(i);
-            logger.info("executeRewindRollback: 执行回滚 filePath={}, toolCallId={}", entry.getKey(), entry.getValue());
-            boolean ok = FileChangeTracker.rollbackByToolCallId(entry.getKey(), entry.getValue());
-            logger.info("executeRewindRollback: 回滚结果 toolCallId={}, ok={}", entry.getValue(), ok);
-            if (ok) count++;
-        }
-
-        logger.info("executeRewindRollback: session 回滚完成, 成功 {} / 总共 {}", count, rollbackEntries.size());
-        return count;
-    }
-
-    /**
-     * 事务性重写 JSONL 文件：删除从 messageId 开始及之后的所有行。
-     * 使用临时文件 + ATOMIC_MOVE（Windows 回退到 REPLACE_EXISTING）。
-     */
-    private void truncateConversationJsonl(Path jsonlPath, String sessionId, String messageId) throws IOException {
-        List<String> lines = Files.readAllLines(jsonlPath, StandardCharsets.UTF_8);
-        List<String> keptLines = new ArrayList<>();
-        boolean passedTarget = false;
-        for (String line : lines) {
-            if (line.isBlank()) continue;
-            try {
-                JsonNode lineNode = objectMapper.readTree(line);
-                String uuid = lineNode.has("uuid") ? lineNode.get("uuid").asText() : "";
-                if (messageId.equals(uuid)) {
-                    passedTarget = true;
-                    continue;
-                }
-                if (!passedTarget) {
-                    keptLines.add(line);
-                }
-            } catch (Exception e) {
-                if (!passedTarget) {
-                    keptLines.add(line);
-                }
-            }
-        }
-
-        Path tempFile = jsonlPath.resolveSibling("conversation.jsonl.tmp");
-        Files.write(tempFile, keptLines, StandardCharsets.UTF_8);
-        Files.move(tempFile, jsonlPath, StandardCopyOption.REPLACE_EXISTING);
-        jsonlReader.removeFromCache(sessionId);
-        logger.debug("JSONL 文件截断完成: sessionId={}, 保留{}行", sessionId, keptLines.size());
-    }
-
-    /**
-     * 回滚预览：从 conversation.jsonl 中收集目标消息之后的所有文件操作变更。
-     */
-    private List<Map<String, Object>> collectFileChangesAfterMessage(String sessionId, String messageId) throws IOException {
-        Path jsonlPath = findJsonlPathForSession(sessionId);
-        if (jsonlPath == null || !Files.exists(jsonlPath)) return List.of();
-
-        List<String> lines = Files.readAllLines(jsonlPath, StandardCharsets.UTF_8);
-        boolean foundTarget = false;
-        DiffComputer diffComputer = DiffComputer.DEFAULT;
-        Map<String, Map<String, Object>> fileChanges = new java.util.LinkedHashMap<>();
-
-        for (String line : lines) {
-            if (line.isBlank()) continue;
-            try {
-                JsonNode lineNode = objectMapper.readTree(line);
-                String uuid = lineNode.has("uuid") ? lineNode.get("uuid").asText("") : "";
-
-                if (!foundTarget) {
-                    if (uuid.equals(messageId)) {
-                        foundTarget = true;
-                    }
-                    continue;
-                }
-
-                String type = lineNode.has("type") ? lineNode.get("type").asText("") : "";
-                if (!"assistant".equals(type)) continue;
-
-                JsonNode msgNode = lineNode.get("message");
-                if (msgNode == null) continue;
-                JsonNode toolCalls = msgNode.get("tool_calls");
-                if (toolCalls == null || !toolCalls.isArray()) continue;
-
-                for (JsonNode tc : toolCalls) {
-                    String toolName = tc.path("function").path("name").asText("");
-                    if (!isFileTool(toolName)) continue;
-
-                    String toolCallId = tc.has("id") ? tc.get("id").asText("") : "";
-                    if (toolCallId.isEmpty()) continue;
-
-                    String argsStr = tc.path("function").path("arguments").asText("");
-                    List<String> filePaths = parseFilePathsFromArgs(argsStr);
-
-                    for (String filePath : filePaths) {
-                        if (fileChanges.containsKey(filePath)) continue;
-
-                        FileChangeTracker.FileChange change = FileChangeTracker.getChangeByToolCallId(toolCallId);
-                        String action;
-                        int insertions = 0;
-                        int deletions = 0;
-
-                        if (change != null) {
-                            action = change.newFile ? "delete" : "restore";
-                            int[] stats = diffComputer.countDiffStats(
-                                change.originalContent != null ? change.originalContent : "",
-                                change.newContent != null ? change.newContent : "");
-                            insertions = stats[0];
-                            deletions = stats[1];
-                        } else {
-                            action = "restore";
-                        }
-
-                        Map<String, Object> item = new HashMap<>();
-                        item.put("filePath", filePath);
-                        item.put("action", action);
-                        item.put("insertions", insertions);
-                        item.put("deletions", deletions);
-                        fileChanges.put(filePath, item);
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
-        return new ArrayList<>(fileChanges.values());
-    }
-
-    private static final java.util.Set<String> FILE_TOOLS = java.util.Set.of("edit_file", "write_file", "delete_file");
-
-    private static boolean isFileTool(String toolName) {
-        return toolName != null && FILE_TOOLS.contains(toolName);
-    }
-
-    /**
-     * 从工具调用参数中解析所有文件路径。
-     * edit_file/write_file 使用 "path"（单个字符串）；
-     * delete_file 使用 "paths"（字符串数组）。
-     */
-    private static List<String> parseFilePathsFromArgs(String argsStr) {
-        if (argsStr == null || argsStr.isEmpty()) return List.of();
-        try {
-            JsonNode args = objectMapper.readTree(argsStr);
-            if (args.has("paths") && args.get("paths").isArray()) {
-                List<String> paths = new ArrayList<>();
-                for (JsonNode p : args.get("paths")) {
-                    paths.add(p.asText());
-                }
-                return paths;
-            }
-            if (args.has("path")) {
-                return List.of(args.get("path").asText());
-            }
-            return List.of();
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    private Path findJsonlPathForSession(String sessionId) {
-        Conversation conversation = com.example.agent.web.session.WebSessionManager.getInstance().getSessions().get(sessionId);
-        if (conversation != null) {
-            ConversationService conversationService = ServiceLocator.get(ConversationService.class);
-            return conversationService.flushTranscript(sessionId);
-        }
-        return jsonlReader.findJsonlFile(sessionId);
     }
 
     /**
