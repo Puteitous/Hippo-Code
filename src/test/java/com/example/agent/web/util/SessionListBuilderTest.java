@@ -217,6 +217,18 @@ class SessionListBuilderTest {
         }
 
         @Test
+        @DisplayName("\"_fork_\" 分叉会话提取 forkTs")
+        void forkSession() {
+            assertEquals("1741536000000", SessionListBuilder.extractTimestamp("web-1741449600000_fork_1741536000000"));
+        }
+
+        @Test
+        @DisplayName("\"_fork_\" 双重分叉提取最后一个 forkTs")
+        void doubleForkSession() {
+            assertEquals("1741622400000", SessionListBuilder.extractTimestamp("web-1741449600000_fork_1741536000000_fork_1741622400000"));
+        }
+
+        @Test
         @DisplayName("\"test-session-\" 前缀提取后缀")
         void testSessionPrefix() {
             assertEquals("1234567890", SessionListBuilder.extractTimestamp("test-session-1234567890"));

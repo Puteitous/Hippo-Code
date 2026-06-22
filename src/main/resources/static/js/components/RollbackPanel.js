@@ -251,8 +251,8 @@ export class RollbackPanel {
       <div class="rollback-inline-footer">
         <span class="rollback-inline-actions">
           <button class="rollback-inline-btn rollback-inline-btn-cancel">取消</button>
-          <button class="rollback-inline-btn rollback-inline-btn-files">回滚文件</button>
-          <button class="rollback-inline-btn rollback-inline-btn-confirm">全部回滚</button>
+          <button class="rollback-inline-btn rollback-inline-btn-files">仅回滚文件</button>
+          <button class="rollback-inline-btn rollback-inline-btn-confirm">回滚会话与文件</button>
         </span>
       </div>
     `;

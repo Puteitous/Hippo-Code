@@ -1654,14 +1654,27 @@
 }
 
 .rollback-inline-btn-files {
-    background: transparent;
+    background: var(--bg-white);
     color: var(--text-primary);
     border-color: var(--border-color);
 }
 
 .rollback-inline-btn-files:hover {
-    background: var(--bg-code);
+    background: var(--bg-hover);
     border-color: var(--text-muted);
+}
+
+[data-theme="dark"] .rollback-inline-btn-confirm,
+[data-theme="dark"] .rollback-inline-btn-files {
+    background: #e8e8ee;
+    color: #181a1b;
+    border-color: #d0d0d4;
+}
+
+[data-theme="dark"] .rollback-inline-btn-confirm:hover,
+[data-theme="dark"] .rollback-inline-btn-files:hover {
+    background: #dcdce2;
+    border-color: #c0c0c4;
 }
 
 .rollback-inline-loading {

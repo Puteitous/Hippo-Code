@@ -401,6 +401,8 @@ function bindGlobalEvents() {
       if (forkResult.newSessionId) {
         showToast('已创建新会话，正在切换...', { type: 'info', duration: 3000 });
         await switchSession(forkResult.newSessionId);
+        await sessionManager.loadSessions();
+        updateHistoryDropdown?.();
         showToast('已分叉为新会话', { type: 'success', duration: 4000 });
       }
     } catch (e) {

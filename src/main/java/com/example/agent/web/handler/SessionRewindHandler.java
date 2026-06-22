@@ -10,6 +10,7 @@ import com.example.agent.web.util.ConversationJsonlReader;
 import com.example.agent.web.util.DiffComputer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.example.agent.logging.WorkspaceManager.getSessionDir;
 
@@ -244,20 +246,47 @@ public class SessionRewindHandler {
                 return;
             }
 
-            // 生成新 sessionId：在源 ID 后追加 _fork_ 时间戳，确保唯一且可溯源
-            String newSessionId = sessionId + "_fork_" + System.currentTimeMillis();
+            // 剥离 _fork_ 链找到根 sessionId，新分叉始终使用 rootId + _fork_ + timestamp
+            String rootSessionId = sessionId.indexOf("_fork_") > 0 ? sessionId.substring(0, sessionId.indexOf("_fork_")) : sessionId;
+            String newSessionId = rootSessionId + "_fork_" + System.currentTimeMillis();
 
-            // 创建新会话目录并写入截断后的 JSONL
+            // 创建新会话目录
             Path newSessionDir = getSessionDir(newSessionId);
             Files.createDirectories(newSessionDir);
             Path newJsonlPath = newSessionDir.resolve("conversation.jsonl");
-            Files.write(newJsonlPath, keptLines, StandardCharsets.UTF_8);
 
             // 继承源会话的元数据（workspacePath 等）
             Path sourceMetadata = jsonlPath.getParent().resolve("session.json");
             if (Files.exists(sourceMetadata)) {
                 Files.copy(sourceMetadata, newSessionDir.resolve("session.json"));
             }
+
+            // 从源会话提取标题，生成可区分的分叉名称
+            String sourceTitle = extractSessionTitle(jsonlPath);
+            // 保底：如果标题为空或不是有效标题，使用"会话"+" " + sessionId 后缀
+            if (sourceTitle == null || sourceTitle.isBlank()) {
+                sourceTitle = "会话";
+            }
+            int parentNum = extractTrailingNumber(sourceTitle);
+            String cleanTitle = parentNum > 0 ? sourceTitle.replaceAll(" \\(\\d+\\)$", "") : sourceTitle;
+            logger.debug("分叉命名: sessionId={}, rootSessionId={}, sourceTitle={}, cleanTitle={}", sessionId, rootSessionId, sourceTitle, cleanTitle);
+            // 找出该 cleanTitle 已用的最大编号（源自身算 1），新分叉 = max + 1
+            int forkNum = findNextForkNumber(rootSessionId, jsonlPath, cleanTitle, parentNum > 0 ? parentNum : 1);
+            String forkTitle = cleanTitle + " (" + forkNum + ")";
+
+            // 构造 custom-title 条目
+            ObjectNode titleEntry = objectMapper.createObjectNode();
+            titleEntry.put("type", "custom-title");
+            titleEntry.put("uuid", UUID.randomUUID().toString());
+            titleEntry.put("sessionId", newSessionId);
+            titleEntry.put("timestamp", java.time.Instant.now().toString());
+            titleEntry.put("version", "1.0.0");
+            titleEntry.put("cwd", System.getProperty("user.dir"));
+            titleEntry.put("title", forkTitle);
+
+            // 插入到 JSONL 开头，再写入
+            keptLines.add(0, objectMapper.writeValueAsString(titleEntry));
+            Files.write(newJsonlPath, keptLines, StandardCharsets.UTF_8);
 
             // 注册到 JSONL reader 缓存，使其立即可见
             jsonlReader.getFileCache().put(newSessionId, newJsonlPath);
@@ -490,6 +519,88 @@ public class SessionRewindHandler {
             return ServiceLocator.get(ConversationService.class).flushTranscript(sessionId);
         }
         return jsonlReader.findJsonlFile(sessionId);
+    }
+
+    /**
+     * 从 JSONL 中提取会话标题：优先 custom-title，回退到首条用户消息。
+     */
+    private String extractSessionTitle(Path jsonlPath) throws IOException {
+        // 先找 custom-title（用户手动重命名）
+        for (String line : Files.readAllLines(jsonlPath, StandardCharsets.UTF_8)) {
+            if (line.isBlank()) continue;
+            try {
+                JsonNode node = objectMapper.readTree(line);
+                if ("custom-title".equals(node.path("type").asText())) {
+                    String title = node.path("title").asText(null);
+                    if (title != null && !title.isBlank()) return title;
+                }
+            } catch (Exception ignored) {}
+        }
+        // 回退到首条用户消息
+        for (String line : Files.readAllLines(jsonlPath, StandardCharsets.UTF_8)) {
+            if (line.isBlank()) continue;
+            try {
+                JsonNode node = objectMapper.readTree(line);
+                if ("user".equals(node.path("type").asText()) ||
+                    "user".equals(node.path("message").path("role").asText())) {
+                    String content = node.path("message").path("content").asText("");
+                    if (!content.isBlank()) return content;
+                }
+            } catch (Exception ignored) {}
+        }
+        return "会话";
+    }
+
+    /**
+     * 找出该 cleanTitle 在所有同源分叉中已用的最大编号，新分叉用 max + 1。
+     * 使用 rootSessionId 作为前缀（剥离了 _fork_ 链），确保扫描所有同源分叉链。
+     *
+     * @param rootSessionId 根会话 ID（不含 _fork_ 后缀）
+     * @param baseNum 源会话自身的编号（无后缀时为 1，有 (N) 时取 N）
+     */
+    private int findNextForkNumber(String rootSessionId, Path sourceJsonlPath, String cleanTitle, int baseNum) throws IOException {
+        int maxUsed = baseNum;
+        Path dateDir = sourceJsonlPath.getParent().getParent();
+        if (dateDir == null || !Files.isDirectory(dateDir)) return maxUsed + 1;
+        String prefix = rootSessionId + "_fork_";
+        try (var stream = Files.list(dateDir)) {
+            List<Path> forkDirs = stream
+                .filter(Files::isDirectory)
+                .map(p -> p.getFileName().toString())
+                .filter(name -> name.startsWith(prefix))
+                .map(name -> dateDir.resolve(name))
+                .collect(java.util.stream.Collectors.toList());
+            for (Path forkDir : forkDirs) {
+                Path forkJsonl = forkDir.resolve("conversation.jsonl");
+                if (Files.exists(forkJsonl)) {
+                    String title = extractSessionTitle(forkJsonl);
+                    int num = extractTrailingNumber(title);
+                    if (num > 0) {
+                        String base = title.replaceAll(" \\(\\d+\\)$", "");
+                        if (cleanTitle.equals(base) && num > maxUsed) {
+                            maxUsed = num;
+                        }
+                    }
+                }
+            }
+        }
+        logger.debug("findNextForkNumber: rootSessionId={}, cleanTitle={}, baseNum={}, maxUsed={}", rootSessionId, cleanTitle, baseNum, maxUsed);
+        return maxUsed + 1;
+    }
+
+    /**
+     * 提取标题末尾的括号数字，如"帮我写个函数 (2)" → 2。
+     * 无匹配时返回 0。
+     */
+    private int extractTrailingNumber(String title) {
+        if (title == null) return 0;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(" \\((\\d+)\\)$").matcher(title);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException ignored) {}
+        }
+        return 0;
     }
 
     private static void sendJson(HttpExchange exchange, Object data) throws IOException {

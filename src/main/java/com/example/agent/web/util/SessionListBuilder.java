@@ -4,6 +4,8 @@ import com.example.agent.desktop.WorkspaceContext;
 import com.example.agent.domain.conversation.Conversation;
 import com.example.agent.llm.model.Message;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -169,6 +171,14 @@ public class SessionListBuilder {
         }
 
         if (sessionId.startsWith("web-")) {
+            // 分叉会话格式：web-{sourceTs}_fork_{forkTs}[_fork_{moreTs}]，使用最后一个 forkTs
+            int forkIdx = sessionId.lastIndexOf("_fork_");
+            if (forkIdx > 0) {
+                String forkTs = sessionId.substring(forkIdx + 6);
+                if (forkTs.matches("\\d+")) {
+                    return forkTs;
+                }
+            }
             return sessionId.substring(4);
         }
 
