@@ -469,9 +469,6 @@ const HippoWorkspace = (() => {
     if (els.previewPanel) {
       els.previewPanel.classList.remove('hidden');
     }
-    // 显示聊天面板头部
-    const header = document.getElementById('chatPanelHeader');
-    if (header) header.style.display = '';
   }
 
   function hidePreview() {
@@ -479,9 +476,6 @@ const HippoWorkspace = (() => {
     if (els.previewPanel) {
       els.previewPanel.classList.add('hidden');
     }
-    // 隐藏聊天面板头部
-    const header = document.getElementById('chatPanelHeader');
-    if (header) header.style.display = 'none';
     // 恢复聊天面板（如果被折叠了）
     chatPanel.classList.remove('collapsed');
     if (resizer) resizer.style.display = '';
@@ -595,10 +589,8 @@ const HippoWorkspace = (() => {
   // 展开聊天
   chatShowBtn?.addEventListener('click', () => {
     chatPanel.classList.remove('collapsed');
-    // 预览面板显示时才恢复分隔条
-    if (resizer && els.previewPanel && !els.previewPanel.classList.contains('hidden')) {
-      resizer.style.display = '';
-    }
+    // 移除内联样式，让 CSS 自行控制分隔条显隐
+    if (resizer) resizer.style.display = '';
     chatShowBtn.style.display = 'none';
   });
 

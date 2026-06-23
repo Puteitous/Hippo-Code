@@ -338,6 +338,18 @@ body.desktop-window {
     display: none;
 }
 
+/* 预览隐藏时折叠，聊天面板同样缩到 0 宽度 */
+.chat-panel.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    overflow: hidden;
+}
+
+/* 预览面板隐藏时，折叠按钮也无意义，隐藏 */
+.preview-panel.hidden + .panel-resizer + .chat-panel .panel-toggle-btn {
+    display: none;
+}
+
 /* ========== 面板拖拽分隔条 ========== */
 .panel-resizer {
     width: 4px;
@@ -413,7 +425,7 @@ body.desktop-window {
     padding: 0 10px 0 14px;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
-    background: var(--bg-sidebar);
+    background: rgb(24, 26, 27);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
