@@ -1179,10 +1179,7 @@
     stroke: var(--warning-color);
 }
 
-.tool-timeline-status.running svg {
-    stroke: var(--text-muted);
-}
-
+.tool-timeline-status.running svg,
 .tool-timeline-status.running .tool-spinner {
     stroke: var(--warning-color, #e6a817);
 }

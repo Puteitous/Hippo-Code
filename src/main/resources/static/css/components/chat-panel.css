@@ -825,6 +825,13 @@
     box-shadow: 0 4px 16px rgba(0,0,0,0.35);
 }
 
+.popover-empty {
+    padding: 16px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 /* ── 状态栏模型快速选择器 ── */
 /* 样式已迁移至 dropdown.css */
 

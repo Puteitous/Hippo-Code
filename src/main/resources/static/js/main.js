@@ -178,6 +178,7 @@ function init() {
     sessionManager.setCurrentSession(currentSessionId);
     appState.currentSessionId = currentSessionId;
     sessionManager.loadSessions().then(() => updateHistoryDropdown?.());
+    updateChatPanelTitle(currentSessionId);
   })();
   
   // 11. 启动自动更新
@@ -208,6 +209,7 @@ function init() {
   EventBus.on('session:title-updated', ({ sessionId, title }) => {
     if (sessionId && sessionManager && title) {
       sessionManager.updateSessionTitle(sessionId, title);
+      if (sessionId === currentSessionId) updateChatPanelTitle(sessionId);
       // 同步更新历史记录下拉框
       updateHistoryDropdown?.();
     }
@@ -440,6 +442,18 @@ function bindGlobalEvents() {
 
 // RollbackPanel 接管了回滚逻辑
 
+// ── 更新聊天面板标题 ──
+function updateChatPanelTitle(sessionId) {
+  const titleEl = document.getElementById('chatPanelTitle');
+  if (!titleEl) return;
+  let name = sessionManager?.sessionNames?.[sessionId];
+  if (!name) {
+    const session = sessionManager?.sessions?.find(s => s.id === sessionId);
+    name = session?.title;
+  }
+  titleEl.textContent = name || '聊天';
+}
+
 // ========== 会话历史下拉（模块级，供多处调用） ==========
 function updateHistoryDropdown() {
   const listEl = document.getElementById('chatHistoryList');
@@ -519,6 +533,7 @@ async function createNewSession() {
     elements.messageInput.focus();
   }
   try { localStorage.setItem('hippo-last-session-id', currentSessionId); } catch(e) {}
+  updateChatPanelTitle(currentSessionId);
   updateHistoryDropdown();
   // 清空前会话的文件变更（通知后端切换上下文，变更记录归零）
   try {
@@ -588,7 +603,7 @@ async function switchSession(sessionId) {
     
     // 保存为上次活跃会话
     try { localStorage.setItem('hippo-last-session-id', sessionId); } catch(e) {}
-    
+    updateChatPanelTitle(sessionId);
     tokenMonitor.scheduleUpdate();
     metricsPanel.updateMetrics();
     // 刷新文件变更列表（后端已在 handleGetMessages 中加载了目标会话的变更）
@@ -597,6 +612,7 @@ async function switchSession(sessionId) {
     fileChangeManager?.updateFileChanges();
   } catch (e) {
     chatContainer.classList.remove('switching');
+    updateChatPanelTitle(sessionId);
     chatContainer.innerHTML = `
       <div class="empty-state">
         <div class="empty-hero-logo"><span class="hippo-char">🦛</span></div>

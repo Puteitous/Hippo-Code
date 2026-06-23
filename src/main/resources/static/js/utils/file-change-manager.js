@@ -230,7 +230,7 @@ export class FileChangeManager {
     if (!popoverBody) return;
 
     if (this._cachedFileGroups.size === 0) {
-      popoverBody.innerHTML = '';
+      popoverBody.innerHTML = '<div class="popover-empty">暂无文件变更</div>';
       return;
     }
 

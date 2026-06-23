@@ -250,6 +250,10 @@
     min-height: 0;
 }
 
+[data-theme="dark"] .file-preview-area {
+    background: #282c34;
+}
+
 .file-preview-toolbar {
     display: flex;
     align-items: center;
@@ -257,8 +261,6 @@
     padding: 0 12px;
     height: 25px;
     flex-shrink: 0;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-sidebar);
 }
 
 .file-preview-path {

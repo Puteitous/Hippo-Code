@@ -424,8 +424,7 @@ body.desktop-window {
     height: 36px;
     padding: 0 10px 0 14px;
     flex-shrink: 0;
-    border-bottom: 1px solid var(--border);
-    background: rgb(24, 26, 27);
+    background: var(--bg-app);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 

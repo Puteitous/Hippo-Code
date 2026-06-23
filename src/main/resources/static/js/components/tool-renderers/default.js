@@ -22,14 +22,14 @@ export function renderDefaultToolCard(tool) {
   const wrenchSvg = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2a4 4 0 0 0-3.5 5.7L2 12.2 3.8 14l4.5-4.5A4 4 0 1 0 10 2z"/><line x1="10" y1="6" x2="12" y2="4"/></svg>';
   const checkSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 8 7 11 12 5"/></svg>';
   const xSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
-  const dotSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/></svg>';
+  const spinnerSvg = '<svg class="tool-spinner" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="31.4 31.4" stroke-linecap="round"/></svg>';
 
   let statusDisplay = '';
   if (tool.result === 'success') statusDisplay = `${checkSvg} 成功`;
   else if (tool.result === 'error') statusDisplay = `${xSvg} 失败`;
   else if (tool.result === 'cancelled') statusDisplay = `${cancelSvg} 已取消`;
   else if (tool.result === 'interrupted') statusDisplay = `${warnSvg} 中断`;
-  else statusDisplay = `${dotSvg} 运行中`;
+  else statusDisplay = `${spinnerSvg} 运行中`;
 
   return `
     <div class="tool-call-card">
