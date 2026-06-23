@@ -1,11 +1,11 @@
 package com.example.agent.tools.office;
 
+import com.example.agent.tools.FileUtils;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -26,26 +26,26 @@ public class CsvWriter {
      * @return 写入摘要
      */
     public String write(Path path, String[] headers, List<String[]> rows) throws IOException {
-        try (OutputStream os = Files.newOutputStream(path);
-             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8))) {
+        FileUtils.atomicWriteStream(path, os -> {
+            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(os, StandardCharsets.UTF_8))) {
+                // 写入 UTF-8 BOM
+                os.write(0xEF);
+                os.write(0xBB);
+                os.write(0xBF);
 
-            // 写入 UTF-8 BOM
-            os.write(0xEF);
-            os.write(0xBB);
-            os.write(0xBF);
+                // 写表头
+                if (headers != null && headers.length > 0) {
+                    writer.write(escapeCsvLine(headers));
+                    writer.newLine();
+                }
 
-            // 写表头
-            if (headers != null && headers.length > 0) {
-                writer.write(escapeCsvLine(headers));
-                writer.newLine();
+                // 写数据行
+                for (String[] row : rows) {
+                    writer.write(escapeCsvLine(row));
+                    writer.newLine();
+                }
             }
-
-            // 写数据行
-            for (String[] row : rows) {
-                writer.write(escapeCsvLine(row));
-                writer.newLine();
-            }
-        }
+        });
 
         int totalRows = rows.size();
         return String.format("CSV 文件写入成功: 共 %d 行数据", totalRows);

@@ -2,9 +2,9 @@ package com.example.agent.tools.office;
 
 import org.apache.poi.xwpf.usermodel.*;
 
+import com.example.agent.tools.FileUtils;
+
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,9 +39,7 @@ public class DocxWriter {
     public String write(Path path, String content) throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
             renderMarkdown(doc, content);
-            try (OutputStream os = Files.newOutputStream(path)) {
-                doc.write(os);
-            }
+            FileUtils.atomicWriteStream(path, doc::write);
         }
 
         int lineCount = content.isEmpty() ? 0 : content.split("\n", -1).length;

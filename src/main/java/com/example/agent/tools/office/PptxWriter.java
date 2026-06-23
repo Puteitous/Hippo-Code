@@ -3,9 +3,9 @@ package com.example.agent.tools.office;
 import org.apache.poi.xslf.usermodel.*;
 
 import java.awt.*;
+import com.example.agent.tools.FileUtils;
+
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -40,9 +40,7 @@ public class PptxWriter {
                 renderSlide(ppt, slides.get(i));
             }
 
-            try (OutputStream os = Files.newOutputStream(path)) {
-                ppt.write(os);
-            }
+            FileUtils.atomicWriteStream(path, ppt::write);
         }
 
         int total = Math.min(slides.size(), MAX_SLIDES);

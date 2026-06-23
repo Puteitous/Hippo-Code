@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.Collections;
 import java.util.List;
@@ -243,9 +242,7 @@ public class EditFileTool implements ToolExecutor {
                 }
             }
 
-            Files.writeString(path, writeContent, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING);
+            FileUtils.atomicWriteString(path, writeContent);
 
             FileChangeTracker.recordChange(
                 path.toAbsolutePath().toString(),

@@ -214,7 +214,26 @@ public class WriteOfficeFileTool implements ToolExecutor {
             sheets.add(new SheetDef(name, headers, rows));
         }
 
-        return spreadsheetWriter.write(path, sheets);
+        String result = spreadsheetWriter.write(path, sheets);
+
+        // 校验每个 Sheet 的行列数一致性
+        StringBuilder allWarnings = new StringBuilder();
+        for (int si = 0; si < sheets.size(); si++) {
+            SheetDef sheet = sheets.get(si);
+            if (sheet.headers != null && sheet.headers.length > 0 && !sheet.rows.isEmpty()) {
+                String warnings = validateRowColumnCounts(sheet.headers.length, sheet.rows, 2);
+                if (!warnings.isEmpty()) {
+                    allWarnings.append("Sheet ").append(si + 1)
+                            .append(" (").append(sheet.name != null ? sheet.name : "").append(") 警告:\n")
+                            .append(warnings).append("\n");
+                }
+            }
+        }
+        if (allWarnings.length() > 0) {
+            result += "\n" + allWarnings.toString().trim();
+        }
+
+        return result;
     }
 
     // ==================== CSV 写入 ====================
@@ -242,7 +261,17 @@ public class WriteOfficeFileTool implements ToolExecutor {
             }
         }
 
-        return csvWriter.write(path, headers, rows);
+        String result = csvWriter.write(path, headers, rows);
+
+        // 校验行列数一致性（数据从第 2 行开始计数，第 1 行为表头）
+        if (headers != null && headers.length > 0) {
+            String warnings = validateRowColumnCounts(headers.length, rows, 2);
+            if (!warnings.isEmpty()) {
+                result += "\n" + warnings;
+            }
+        }
+
+        return result;
     }
 
     // ==================== DOCX 写入 ====================
@@ -305,7 +334,58 @@ public class WriteOfficeFileTool implements ToolExecutor {
             slides.add(new SlideDef(title, content, bullets, table, layout));
         }
 
-        return pptxWriter.write(path, slides);
+        String result = pptxWriter.write(path, slides);
+
+        // 校验每张幻灯片中表格的行列数一致性
+        StringBuilder allWarnings = new StringBuilder();
+        for (int si = 0; si < slides.size(); si++) {
+            SlideDef slide = slides.get(si);
+            if (slide.table != null && slide.table.headers != null
+                    && slide.table.headers.length > 0
+                    && slide.table.rows != null && !slide.table.rows.isEmpty()) {
+                String warnings = validateRowColumnCounts(
+                        slide.table.headers.length, slide.table.rows, 2);
+                if (!warnings.isEmpty()) {
+                    allWarnings.append("幻灯片 ").append(si + 1)
+                            .append(" 表格警告:\n").append(warnings).append("\n");
+                }
+            }
+        }
+        if (allWarnings.length() > 0) {
+            result += "\n" + allWarnings.toString().trim();
+        }
+
+        return result;
+    }
+
+    // ==================== 列数校验 ====================
+
+    /**
+     * 校验数据行列数与表头列数是否一致，生成 warning 列表。
+     *
+     * @param headerLen   表头列数
+     * @param rows        数据行
+     * @param startRowNum 数据起始行号（1-based，用于显示）
+     * @return warning 字符串，无问题则返回空字符串
+     */
+    private String validateRowColumnCounts(int headerLen, List<String[]> rows, int startRowNum) {
+        List<String> warnings = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            int rowLen = rows.get(i) != null ? rows.get(i).length : 0;
+            if (rowLen != headerLen) {
+                int rowNum = i + startRowNum;
+                if (rowLen > headerLen) {
+                    warnings.add(String.format(
+                            "⚠️ 写入警告: 第%d行有%d列，比表头(%d列)多%d列，多余数据已放入扩展列",
+                            rowNum, rowLen, headerLen, rowLen - headerLen));
+                } else {
+                    warnings.add(String.format(
+                            "⚠️ 写入警告: 第%d行有%d列，比表头(%d列)少%d列，缺失位置已填充空值",
+                            rowNum, rowLen, headerLen, headerLen - rowLen));
+                }
+            }
+        }
+        return String.join("\n", warnings);
     }
 
     // ==================== 参数提取 ====================

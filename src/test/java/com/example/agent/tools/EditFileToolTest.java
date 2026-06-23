@@ -18,6 +18,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.stream.Stream;
@@ -40,6 +41,7 @@ class EditFileToolTest {
         tool = new EditFileTool();
         objectMapper = new ObjectMapper();
         lenient().when(mockPath.toAbsolutePath()).thenReturn(mockPath);
+        lenient().when(mockPath.resolveSibling(anyString())).thenReturn(mockPath);
     }
 
     @Test
@@ -81,6 +83,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -114,6 +117,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -265,6 +269,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -317,6 +322,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -521,6 +527,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -552,6 +559,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -583,6 +591,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
             
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -616,6 +625,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -649,6 +659,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -680,6 +691,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -777,6 +789,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -809,6 +822,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -876,6 +890,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -942,6 +957,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -1005,6 +1021,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(mockPath, StandardCharsets.UTF_8)).thenReturn(fileContent);
             filesMock.when(() -> Files.writeString(eq(mockPath), anyString(), eq(StandardCharsets.UTF_8),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(mockPath);
+            filesMock.when(() -> Files.move(eq(mockPath), eq(mockPath), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(mockPath);
 
             ObjectNode args = objectMapper.createObjectNode();
             args.put("path", "test.txt");
@@ -1065,6 +1082,7 @@ class EditFileToolTest {
             filesMock.when(() -> Files.readString(any(), any())).thenReturn("Hello World");
             filesMock.when(() -> Files.writeString(any(), anyString(), any(Charset.class),
                 any(StandardOpenOption.class), any(StandardOpenOption.class))).thenReturn(testFile);
+            filesMock.when(() -> Files.move(any(), any(), any(StandardCopyOption.class), any(StandardCopyOption.class))).thenReturn(testFile);
             long now = System.currentTimeMillis();
             filesMock.when(() -> Files.getLastModifiedTime(any())).thenReturn(FileTime.fromMillis(now));
 

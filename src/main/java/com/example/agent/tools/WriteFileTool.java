@@ -30,7 +30,7 @@ public class WriteFileTool implements ToolExecutor {
 
     @Override
     public String getDescription() {
-        return "将内容写入指定路径的文件。如果文件不存在则创建，如果存在则覆盖。只能访问项目目录内的文件。";
+        return "将内容写入指定路径的文件。如果文件不存在则创建，如果存在则覆盖（原子写入）。支持 append 追加模式。只能访问项目目录内的文件。";
     }
 
     @Override
@@ -46,6 +46,10 @@ public class WriteFileTool implements ToolExecutor {
                     "content": {
                         "type": "string",
                         "description": "要写入文件的内容"
+                    },
+                    "append": {
+                        "type": "boolean",
+                        "description": "是否追加到文件末尾（默认 false，覆盖写入）"
                     }
                 },
                 "required": ["path", "content"]
@@ -91,6 +95,8 @@ public class WriteFileTool implements ToolExecutor {
                     content.length(), MAX_CONTENT_SIZE));
         }
 
+        boolean append = arguments.has("append") && arguments.get("append").asBoolean(false);
+
         Path path = PathSecurityUtils.validateAndResolve(filePath);
 
         try {
@@ -105,14 +111,22 @@ public class WriteFileTool implements ToolExecutor {
                 originalContent = Files.readString(path, StandardCharsets.UTF_8);
             }
 
-            Files.writeString(path, content, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING);
+            if (append) {
+                // 追加模式：直接在文件末尾追加内容
+                Files.writeString(path, content, StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.APPEND);
+            } else {
+                // 原子写入：先写临时文件，再 atomic move 覆盖目标，中断不会留下残缺文件
+                FileUtils.atomicWriteString(path, content);
+            }
 
+            // 记录完整变更（用于回滚）
+            String finalContent = (append && fileExisted) ? originalContent + content : content;
             FileChangeTracker.recordChange(
                 path.toAbsolutePath().toString(),
                 originalContent,
-                content,
+                finalContent,
                 "write_file",
                 !fileExisted
             );
@@ -120,7 +134,12 @@ public class WriteFileTool implements ToolExecutor {
             String absolutePath = path.toAbsolutePath() != null ? path.toAbsolutePath().toString() : path.toString();
             String relativePath = PathSecurityUtils.getRelativePath(path);
             String normalizedPath = relativePath.replace('\\', '/');
-            String action = fileExisted ? "覆盖" : "创建";
+            String action;
+            if (append && fileExisted) {
+                action = "追加";
+            } else {
+                action = fileExisted ? "覆盖" : "创建";
+            }
 
             // 如果写入的是记忆文件，广播 SSE 事件
             if (normalizedPath.contains(".hippo/memory/") && !normalizedPath.endsWith("MEMORY.md")) {
