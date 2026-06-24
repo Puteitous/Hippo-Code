@@ -58,3 +58,27 @@ export function createElement(tag, className = '', innerHTML = '') {
   if (innerHTML) el.innerHTML = innerHTML;
   return el;
 }
+
+/**
+ * 轻量 GET 请求封装。
+ * 同域 JSON API，自动 check status + 解析 JSON。
+ */
+export async function apiGet(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+/**
+ * 轻量 POST/PUT/DELETE 请求封装。
+ * body 自动序列化为 JSON，自动 check status + 解析 JSON。
+ */
+export async function apiPost(url, body, method = 'POST') {
+  const resp = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body != null ? JSON.stringify(body) : undefined
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}

@@ -1,6 +1,6 @@
 // 实时监控面板组件
 import { appState } from '../state/app-state.js';
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, apiGet } from '../utils.js';
 
 export class MetricsPanel {
   constructor() {
@@ -51,9 +51,7 @@ export class MetricsPanel {
    */
   async updateMetrics() {
     try {
-      const response = await fetch('/api/metrics');
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiGet('/api/metrics');
       
       // LLM 指标
       if (data.llm) {

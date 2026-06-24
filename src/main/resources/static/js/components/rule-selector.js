@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from '../utils.js';
+
 /**
  * 规则选择器组件。
  * 从 /api/rules/list 加载规则列表，展示为悬浮框，支持多选。
@@ -214,9 +216,7 @@ export class RuleSelector {
 
   async _loadRules() {
     try {
-      const response = await fetch('/api/rules/list');
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiGet('/api/rules/list');
       this._rules = [];
 
       if (data.projectRules) {
@@ -450,12 +450,7 @@ export class RuleSelector {
     }
 
     try {
-      const response = await fetch('/api/rules/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, mode, description, scope, content })
-      });
-      const result = await response.json();
+      const result = await apiPost('/api/rules/create', { name, mode, description, scope, content });
 
       if (result.success) {
         overlay.remove();

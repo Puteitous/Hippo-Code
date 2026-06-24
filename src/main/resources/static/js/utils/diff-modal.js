@@ -1,4 +1,4 @@
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, apiGet, apiPost } from '../utils.js';
 import { showToast } from './toast.js';
 import { EventBus } from './event-bus.js';
 import { getFileIconInfo } from './file-icons.js';
@@ -92,11 +92,7 @@ export class DiffModalManager {
       if (toolCallId) {
         url += `&toolCallId=${encodeURIComponent(toolCallId)}`;
       }
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('加载失败');
-      }
-      const data = await response.json();
+      const data = await apiGet(url);
       this.allChanges = data.allChanges || [];
       this.renderTimeline();
       if (this.allChanges.length > 0) {
@@ -256,16 +252,10 @@ export class DiffModalManager {
     this.rollbackBtn.textContent = '回滚中...';
 
     try {
-      const response = await fetch('/api/files/rollback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: this.currentFilePath,
-          toolCallId: this.currentToolCallId || undefined
-        })
+      const result = await apiPost('/api/files/rollback', {
+        filePath: this.currentFilePath,
+        toolCallId: this.currentToolCallId || undefined
       });
-
-      const result = await response.json();
 
       if (result.success) {
         showToast(`文件已恢复：${this.currentFilePath.split(/[/\\]/).pop()}`, {

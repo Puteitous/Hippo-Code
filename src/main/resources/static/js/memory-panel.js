@@ -1,5 +1,5 @@
 import { SSEClient } from './sse-client.js';
-import { safeParseJSON, escapeHtml } from './utils.js';
+import { safeParseJSON, escapeHtml, apiGet, apiPost } from './utils.js';
 
 export class MemoryPanel {
   constructor(container, sseUrl = '/sse/memory-events') {
@@ -24,9 +24,7 @@ export class MemoryPanel {
 
   async loadMemories() {
     try {
-      const response = await fetch('/api/memories');
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiGet('/api/memories');
       this.memories = data.memories || [];
       this.hasMemories = this.memories.length > 0;
       this.renderList();
@@ -132,9 +130,7 @@ export class MemoryPanel {
 
   async viewMemory(id) {
     try {
-      const response = await fetch(`/api/memories/${encodeURIComponent(id)}`);
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiGet(`/api/memories/${encodeURIComponent(id)}`);
       this.selectedMemory = data;
       this.currentView = 'detail';
       this.renderDetail(data);
@@ -188,9 +184,7 @@ export class MemoryPanel {
 
   async editMemory(id) {
     try {
-      const response = await fetch(`/api/memories/${encodeURIComponent(id)}`);
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiGet(`/api/memories/${encodeURIComponent(id)}`);
       this.currentView = 'edit';
       this.renderEdit(data);
     } catch (e) {
@@ -232,12 +226,8 @@ export class MemoryPanel {
       const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t);
 
       try {
-        const res = await fetch(`/api/memories/${encodeURIComponent(data.id)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, tags })
-        });
-        if (res.ok) {
+        const res = await apiPost(`/api/memories/${encodeURIComponent(data.id)}`, { content, tags }, 'PUT');
+        if (res.success) {
           this.viewMemory(data.id);
         } else {
           showToast('保存失败', 'error');
@@ -252,10 +242,8 @@ export class MemoryPanel {
     if (!confirm(`确定要删除记忆 "${id}" 吗？此操作不可撤销。`)) return;
 
     try {
-      const res = await fetch(`/api/memories/${encodeURIComponent(id)}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
+      const res = await apiPost(`/api/memories/${encodeURIComponent(id)}`, undefined, 'DELETE');
+      if (res.success) {
         this.memories = this.memories.filter(m => m.id !== id);
         if (this.currentView === 'list') {
           this.renderList();

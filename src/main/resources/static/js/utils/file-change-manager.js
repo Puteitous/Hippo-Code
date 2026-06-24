@@ -1,4 +1,4 @@
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, apiGet, apiPost } from '../utils.js';
 import { showToast } from './toast.js';
 import { diffModalManager } from './diff-modal.js';
 import { EventBus } from './event-bus.js';
@@ -113,9 +113,7 @@ export class FileChangeManager {
 
   async updateFileChanges() {
     try {
-      const response = await fetch('/api/files/changes');
-      if (!response.ok) return;
-      const changes = await response.json();
+      const changes = await apiGet('/api/files/changes');
 
       // 右侧面板 DOM 可能已被移除，安全查找
       const list = document.getElementById('fileChangesList');
@@ -281,12 +279,7 @@ export class FileChangeManager {
     btnEl.textContent = '回滚中...';
 
     try {
-      const response = await fetch('/api/files/rollback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath })
-      });
-      const result = await response.json();
+      const result = await apiPost('/api/files/rollback', { filePath });
 
       if (result.success) {
         showToast(`文件已恢复：${filePath.split(/[/\\]/).pop()}`, { type: 'success', duration: 3000 });

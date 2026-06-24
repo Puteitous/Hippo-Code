@@ -16,6 +16,7 @@
 
 import { getFileIconInfo } from '../utils/file-icons.js';
 import { showToast } from '../utils/toast.js';
+import { apiGet } from '../utils.js';
 
 export class FileTree {
   /**
@@ -634,9 +635,8 @@ export class FileTree {
   async _fetchAndApplyGitStatus() {
     if (!this._rootPath) return;
     try {
-      const resp = await fetch(`/api/git/status?path=${encodeURIComponent(this._rootPath)}`);
-      if (!resp.ok) return;
-      this._gitStatus = await resp.json();
+      const data = await apiGet(`/api/git/status?path=${encodeURIComponent(this._rootPath)}`);
+      this._gitStatus = data;
       this._applyGitStatusClasses();
     } catch (e) {
       this._gitStatus = { available: false };

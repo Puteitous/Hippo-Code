@@ -20,7 +20,7 @@ import { diffModalManager } from './utils/diff-modal.js';
 import { FileChangeManager } from './utils/file-change-manager.js';
 import { EventBus } from './utils/event-bus.js';
 import { showToast } from './utils/toast.js';
-import { generateSessionId } from './utils.js';
+import { generateSessionId, apiGet, apiPost } from './utils.js';
 import { renderMarkdown } from './markdown-renderer.js';
 import { SplashScreen } from './components/SplashScreen.js';
 import { RollbackPanel } from './components/RollbackPanel.js';
@@ -694,9 +694,7 @@ async function switchSession(sessionId) {
 
 async function loadPromptPresets() {
   try {
-    const response = await fetch('/api/system-prompts/presets');
-    if (!response.ok) return;
-    const data = await response.json();
+    const data = await apiGet('/api/system-prompts/presets');
     promptPresets = data.presets || [];
     renderPromptModeBar();
   } catch (e) {
@@ -1015,8 +1013,7 @@ let providerDropdown = null;
 
 async function loadConfig() {
   try {
-    const resp = await fetch('/api/config/llm');
-    const data = await resp.json();
+    const data = await apiGet('/api/config/llm');
 
     // Provider 下拉
     if (!providerDropdown && configProviderBtn) {
@@ -1215,9 +1212,7 @@ function loadModelHistoryList(data) {
 /** 将历史模型加载到表单中编辑 */
 function editModelFromHistory(provider, model) {
   // 先重新获取最新数据
-  fetch('/api/config/llm')
-    .then(r => r.json())
-    .then(data => {
+  apiGet('/api/config/llm').then(data => {
       const history = data.modelHistory || [];
       const snap = history.find(s => s.provider === provider && s.model === model);
       if (!snap) {
@@ -1399,8 +1394,7 @@ async function loadQuickModelConfig() {
 
   // 2. 后台异步请求最新数据
   try {
-    const resp = await fetch('/api/config/llm');
-    const data = await resp.json();
+    const data = await apiGet('/api/config/llm');
     saveModelConfigToCache(data);
     applyModelConfigToDropdown(data);
   } catch (e) {

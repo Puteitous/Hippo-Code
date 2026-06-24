@@ -1,3 +1,5 @@
+import { apiGet, apiPost } from '../utils.js';
+
 /**
  * 技能面板组件 — 管理项目级和用户级技能文件。
  *
@@ -133,10 +135,7 @@ export class SkillPanel {
     this._emptyEl.style.display = 'none';
 
     try {
-      const resp = await fetch('/api/skills/list');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-
+      const data = await apiGet('/api/skills/list');
       this._projectSkills = data.projectSkills || [];
       this._userSkills = data.userSkills || [];
 
@@ -231,16 +230,11 @@ export class SkillPanel {
     if (!confirm(`确定删除技能「${skill.name || skill.fileName}」？`)) return;
 
     try {
-      const resp = await fetch('/api/skills/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: skill.filePath,
-          fileName: skill.fileName,
-          scope: source
-        })
+      const result = await apiPost('/api/skills/delete', {
+        filePath: skill.filePath,
+        fileName: skill.fileName,
+        scope: source
       });
-      const result = await resp.json();
 
       if (result.success) {
         // 从本地列表移除
@@ -404,9 +398,7 @@ export class SkillPanel {
 
     // → 加载内容
     try {
-      const resp = await fetch(`/api/skills/get?filePath=${encodeURIComponent(skill.filePath)}`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
+      const data = await apiGet(`/api/skills/get?filePath=${encodeURIComponent(skill.filePath)}`);
 
       loadingEl.remove();
       editorWrap.style.display = 'block';
@@ -441,18 +433,13 @@ export class SkillPanel {
     saveBtn.textContent = '保存中…';
 
     try {
-      const resp = await fetch('/api/skills/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: skill.filePath,
-          name,
-          description,
-          scope,
-          content
-        })
+      const result = await apiPost('/api/skills/update', {
+        filePath: skill.filePath,
+        name,
+        description,
+        scope,
+        content
       });
-      const result = await resp.json();
 
       if (result.success) {
         this._showDetailStatus(statusEl, '✓ 技能已保存', 'success');
@@ -649,12 +636,7 @@ export class SkillPanel {
     }
 
     try {
-      const resp = await fetch('/api/skills/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, scope, content })
-      });
-      const result = await resp.json();
+      const result = await apiPost('/api/skills/create', { name, description, scope, content });
 
       if (result.success) {
         overlay.remove();
