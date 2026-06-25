@@ -209,16 +209,21 @@ export function renderToolTimelineRow(tool) {
     const args = parseToolArgs(tool.args);
     const fp = args.path || '';
     if (fp) {
-      viewBtnHtml = `<span class="tool-timeline-view-btn" onclick="event.stopPropagation();window.showFileDiff('${escapeHtml(fp)}','${escapeHtml(tool.id||'')}')">查看</span>`;
+      const jsFp = fp.replace(/\\/g, '/');
+      viewBtnHtml = `<span class="tool-timeline-view-btn" onclick="event.stopPropagation();window.showFileDiff('${escapeHtml(jsFp)}','${escapeHtml(tool.id||'')}')">查看</span>`;
     }
   }
+
+  // Windows 路径中的反斜杠在 JS 字符串字面量中会被解释为转义符（如 \t → tab），
+  // 须替换为正斜杠以确保路径完整传递。
+  const jsPath = summaryFilePath ? summaryFilePath.replace(/\\/g, '/') : '';
 
   return `
     <div class="tool-timeline-item" data-tool-name="${escapeHtml(name)}" data-tool-status="${status}">
       <div class="tool-timeline-row" onclick="window.toggleToolTimeline(this)">
         <span class="tool-timeline-dot">${toolSvg}</span>
         <span class="tool-timeline-name">${escapeHtml(name)}</span>
-        <span class="tool-timeline-summary"${summaryFilePath ? ` onclick="event.stopPropagation();window.HippoWorkspace?.navigateToFile?.('${escapeHtml(summaryFilePath)}')" data-file-path="${escapeHtml(summaryFilePath)}"` : ''}>${escapeHtml(truncateText(summary, 60))}</span>
+        <span class="tool-timeline-summary"${summaryFilePath ? ` onclick="event.stopPropagation();window.HippoWorkspace?.navigateToFile?.('${escapeHtml(jsPath)}')" data-file-path="${escapeHtml(summaryFilePath)}"` : ''}>${escapeHtml(truncateText(summary, 60))}</span>
         <span class="tool-timeline-status ${status}">${statusSvg}</span>
         ${viewBtnHtml}
         <span class="tool-timeline-arrow">◀</span>

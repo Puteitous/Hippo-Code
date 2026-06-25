@@ -8,7 +8,7 @@ import { RenderPipeline } from './RenderPipeline.js';
 import { EventRouter } from './EventRouter.js';
 import { MessageSession } from './MessageSession.js';
 import { getFileIconInfo } from '../utils/file-icons.js';
-import { RuleSelector } from './rule-selector.js';
+import { ContextSelector } from './context-selector.js';
 
 export class ChatPanel {
   constructor(container, chatService, chatUI) {
@@ -76,10 +76,32 @@ export class ChatPanel {
 
     this.eventRouter = this._createEventRouter();
 
-    // 规则选择器
-    this._ruleSelector = new RuleSelector({
+    // 上下文选择器（规则 + 技能）
+    this._contextSelector = new ContextSelector({
       onRulesChange: (selectedIds) => {
         // 选中变化时无需额外操作，sendMessage 时读取即可
+      },
+      onSkillToggle: (skill, selected) => {
+        const bar = this._getActiveRefsBar();
+        if (!bar) return;
+        if (selected) {
+          this._addRefChip(bar, skill.filePath, 'file', skill.filePath);
+        } else {
+          const chip = bar.querySelector(`[data-file-path="${skill.filePath.replace(/\\/g, '/')}"]`);
+          if (chip) chip.remove();
+          if (bar.children.length === 0) bar.style.display = 'none';
+        }
+      },
+      onRuleToggle: (rule, selected) => {
+        const bar = this._getActiveRefsBar();
+        if (!bar) return;
+        if (selected) {
+          this._addRuleRefChip(bar, rule);
+        } else {
+          const chip = bar.querySelector(`[data-rule-id="${rule.id}"]`);
+          if (chip) chip.remove();
+          if (bar.children.length === 0) bar.style.display = 'none';
+        }
       }
     });
 
@@ -97,8 +119,8 @@ export class ChatPanel {
     
     this.bindEvents();
 
-    // 将规则选择器按钮添加到输入区域
-    this._injectRuleSelectorButton();
+    // 将上下文选择器按钮添加到输入区域
+    this._injectContextSelectorButton();
 
     // 监听文本选中快捷操作 → 插入输入框
     this._unsubscribeSelectionAction = EventBus.on('selection:add-to-input', ({ text, refType, filePath, startLine, endLine, selectedText }) => {
@@ -361,7 +383,7 @@ export class ChatPanel {
 
     const chips = refsBar ? [...refsBar.querySelectorAll('.input-ref-chip')] : [];
     const refTexts = chips.map(c => {
-      if (c.dataset.refType === 'file' && c.dataset.filePath) {
+      if ((c.dataset.refType === 'file' || c.dataset.refType === 'rule') && c.dataset.filePath) {
         const sl = c.dataset.startLine;
         const el = c.dataset.endLine;
         const hasLines = sl && el && sl !== 'undefined' && el !== 'undefined';
@@ -391,20 +413,21 @@ export class ChatPanel {
    * @param {string} [filePath]
    * @param {number} [startLine]
    * @param {number} [endLine]
-   * @param {{ isDirectory?: boolean }} [options]
+   * @param {{ isDirectory?: boolean, ruleId?: string }} [options] - ruleId 表示这是规则引用卡片
    * @param {string} [selectedText] - 二进制文件预览的选中文字内容
    */
   _addRefChip(bar, text, refType, filePath, startLine, endLine, options, selectedText) {
     const chip = document.createElement('span');
     chip.className = 'input-ref-chip';
     if (refType === 'file' && filePath) {
-      const fileName = filePath.split('/').pop();
+      const fileName = filePath.split(/[/\\]/).pop();
       const { iconFile } = getFileIconInfo(fileName, { isDirectory: options?.isDirectory });
       const hasLines = startLine != null && endLine != null;
       chip.innerHTML = `<img src="icons/${iconFile}" class="input-ref-chip-icon" draggable="false"> <span class="input-ref-chip-text">${fileName}</span>${hasLines ? `<span class="input-ref-chip-lines">${startLine}-${endLine}</span>` : ''}`;
       chip.title = hasLines ? `${filePath}:${startLine}-${endLine}` : filePath;
-      chip.dataset.refType = 'file';
-      chip.dataset.filePath = filePath;
+      chip.dataset.refType = options?.ruleId ? 'rule' : 'file';
+      chip.dataset.filePath = filePath.replace(/\\/g, '/');
+      if (options?.ruleId) chip.dataset.ruleId = options.ruleId;
       if (startLine != null) chip.dataset.startLine = startLine;
       if (endLine != null) chip.dataset.endLine = endLine;
       if (selectedText) chip.dataset.selectedText = selectedText;
@@ -424,11 +447,22 @@ export class ChatPanel {
       chip.remove();
       // 卡片清空后隐藏栏
       if (bar.children.length === 0) bar.style.display = 'none';
+      // 规则卡片关闭时同步取消选中
+      if (options?.ruleId) {
+        this._contextSelector?.deselectRule(options.ruleId);
+      }
     });
     chip.appendChild(closeBtn);
     bar.appendChild(chip);
     bar.style.display = 'flex';
     bar.dispatchEvent(new Event('refs-changed', { bubbles: true }));
+  }
+
+  /** 在 refs 栏添加一条规则引用卡片 */
+  _addRuleRefChip(bar, rule) {
+    this._addRefChip(bar, rule.filePath || rule.name, 'file', rule.filePath, null, null, {
+      ruleId: rule.id,
+    });
   }
 
   /**
@@ -439,6 +473,33 @@ export class ChatPanel {
     if (bar) {
       bar.innerHTML = '';
       bar.style.display = 'none';
+    }
+  }
+
+  /**
+   * 发送后重新构建技能 chip：_clearRefs 清空了 refs 栏，
+   * 但 ContextSelector 的 _selectedSkillPaths 依然保留，
+   * 需要把仍选中的技能重新添加到 refs 栏。
+   */
+  _syncSkillChips() {
+    const paths = this._contextSelector?.getSelectedSkillPaths() || [];
+    if (paths.length === 0) return;
+    const bar = this._getActiveRefsBar();
+    if (!bar) return;
+    for (const filePath of paths) {
+      this._addRefChip(bar, filePath, 'file', filePath);
+    }
+  }
+
+  /** 发送后重新构建规则 chip（同 _syncSkillChips 逻辑） */
+  _syncRuleChips() {
+    const rules = this._contextSelector?.getSelectedRules() || [];
+    if (rules.length === 0) return;
+    const bar = this._getActiveRefsBar();
+    if (!bar) return;
+    for (const rule of rules) {
+      if (bar.querySelector(`[data-rule-id="${rule.id}"]`)) continue;
+      this._addRuleRefChip(bar, rule);
     }
   }
 
@@ -462,29 +523,14 @@ export class ChatPanel {
     return document.getElementById(id) || document.getElementById('inputRefs') || document.getElementById('heroInputRefs');
   }
 
-  _injectRuleSelectorButton() {
-    // 聊天输入区
-    const inputRow = document.querySelector('.input-row');
-    if (inputRow && this._ruleSelector) {
-      inputRow.appendChild(this._ruleSelector.getButtonElement());
+  _injectContextSelectorButton() {
+    const statusBarLeft = document.querySelector('.status-bar-left');
+    if (statusBarLeft && this._contextSelector) {
+      statusBarLeft.insertBefore(
+        this._contextSelector.getButtonElement(),
+        statusBarLeft.firstChild
+      );
     }
-    // Hero 输入区（可能动态创建）
-    this._observeHeroInput();
-  }
-
-  _observeHeroInput() {
-    const tryInject = () => {
-      const heroWrapper = document.querySelector('.hero-input-wrapper');
-      if (heroWrapper && !heroWrapper.querySelector('.rule-selector-btn')) {
-        const btn = this._ruleSelector?.getButtonElement();
-        if (btn && !btn.parentNode) {
-          heroWrapper.appendChild(btn);
-        }
-      }
-    };
-    tryInject();
-    const observer = new MutationObserver(() => tryInject());
-    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   /**
@@ -520,6 +566,8 @@ export class ChatPanel {
     }
     
     this._clearRefs();
+    this._syncSkillChips();
+    this._syncRuleChips();
     
     this.lastUserMessage = content;
     EventBus.emit('session:auto-name', { sessionId: appState.currentSessionId });
@@ -555,7 +603,7 @@ export class ChatPanel {
       this.sendMessage(this.lastUserMessage);
     };
 
-    const selectedRules = this._ruleSelector?.getSelectedRuleIds() || [];
+    const selectedRules = this._contextSelector?.getSelectedRuleIds() || [];
 
     await session.start({
       sessionId: appState.currentSessionId,

@@ -456,7 +456,7 @@ export class ChatUI {
     const chip = document.createElement('span');
     chip.className = 'input-ref-chip';
     if (ref.type === 'file' && ref.path) {
-      const fileName = ref.path.split('/').pop();
+      const fileName = ref.path.split(/[/\\]/).pop();
       const { iconFile } = getFileIconInfo(fileName);
       const hasLines = ref.startLine != null && ref.endLine != null;
       chip.innerHTML = `<img src="icons/${iconFile}" class="input-ref-chip-icon" draggable="false"> <span class="input-ref-chip-text">${fileName}</span>${hasLines ? `<span class="input-ref-chip-lines">${ref.startLine}-${ref.endLine}</span>` : ''}`;
