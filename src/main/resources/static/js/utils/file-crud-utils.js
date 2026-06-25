@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '../utils.js';
+import { getFileIconInfo } from './file-icons.js';
 
 /**
  * 创建通用的文件编辑详情弹窗（Raw 编辑器 + 元数据表单）。
@@ -66,7 +67,16 @@ export function createDetailModal({ title, item, source, fetchUrl, saveUrl, fiel
   // ── 文件路径提示 ──
   const fileHint = document.createElement('div');
   fileHint.className = 'file-detail-file-hint';
-  fileHint.textContent = `📄 ${item.fileName || item.name + '.md'}`;
+
+  const iconInfo = getFileIconInfo(item.fileName || item.name + '.md');
+  const iconImg = document.createElement('img');
+  iconImg.className = 'file-detail-file-icon';
+  iconImg.src = `/icons/${iconInfo.iconFile}`;
+  iconImg.alt = '';
+
+  const fileName = document.createTextNode(item.fileName || item.name + '.md');
+  fileHint.appendChild(iconImg);
+  fileHint.appendChild(fileName);
   modal.appendChild(fileHint);
 
   // ── 加载状态 ──
@@ -106,7 +116,10 @@ export function createDetailModal({ title, item, source, fetchUrl, saveUrl, fiel
   const closeBtn = document.createElement('button');
   closeBtn.className = 'file-detail-btn file-detail-btn-ghost';
   closeBtn.textContent = '取消';
-  closeBtn.addEventListener('click', () => overlay.remove());
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    overlay.remove();
+  });
 
   saveBtn.addEventListener('click', () => handleSave());
 
@@ -117,8 +130,14 @@ export function createDetailModal({ title, item, source, fetchUrl, saveUrl, fiel
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
+  // 阻止冒泡到 document 触发 ActivityBar 关闭面板
+  modal.addEventListener('click', (e) => e.stopPropagation());
+
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) {
+      e.stopPropagation();
+      overlay.remove();
+    }
   });
 
   // ── 加载文件内容 ──
@@ -271,7 +290,10 @@ export function createCreateModal({ title, createUrl, nameHint, extraFields, onC
   const cancelBtn = document.createElement('button');
   cancelBtn.className = 'file-create-btn file-create-btn-cancel';
   cancelBtn.textContent = '取消';
-  cancelBtn.addEventListener('click', () => overlay.remove());
+  cancelBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    overlay.remove();
+  });
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'file-create-btn file-create-btn-save';
@@ -288,8 +310,14 @@ export function createCreateModal({ title, createUrl, nameHint, extraFields, onC
   const nameInput = modal.querySelector('#file-create-name');
   if (nameInput) nameInput.focus();
 
+  // 阻止冒泡到 document 触发 ActivityBar 关闭面板
+  modal.addEventListener('click', (e) => e.stopPropagation());
+
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) {
+      e.stopPropagation();
+      overlay.remove();
+    }
   });
 
   async function handleCreate() {

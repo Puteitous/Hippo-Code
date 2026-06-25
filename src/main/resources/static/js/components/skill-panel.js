@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '../utils.js';
+import { getFileIconInfo } from '../utils/file-icons.js';
 
 /**
  * 技能面板组件 — 管理项目级和用户级技能文件。
@@ -339,7 +340,16 @@ export class SkillPanel {
     // ── 文件路径提示 ──
     const fileHint = document.createElement('div');
     fileHint.className = 'skill-detail-file-hint';
-    fileHint.textContent = `📄 ${skill.fileName}`;
+
+    const iconInfo = getFileIconInfo(skill.fileName);
+    const iconImg = document.createElement('img');
+    iconImg.className = 'skill-detail-file-icon';
+    iconImg.src = `/icons/${iconInfo.iconFile}`;
+    iconImg.alt = '';
+
+    const fileName = document.createTextNode(skill.fileName);
+    fileHint.appendChild(iconImg);
+    fileHint.appendChild(fileName);
     modal.appendChild(fileHint);
 
     // ── 加载状态 ──
@@ -380,7 +390,10 @@ export class SkillPanel {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'skill-detail-btn skill-detail-btn-ghost';
     closeBtn.textContent = '取消';
-    closeBtn.addEventListener('click', () => overlay.remove());
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      overlay.remove();
+    });
 
     saveBtn.addEventListener('click', () => this._handleSaveDetail(overlay, modal, skill, source));
 
@@ -391,9 +404,15 @@ export class SkillPanel {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
+    // 阻止冒泡到 document 触发 ActivityBar 关闭面板
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
     // 点击遮罩关闭
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+      if (e.target === overlay) {
+        e.stopPropagation();
+        overlay.remove();
+      }
     });
 
     // → 加载内容
@@ -505,7 +524,10 @@ export class SkillPanel {
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'skill-create-btn skill-create-btn-cancel';
     cancelBtn.textContent = '取消';
-    cancelBtn.addEventListener('click', () => overlay.remove());
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      overlay.remove();
+    });
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'skill-create-btn skill-create-btn-save';
@@ -523,9 +545,15 @@ export class SkillPanel {
     const nameInput = modal.querySelector('#skill-name-input');
     if (nameInput) nameInput.focus();
 
+    // 阻止冒泡到 document 触发 ActivityBar 关闭面板
+    modal.addEventListener('click', (e) => e.stopPropagation());
+
     // 点击遮罩关闭
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
+      if (e.target === overlay) {
+        e.stopPropagation();
+        overlay.remove();
+      }
     });
   }
 
