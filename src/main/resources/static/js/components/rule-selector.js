@@ -1,9 +1,9 @@
-import { apiGet, apiPost } from '../utils.js';
+import { apiGet } from '../utils.js';
 
 /**
  * 规则选择器组件。
- * 从 /api/rules/list 加载规则列表，展示为悬浮框，支持多选。
- * 支持新建规则（POST /api/rules/create），区分 project/user 作用域。
+ * 从 /api/rules/list 加载规则列表，展示为悬浮框，支持多选 manual 规则。
+ * 新建规则请前往 Activity Bar 规则管理面板。
  */
 export class RuleSelector {
   constructor({ onRulesChange }) {
@@ -32,7 +32,6 @@ export class RuleSelector {
   destroy() {
     this._btn?.remove();
     this._panel?.remove();
-    this._createModal?.remove();
   }
 
   // ==================== UI 创建 ====================
@@ -92,8 +91,7 @@ export class RuleSelector {
     if (this._rules.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'rule-selector-empty';
-      empty.textContent = '暂无可用规则';
-      empty.innerHTML += '<br><span style="font-size:11px;opacity:0.6;">点击下方按钮创建第一条规则</span>';
+      empty.innerHTML = '暂无可用规则<br><span style="font-size:11px;opacity:0.6;">前往左侧活动栏创建规则</span>';
       this._panel.appendChild(empty);
     } else {
       // 分组：always / manual
@@ -107,20 +105,6 @@ export class RuleSelector {
         this._appendGroup(this._panel, '手动引用', manualRules, false);
       }
     }
-
-    // 底部操作栏
-    const footer = document.createElement('div');
-    footer.className = 'rule-selector-footer';
-    const createBtn = document.createElement('button');
-    createBtn.className = 'rule-selector-create-btn';
-    createBtn.innerHTML = '+ 新建规则';
-    createBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._closePanel();
-      this._showCreateModal();
-    });
-    footer.appendChild(createBtn);
-    this._panel.appendChild(footer);
 
     document.body.appendChild(this._panel);
     this._positionPanel();
@@ -232,256 +216,5 @@ export class RuleSelector {
     } catch (e) {
       console.warn('加载规则列表失败:', e);
     }
-  }
-
-  // ==================== 新建规则弹窗 ====================
-
-  _showCreateModal() {
-    // 创建遮罩层
-    const overlay = document.createElement('div');
-    overlay.className = 'rule-create-overlay';
-
-    const modal = document.createElement('div');
-    modal.className = 'rule-create-modal';
-
-    // 标题
-    const title = document.createElement('div');
-    title.className = 'rule-create-title';
-    title.textContent = '新建规则';
-    modal.appendChild(title);
-
-    // 表单
-    const form = document.createElement('div');
-    form.className = 'rule-create-form';
-
-    // 规则名称
-    form.appendChild(this._createField('规则名称', 'rule-name-input', 'text', 'my-rule', '字母、数字、连字符、下划线、点，不含 .md'));
-    // 规则描述
-    form.appendChild(this._createField('描述（可选）', 'rule-desc-input', 'text', '', '简短说明，前端展示用'));
-    // Mode 选择
-    form.appendChild(this._createModeSelect());
-    // Scope 选择
-    form.appendChild(this._createScopeSelect());
-    // 内容（可选）
-    form.appendChild(this._createContentField());
-
-    modal.appendChild(form);
-
-    // 按钮区
-    const actions = document.createElement('div');
-    actions.className = 'rule-create-actions';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'rule-create-btn rule-create-btn-cancel';
-    cancelBtn.textContent = '取消';
-    cancelBtn.addEventListener('click', () => overlay.remove());
-
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'rule-create-btn rule-create-btn-save';
-    saveBtn.textContent = '创建';
-    saveBtn.addEventListener('click', () => this._handleCreate(overlay, modal));
-
-    actions.appendChild(cancelBtn);
-    actions.appendChild(saveBtn);
-    modal.appendChild(actions);
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    // 聚焦到名称输入框
-    const nameInput = modal.querySelector('#rule-name-input');
-    if (nameInput) nameInput.focus();
-
-    // 点击遮罩关闭
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
-  _createField(label, id, type, placeholder, helpText) {
-    const wrap = document.createElement('div');
-    wrap.className = 'rule-create-field';
-
-    const lbl = document.createElement('label');
-    lbl.className = 'rule-create-label';
-    lbl.textContent = label;
-    lbl.htmlFor = id;
-    wrap.appendChild(lbl);
-
-    const input = document.createElement('input');
-    input.className = 'rule-create-input';
-    input.id = id;
-    input.type = type;
-    input.placeholder = placeholder;
-    wrap.appendChild(input);
-
-    if (helpText) {
-      const help = document.createElement('div');
-      help.className = 'rule-create-help';
-      help.textContent = helpText;
-      wrap.appendChild(help);
-    }
-
-    return wrap;
-  }
-
-  _createModeSelect() {
-    const wrap = document.createElement('div');
-    wrap.className = 'rule-create-field';
-
-    const lbl = document.createElement('label');
-    lbl.className = 'rule-create-label';
-    lbl.textContent = '模式';
-    wrap.appendChild(lbl);
-
-    const toggle = document.createElement('div');
-    toggle.className = 'rule-create-toggle';
-
-    const alwaysBtn = document.createElement('button');
-    alwaysBtn.type = 'button';
-    alwaysBtn.className = 'rule-create-toggle-btn active';
-    alwaysBtn.dataset.value = 'always';
-    alwaysBtn.textContent = '始终生效';
-
-    const manualBtn = document.createElement('button');
-    manualBtn.type = 'button';
-    manualBtn.className = 'rule-create-toggle-btn';
-    manualBtn.dataset.value = 'manual';
-    manualBtn.textContent = '手动引用';
-
-    const updateActive = (active) => {
-      [alwaysBtn, manualBtn].forEach(b => b.classList.toggle('active', b === active));
-    };
-    alwaysBtn.addEventListener('click', () => updateActive(alwaysBtn));
-    manualBtn.addEventListener('click', () => updateActive(manualBtn));
-
-    toggle.appendChild(alwaysBtn);
-    toggle.appendChild(manualBtn);
-    wrap.appendChild(toggle);
-
-    const help = document.createElement('div');
-    help.className = 'rule-create-help';
-    help.textContent = '始终生效：自动注入 system prompt；手动引用：用户点选引用';
-    wrap.appendChild(help);
-
-    return wrap;
-  }
-
-  _createScopeSelect() {
-    const wrap = document.createElement('div');
-    wrap.className = 'rule-create-field';
-
-    const lbl = document.createElement('label');
-    lbl.className = 'rule-create-label';
-    lbl.textContent = '作用域';
-    wrap.appendChild(lbl);
-
-    const toggle = document.createElement('div');
-    toggle.className = 'rule-create-toggle';
-
-    const projectBtn = document.createElement('button');
-    projectBtn.type = 'button';
-    projectBtn.className = 'rule-create-toggle-btn active';
-    projectBtn.dataset.value = 'project';
-    projectBtn.textContent = '项目规则';
-
-    const userBtn = document.createElement('button');
-    userBtn.type = 'button';
-    userBtn.className = 'rule-create-toggle-btn';
-    userBtn.dataset.value = 'user';
-    userBtn.textContent = '全局规则';
-
-    const updateActive = (active) => {
-      [projectBtn, userBtn].forEach(b => b.classList.toggle('active', b === active));
-    };
-    projectBtn.addEventListener('click', () => updateActive(projectBtn));
-    userBtn.addEventListener('click', () => updateActive(userBtn));
-
-    toggle.appendChild(projectBtn);
-    toggle.appendChild(userBtn);
-    wrap.appendChild(toggle);
-
-    const help = document.createElement('div');
-    help.className = 'rule-create-help';
-    help.textContent = '项目规则：随 Git 同步；全局规则：个人兜底';
-    wrap.appendChild(help);
-
-    return wrap;
-  }
-
-  _createContentField() {
-    const wrap = document.createElement('div');
-    wrap.className = 'rule-create-field';
-
-    const lbl = document.createElement('label');
-    lbl.className = 'rule-create-label';
-    lbl.textContent = '内容（可选）';
-    wrap.appendChild(lbl);
-
-    const textarea = document.createElement('textarea');
-    textarea.className = 'rule-create-textarea';
-    textarea.id = 'rule-content-input';
-    textarea.placeholder = '规则正文内容，不填则生成模板';
-    textarea.rows = 6;
-    wrap.appendChild(textarea);
-
-    return wrap;
-  }
-
-  async _handleCreate(overlay, modal) {
-    const name = modal.querySelector('#rule-name-input').value.trim();
-    const description = modal.querySelector('#rule-desc-input').value.trim();
-    const mode = modal.querySelector('.rule-create-toggle-btn.active[data-value="always"], .rule-create-toggle-btn.active[data-value="manual"]')
-      ?.dataset.value || 'always';
-    const scope = modal.querySelector('.rule-create-toggle-btn.active[data-value="project"], .rule-create-toggle-btn.active[data-value="user"]')
-      ?.dataset.value || 'project';
-    const content = modal.querySelector('#rule-content-input')?.value || '';
-
-    if (!name) {
-      this._showError(modal, '请输入规则名称');
-      return;
-    }
-
-    // 禁用按钮防止重复提交
-    const saveBtn = modal.querySelector('.rule-create-btn-save');
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.textContent = '创建中...';
-    }
-
-    try {
-      const result = await apiPost('/api/rules/create', { name, mode, description, scope, content });
-
-      if (result.success) {
-        overlay.remove();
-        // 刷新规则列表
-        this._loaded = false;
-        this._rules = [];
-      } else {
-        this._showError(modal, result.message || '创建失败');
-        if (saveBtn) {
-          saveBtn.disabled = false;
-          saveBtn.textContent = '创建';
-        }
-      }
-    } catch (e) {
-      this._showError(modal, '网络错误，请重试');
-      console.warn('创建规则失败:', e);
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '创建';
-      }
-    }
-  }
-
-  _showError(modal, message) {
-    // 移除旧错误提示
-    const oldErr = modal.querySelector('.rule-create-error');
-    oldErr?.remove();
-
-    const err = document.createElement('div');
-    err.className = 'rule-create-error';
-    err.textContent = message;
-    modal.insertBefore(err, modal.querySelector('.rule-create-actions'));
   }
 }

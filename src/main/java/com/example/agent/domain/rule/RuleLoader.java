@@ -125,13 +125,15 @@ public final class RuleLoader {
         private final String description;
         private final String mode;
         private final String source; // "project" or "user"
+        private final String filePath;
 
-        public RuleInfo(String id, String name, String description, String mode, String source) {
+        public RuleInfo(String id, String name, String description, String mode, String source, String filePath) {
             this.id = id;
             this.name = name;
             this.description = description;
             this.mode = mode;
             this.source = source;
+            this.filePath = filePath;
         }
 
         public String getId() { return id; }
@@ -139,6 +141,7 @@ public final class RuleLoader {
         public String getDescription() { return description; }
         public String getMode() { return mode; }
         public String getSource() { return source; }
+        public String getFilePath() { return filePath; }
     }
 
     /**
@@ -163,6 +166,124 @@ public final class RuleLoader {
             return readFileSafe(userFile);
         }
         return null;
+    }
+
+    /**
+     * 通过绝对文件路径读取规则文件内容。
+     *
+     * @param filePath 规则文件绝对路径
+     * @return 文件文本内容，文件不存在时返回 null
+     */
+    public static String readRuleContentByPath(String filePath) {
+        if (filePath == null || filePath.isBlank()) return null;
+        Path file = Paths.get(filePath);
+        if (!Files.exists(file) || !Files.isRegularFile(file)) return null;
+        return readFileSafe(file);
+    }
+
+    /**
+     * 更新规则文件。
+     *
+     * @param oldFilePath 原文件路径
+     * @param name        新规则名称（不含 .md）
+     * @param mode        新规则模式
+     * @param description 新描述
+     * @param scope       新作用域（project/user）
+     * @param content     完整文件内容（含 Frontmatter）
+     * @param workspacePath 当前工作区路径
+     * @return 更新结果
+     */
+    public static UpdateRuleResult updateRuleFile(String oldFilePath, String name, String mode,
+                                                   String description, String scope,
+                                                   String content, String workspacePath) {
+        Path oldFile = Paths.get(oldFilePath);
+        if (!Files.exists(oldFile) || !Files.isRegularFile(oldFile)) {
+            return new UpdateRuleResult(false, "原文件不存在", null);
+        }
+
+        // 确定新路径
+        String fileName = name.replaceAll("[\\\\/:*?\"<>|]", "-");
+        if (!fileName.endsWith(".md")) {
+            fileName = fileName + ".md";
+        }
+
+        Path targetDir;
+        if ("user".equalsIgnoreCase(scope)) {
+            targetDir = WorkspaceManager.getUserRulesDir();
+        } else {
+            if (workspacePath == null || workspacePath.isBlank()) {
+                return new UpdateRuleResult(false, "未设置工作区", null);
+            }
+            targetDir = getProjectRulesDir(workspacePath);
+        }
+
+        try {
+            Files.createDirectories(targetDir);
+        } catch (IOException e) {
+            logger.error("创建规则目录失败: {}", targetDir, e);
+            return new UpdateRuleResult(false, "创建目录失败", null);
+        }
+
+        Path targetFile = targetDir.resolve(fileName).normalize();
+
+        // 如果目标文件已存在且不是当前文件本身，报错
+        if (Files.exists(targetFile) && !targetFile.equals(oldFile.toAbsolutePath().normalize())) {
+            return new UpdateRuleResult(false, "目标文件已存在: " + fileName, null);
+        }
+
+        try {
+            Files.writeString(targetFile, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            if (!targetFile.equals(oldFile.toAbsolutePath().normalize())) {
+                Files.deleteIfExists(oldFile);
+                logger.info("规则文件已移动: {} → {}", oldFile, targetFile);
+            } else {
+                logger.info("规则文件已更新: {}", targetFile);
+            }
+        } catch (IOException e) {
+            logger.error("写入规则文件失败: {}", targetFile, e);
+            return new UpdateRuleResult(false, "写入文件失败", null);
+        }
+
+        return new UpdateRuleResult(true, "规则已更新", targetFile.toAbsolutePath().normalize().toString());
+    }
+
+    /**
+     * 删除规则文件。
+     *
+     * @param filePath 规则文件绝对路径
+     * @return 是否删除成功
+     */
+    public static boolean deleteRuleFile(String filePath) {
+        if (filePath == null || filePath.isBlank()) return false;
+        Path file = Paths.get(filePath);
+        if (!Files.exists(file)) return false;
+        try {
+            Files.delete(file);
+            logger.info("规则文件已删除: {}", file);
+            return true;
+        } catch (IOException e) {
+            logger.error("删除规则文件失败: {}", file, e);
+            return false;
+        }
+    }
+
+    /**
+     * 更新规则文件的结果。
+     */
+    public static class UpdateRuleResult {
+        private final boolean success;
+        private final String message;
+        private final String filePath;
+
+        public UpdateRuleResult(boolean success, String message, String filePath) {
+            this.success = success;
+            this.message = message;
+            this.filePath = filePath;
+        }
+
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
+        public String getFilePath() { return filePath; }
     }
 
     // ==================== 始终生效规则加载（供 RuleManager 使用） ====================
@@ -380,7 +501,8 @@ public final class RuleLoader {
         String fileName = file.getFileName().toString();
         String id = fileName.endsWith(".md") ? fileName.substring(0, fileName.length() - 3) : fileName;
         RuleMetadata meta = RuleMetadata.parse(head, fileName);
-        return new RuleInfo(id, fileName, meta.getDescription(), meta.getMode().getValue(), source);
+        return new RuleInfo(id, fileName, meta.getDescription(), meta.getMode().getValue(), source,
+                file.toAbsolutePath().normalize().toString());
     }
 
     /**

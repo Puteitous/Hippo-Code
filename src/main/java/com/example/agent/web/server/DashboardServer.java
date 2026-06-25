@@ -83,6 +83,9 @@ public class DashboardServer {
             server.createContext("/api/metrics", new MetricsApiHandler());
             server.createContext("/api/rules/list", new RulesApiHandler());
             server.createContext("/api/rules/create", new RulesApiHandler());
+            server.createContext("/api/rules/get", new RulesApiHandler());
+            server.createContext("/api/rules/update", new RulesApiHandler());
+            server.createContext("/api/rules/delete", new RulesApiHandler());
             server.createContext("/api/skills/list", new SkillsApiHandler());
             server.createContext("/api/skills/get", new SkillsApiHandler());
             server.createContext("/api/skills/create", new SkillsApiHandler());

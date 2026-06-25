@@ -27,6 +27,7 @@ import { RollbackPanel } from './components/RollbackPanel.js';
 import { initSelectionActions } from './components/selection-actions.js';
 import { ActivityBar } from './components/ActivityBar.js';
 import { SkillPanel } from './components/skill-panel.js';
+import { RulesPanel } from './components/RulesPanel.js';
 import { CustomDropdown } from './utils/dropdown.js';
 import { ConfirmDialog } from './utils/modal.js';
 
@@ -119,6 +120,22 @@ function init() {
     activityBar.onPanelOpen('skills', () => {
       if (skillPanelInstance) {
         skillPanelInstance._loadSkills();
+      }
+    });
+  }
+
+  // 注册规则面板
+  if (activityBar) {
+    let rulesPanelInstance = null;
+    activityBar.registerPanel('rules', () => {
+      if (!rulesPanelInstance) {
+        rulesPanelInstance = new RulesPanel();
+      }
+      return rulesPanelInstance.render();
+    });
+    activityBar.onPanelOpen('rules', () => {
+      if (rulesPanelInstance) {
+        rulesPanelInstance._loadRules();
       }
     });
   }

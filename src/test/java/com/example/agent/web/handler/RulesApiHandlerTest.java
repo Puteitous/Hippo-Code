@@ -1,6 +1,7 @@
 package com.example.agent.web.handler;
 
 import com.example.agent.desktop.WorkspaceContext;
+import com.example.agent.logging.WorkspaceManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.Headers;
@@ -153,17 +154,24 @@ class RulesApiHandlerTest {
         @Test
         @DisplayName("user scope - 成功创建全局规则")
         void createUserRule() throws IOException {
-            String uniqueName = "global-rule-" + System.nanoTime();
-            String body = """
-                    {"name":"$UNIQUE","mode":"manual","description":"全局","scope":"user"}
-                    """.replace("$UNIQUE", uniqueName);
-            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/create", body);
-            handler.handle(exchange);
+            Path originalRoot = WorkspaceManager.getHippoRoot();
+            try {
+                WorkspaceManager.overrideBasePath(tempDir);
 
-            assertEquals(201, exchange.getResponseCode());
-            Map<String, Object> result = objectMapper.readValue(
-                    exchange.getResponseBodyAsString(), new TypeReference<>() {});
-            assertTrue((Boolean) result.get("success"));
+                String uniqueName = "global-rule-" + System.nanoTime();
+                String body = """
+                        {"name":"$UNIQUE","mode":"manual","description":"全局","scope":"user"}
+                        """.replace("$UNIQUE", uniqueName);
+                FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/create", body);
+                handler.handle(exchange);
+
+                assertEquals(201, exchange.getResponseCode());
+                Map<String, Object> result = objectMapper.readValue(
+                        exchange.getResponseBodyAsString(), new TypeReference<>() {});
+                assertTrue((Boolean) result.get("success"));
+            } finally {
+                WorkspaceManager.overrideBasePath(originalRoot.getParent());
+            }
         }
 
         @Test
@@ -244,6 +252,155 @@ class RulesApiHandlerTest {
             FakeHttpExchange exchange = createExchange("OPTIONS", "/api/rules/create");
             handler.handle(exchange);
             assertEquals(204, exchange.getResponseCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /api/rules/get")
+    class GetRuleTests {
+
+        @Test
+        @DisplayName("成功读取规则文件内容")
+        void readExistingFile() throws IOException {
+            Path rulesDir = tempDir.resolve(".hippo").resolve("rules");
+            Files.createDirectories(rulesDir);
+            Files.writeString(rulesDir.resolve("test.md"), "# 测试规则\n\n内容");
+            WorkspaceContext.setCurrentFolder(tempDir.toString());
+
+            String filePath = rulesDir.resolve("test.md").toAbsolutePath().normalize().toString();
+            FakeHttpExchange exchange = createExchange("GET",
+                    "/api/rules/get?filePath=" + java.net.URLEncoder.encode(filePath, "UTF-8"));
+            handler.handle(exchange);
+
+            assertEquals(200, exchange.getResponseCode());
+            Map<String, Object> result = objectMapper.readValue(
+                    exchange.getResponseBodyAsString(), new TypeReference<>() {});
+            assertTrue(((String) result.get("content")).contains("测试规则"));
+        }
+
+        @Test
+        @DisplayName("缺少 filePath 参数返回 400")
+        void missingFilePath() throws IOException {
+            FakeHttpExchange exchange = createExchange("GET", "/api/rules/get");
+            handler.handle(exchange);
+            assertEquals(400, exchange.getResponseCode());
+        }
+
+        @Test
+        @DisplayName("文件不存在返回 404")
+        void fileNotFound() throws IOException {
+            String path = tempDir.resolve("nonexistent.md").toAbsolutePath().normalize().toString();
+            FakeHttpExchange exchange = createExchange("GET",
+                    "/api/rules/get?filePath=" + java.net.URLEncoder.encode(path, "UTF-8"));
+            handler.handle(exchange);
+            assertEquals(404, exchange.getResponseCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/rules/update")
+    class UpdateRuleTests {
+
+        @Test
+        @DisplayName("成功更新规则内容")
+        void updateContent() throws IOException {
+            Path rulesDir = tempDir.resolve(".hippo").resolve("rules");
+            Files.createDirectories(rulesDir);
+            Path file = rulesDir.resolve("test.md");
+            Files.writeString(file, "---\nmode: always\n---\n\nold content");
+            WorkspaceContext.setCurrentFolder(tempDir.toString());
+
+            String body = """
+                    {"filePath":"%s","name":"test","mode":"manual","description":"updated","scope":"project","content":"---\\nmode: manual\\n---\\n\\nnew content"}
+                    """.formatted(file.toAbsolutePath().normalize().toString().replace("\\", "\\\\"));
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/update", body);
+            handler.handle(exchange);
+
+            assertEquals(200, exchange.getResponseCode());
+            Map<String, Object> result = objectMapper.readValue(
+                    exchange.getResponseBodyAsString(), new TypeReference<>() {});
+            assertTrue((Boolean) result.get("success"));
+
+            String fileContent = Files.readString(file);
+            assertTrue(fileContent.contains("new content"));
+        }
+
+        @Test
+        @DisplayName("filePath 为空返回 400")
+        void emptyFilePath() throws IOException {
+            String body = """
+                    {"filePath":"","name":"test","scope":"project","content":""}
+                    """;
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/update", body);
+            handler.handle(exchange);
+            assertEquals(400, exchange.getResponseCode());
+        }
+
+        @Test
+        @DisplayName("name 为空返回 400")
+        void emptyName() throws IOException {
+            Path rulesDir = tempDir.resolve(".hippo").resolve("rules");
+            Files.createDirectories(rulesDir);
+            Path file = rulesDir.resolve("test.md");
+            Files.writeString(file, "content");
+            WorkspaceContext.setCurrentFolder(tempDir.toString());
+
+            String body = """
+                    {"filePath":"%s","name":"","scope":"project","content":""}
+                    """.formatted(file.toAbsolutePath().normalize().toString().replace("\\", "\\\\"));
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/update", body);
+            handler.handle(exchange);
+            assertEquals(400, exchange.getResponseCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /api/rules/delete")
+    class DeleteRuleTests {
+
+        @Test
+        @DisplayName("成功删除规则文件")
+        void deleteExisting() throws IOException {
+            Path rulesDir = tempDir.resolve(".hippo").resolve("rules");
+            Files.createDirectories(rulesDir);
+            Path file = rulesDir.resolve("to-delete.md");
+            Files.writeString(file, "content");
+            WorkspaceContext.setCurrentFolder(tempDir.toString());
+
+            String body = """
+                    {"filePath":"%s"}
+                    """.formatted(file.toAbsolutePath().normalize().toString().replace("\\", "\\\\"));
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/delete", body);
+            handler.handle(exchange);
+
+            assertEquals(200, exchange.getResponseCode());
+            Map<String, Object> result = objectMapper.readValue(
+                    exchange.getResponseBodyAsString(), new TypeReference<>() {});
+            assertTrue((Boolean) result.get("success"));
+            assertFalse(Files.exists(file));
+        }
+
+        @Test
+        @DisplayName("filePath 为空返回 400")
+        void emptyFilePath() throws IOException {
+            String body = """
+                    {"filePath":""}
+                    """;
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/delete", body);
+            handler.handle(exchange);
+            assertEquals(400, exchange.getResponseCode());
+        }
+
+        @Test
+        @DisplayName("文件不存在返回 404")
+        void fileNotFound() throws IOException {
+            String path = tempDir.resolve("nonexistent.md").toAbsolutePath().normalize().toString();
+            String body = """
+                    {"filePath":"%s"}
+                    """.formatted(path.replace("\\", "\\\\"));
+            FakeHttpExchange exchange = createExchangeWithBody("POST", "/api/rules/delete", body);
+            handler.handle(exchange);
+            assertEquals(404, exchange.getResponseCode());
         }
     }
 

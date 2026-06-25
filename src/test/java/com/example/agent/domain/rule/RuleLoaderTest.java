@@ -1,5 +1,6 @@
 package com.example.agent.domain.rule;
 
+import com.example.agent.logging.WorkspaceManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -276,13 +277,23 @@ class RuleLoaderTest {
         @Test
         @DisplayName("user scope - 成功创建全局规则")
         void createRuleFile_userScope() {
-            String uniqueName = "user-rule-" + System.nanoTime();
-            RuleLoader.CreateRuleResult result = RuleLoader.createRuleFile(
-                    uniqueName, "always", "全局规则", "user", null, null);
+            Path originalRoot = WorkspaceManager.getHippoRoot();
+            try {
+                WorkspaceManager.overrideBasePath(tempDir);
 
-            assertTrue(result.isSuccess());
-            assertNotNull(result.getFilePath());
-            assertTrue(result.getFilePath().getFileName().toString().equals(uniqueName + ".md"));
+                String uniqueName = "user-rule-" + System.nanoTime();
+                RuleLoader.CreateRuleResult result = RuleLoader.createRuleFile(
+                        uniqueName, "always", "全局规则", "user", null, null);
+
+                assertTrue(result.isSuccess());
+                assertNotNull(result.getFilePath());
+                assertTrue(result.getFilePath().getFileName().toString().equals(uniqueName + ".md"));
+                // 确认文件创建在临时目录下
+                assertTrue(result.getFilePath().toAbsolutePath().normalize()
+                        .startsWith(tempDir.toAbsolutePath().normalize()));
+            } finally {
+                WorkspaceManager.overrideBasePath(originalRoot.getParent());
+            }
         }
 
         @Test
