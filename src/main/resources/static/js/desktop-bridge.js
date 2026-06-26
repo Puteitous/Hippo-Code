@@ -91,6 +91,75 @@ const HippoDesktop = (() => {
     });
   }
 
+  // ========== 窗口大小调整（Resize 热区拖拽） ==========
+  let resizeState = null;
+
+  function initResize() {
+    if (!api.isAvailable) return;
+
+    // 检查是否已存在 resize 热区
+    if (document.querySelector('.window-resize-handle')) return;
+
+    const directions = ['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'];
+
+    directions.forEach(dir => {
+      const handle = document.createElement('div');
+      handle.className = 'window-resize-handle ' + dir;
+      handle.dataset.dir = dir;
+      document.body.appendChild(handle);
+
+      handle.addEventListener('mousedown', (e) => {
+        // 最大化时禁止调整大小
+        const maxBtn = document.getElementById('winMaximize');
+        if (maxBtn && maxBtn.classList.contains('is-maximized')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        resizeState = {
+          dir,
+          startX: e.screenX,
+          startY: e.screenY,
+          winX: window.screenX,
+          winY: window.screenY,
+          winW: window.innerWidth,
+          winH: window.innerHeight,
+          minW: 800,
+          minH: 500
+        };
+      });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!resizeState) return;
+
+      const { dir, startX, startY, winX, winY, winW, winH, minW, minH } = resizeState;
+      const dx = e.screenX - startX;
+      const dy = e.screenY - startY;
+
+      let x = winX, y = winY, w = winW, h = winH;
+
+      if (dir.includes('e')) w = Math.max(minW, winW + dx);
+      if (dir.includes('s')) h = Math.max(minH, winH + dy);
+      if (dir.includes('w')) {
+        const newW = Math.max(minW, winW - dx);
+        x = winX + winW - newW;
+        w = newW;
+      }
+      if (dir.includes('n')) {
+        const newH = Math.max(minH, winH - dy);
+        y = winY + winH - newH;
+        h = newH;
+      }
+
+      api.resizeWindow(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    });
+
+    document.addEventListener('mouseup', () => {
+      resizeState = null;
+    });
+  }
+
   // ========== 窗口最大化状态同步 ==========
   async function syncMaximizeState() {
     try {
@@ -100,6 +169,8 @@ const HippoDesktop = (() => {
         btn.classList.toggle('is-maximized', state.maximized);
         btn.title = state.maximized ? '还原' : '最大化';
       }
+      // 最大化时禁用 resize 热区（避免光标误导）
+      document.body.classList.toggle('window-maximized', state && state.maximized);
     } catch {
       // 忽略，非桌面端
     }
@@ -304,6 +375,10 @@ const HippoDesktop = (() => {
       return send('windowMove', { x, y });
     },
 
+    resizeWindow(x, y, width, height) {
+      return send('windowResize', { x, y, width, height });
+    },
+
     getWindowState() {
       return send('windowGetState');
     },
@@ -454,6 +529,7 @@ const HippoDesktop = (() => {
     // 窗口控制按钮初始化（不再依赖 Java executeJavaScript 调用 _onReady）
     initWindowControls();
     initDrag();
+    initResize();
   } else {
     console.warn('HippoDesktop: cefQuery not available, desktop-only features disabled');
   }

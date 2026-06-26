@@ -153,6 +153,16 @@ public class WindowManager {
     }
 
     /**
+     * 调整窗口位置和大小（前端拖拽 resize 时调用）。
+     * 已包含最小尺寸限制（800x500），如果传入值低于最小值则自动扩至最小值。
+     */
+    public void resizeWindow(int x, int y, int width, int height) {
+        int w = Math.max(800, width);
+        int h = Math.max(500, height);
+        mainFrame.setBounds(x, y, w, h);
+    }
+
+    /**
      * 获取窗口当前状态（位置、尺寸、最大化状态）。
      * 返回 ObjectNode 便于 Bridge Handler 直接序列化。
      */

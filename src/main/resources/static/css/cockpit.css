@@ -758,3 +758,77 @@ body.page-loading .main-container {
 .header-brand:active {
     cursor: grabbing;
 }
+
+/* ==========================================
+   窗口大小调整热区（桌面端无标题栏，通过 JS 自定义 resize）
+   ========================================== */
+
+.window-resize-handle {
+    position: fixed;
+    z-index: 2147483647;
+}
+
+/* 最大化时禁用 resize 热区，避免光标误导 */
+body.window-maximized .window-resize-handle {
+    display: none !important;
+}
+
+/* 四个角 — 可拖拽区域 10px */
+.window-resize-handle.nw {
+    top: 0;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    cursor: nw-resize;
+}
+.window-resize-handle.ne {
+    top: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    cursor: ne-resize;
+}
+.window-resize-handle.sw {
+    bottom: 0;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    cursor: sw-resize;
+}
+.window-resize-handle.se {
+    bottom: 0;
+    right: 0;
+    width: 10px;
+    height: 10px;
+    cursor: se-resize;
+}
+
+/* 四条边 — 8px 宽/高，避开圆角区域 */
+.window-resize-handle.n {
+    top: 0;
+    left: 10px;
+    right: 10px;
+    height: 6px;
+    cursor: n-resize;
+}
+.window-resize-handle.s {
+    bottom: 0;
+    left: 10px;
+    right: 10px;
+    height: 6px;
+    cursor: s-resize;
+}
+.window-resize-handle.w {
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 6px;
+    cursor: w-resize;
+}
+.window-resize-handle.e {
+    right: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 6px;
+    cursor: e-resize;
+}

@@ -627,12 +627,15 @@
     padding: 0 8px 8px 8px;
     user-select: none;
     min-height: 28px;
+    overflow: hidden;
 }
 
 .status-bar-left {
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .status-bar-item {
@@ -646,6 +649,9 @@
     white-space: nowrap;
     padding: 2px 4px;
     border-radius: var(--radius-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .status-bar-item:hover {

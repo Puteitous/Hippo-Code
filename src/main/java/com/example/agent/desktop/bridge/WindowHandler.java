@@ -69,6 +69,16 @@ public class WindowHandler extends CefMessageRouterHandlerAdapter {
                     }
                     callback.success("{}");
                     return true;
+                case "windowResize":
+                    if (json.has("x") && json.has("y") && json.has("width") && json.has("height")) {
+                        int wx = json.get("x").asInt();
+                        int wy = json.get("y").asInt();
+                        int ww = json.get("width").asInt();
+                        int wh = json.get("height").asInt();
+                        SwingUtilities.invokeLater(() -> windowManager.resizeWindow(wx, wy, ww, wh));
+                    }
+                    callback.success("{}");
+                    return true;
                 case "windowGetState":
                     // 需要在 EDT 读取 JFrame 状态，避免非 EDT 线程访问 Swing 组件
                     try {
