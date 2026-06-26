@@ -212,6 +212,7 @@ function init() {
   loadPromptPresets();
   
   // 10. 尝试恢复上次会话，否则创建新会话
+  _cachedLastSessionInfo = _readLastSessionInfo();
   (async () => {
     const lastSessionId = (() => {
       try { return localStorage.getItem('hippo-last-session-id'); } catch { return null; }
@@ -263,7 +264,10 @@ function init() {
   EventBus.on('session:title-updated', ({ sessionId, title }) => {
     if (sessionId && sessionManager && title) {
       sessionManager.updateSessionTitle(sessionId, title);
-      if (sessionId === currentSessionId) updateChatPanelTitle(sessionId);
+      if (sessionId === currentSessionId) {
+        _saveLastSessionInfo(sessionId, title, null); // 只更新标题，project 不变
+        updateChatPanelTitle(sessionId);
+      }
       // 同步更新历史记录下拉框
       updateHistoryDropdown?.();
     }
@@ -537,16 +541,61 @@ function bindGlobalEvents() {
 
 // RollbackPanel 接管了回滚逻辑
 
+// ── 保存/读取最后一次会话信息到 localStorage（重启恢复用） ──
+function _saveLastSessionInfo(sessionId, title, projectPath) {
+  try {
+    localStorage.setItem('hippo-last-session-id', sessionId);
+    if (title) localStorage.setItem('hippo-last-session-title', title);
+    if (projectPath) localStorage.setItem('hippo-last-session-project', projectPath);
+  } catch (e) {}
+}
+
+function _readLastSessionInfo() {
+  try {
+    return {
+      sessionId: localStorage.getItem('hippo-last-session-id'),
+      title: localStorage.getItem('hippo-last-session-title'),
+      projectPath: localStorage.getItem('hippo-last-session-project'),
+    };
+  } catch { return {}; }
+}
+
+// 模块级缓存，启动时从 localStorage 预读，用于 sessions 加载完成前的回退
+let _cachedLastSessionInfo = {};
+
 // ── 更新聊天面板标题 ──
-function updateChatPanelTitle(sessionId) {
+function updateChatPanelTitle(sessionId, fallbackTitle, fallbackProject) {
   const titleEl = document.getElementById('chatPanelTitle');
   if (!titleEl) return;
   let name = sessionManager?.sessionNames?.[sessionId];
+  let projectPath = null;
   if (!name) {
     const session = sessionManager?.sessions?.find(s => s.id === sessionId);
     name = session?.title;
+    projectPath = session?.projectPath;
+  } else {
+    const session = sessionManager?.sessions?.find(s => s.id === sessionId);
+    projectPath = session?.projectPath;
   }
+  // 如果 sessions 还没加载完，用 fallback 或缓存值
+  if (!name) name = fallbackTitle || (!sessionId || sessionId === _cachedLastSessionInfo.sessionId ? _cachedLastSessionInfo.title : null);
+  if (!projectPath) projectPath = fallbackProject || (!sessionId || sessionId === _cachedLastSessionInfo.sessionId ? _cachedLastSessionInfo.projectPath : null);
   titleEl.textContent = name || '聊天';
+
+  // 更新项目名后缀
+  const groupEl = titleEl.parentNode; // .chat-panel-title-group
+  let projectEl = groupEl.querySelector('.chat-panel-project');
+  if (projectPath) {
+    const dirName = projectPath.replace(/\\/g, '/').split('/').filter(Boolean).pop();
+    if (!projectEl) {
+      projectEl = document.createElement('span');
+      projectEl.className = 'chat-panel-project';
+      groupEl.insertBefore(projectEl, groupEl.firstChild);
+    }
+    projectEl.textContent = dirName;
+  } else if (projectEl) {
+    projectEl.remove();
+  }
 }
 
 // ========== 会话历史下拉（模块级，供多处调用） ==========
@@ -716,7 +765,9 @@ async function switchSession(sessionId) {
     }
     
     // 保存为上次活跃会话
-    try { localStorage.setItem('hippo-last-session-id', sessionId); } catch(e) {}
+    const _title = sessionManager?.sessionNames?.[sessionId];
+    const _session = sessionManager?.sessions?.find(s => s.id === sessionId);
+    _saveLastSessionInfo(sessionId, _title || _session?.title, _session?.projectPath);
     updateChatPanelTitle(sessionId);
     tokenMonitor.scheduleUpdate();
     metricsPanel.updateMetrics();

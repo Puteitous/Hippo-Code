@@ -6,28 +6,24 @@ import com.sun.net.httpserver.HttpHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 获取文件 AI 修改前的原始内容。
  *
- * 策略：git 优先，AI 降级
- *   1. 文件在 git 仓库中且已被跟踪 → git show HEAD:<path> 返回 committed 版本
- *   2. 否则 → FileChangeTracker 中取最后一次变更的 originalContent
+ * 策略：仅从 AI 变更记录（FileChangeTracker）中取原始内容。
+ *   git 路线已注释（以前 git show HEAD 为准，但会显示全量 diff 而非仅 AI 改动）。
  *
  * 查询参数：?path=<绝对路径>
- * 返回 JSON：{"content":"...", "source":"git"|"ai"} 或 {"error":"..."}
+ * 返回 JSON：{"content":"...", "source":"ai"} 或 {"error":"..."}
  */
 public class DiffOriginalHandler implements HttpHandler {
 
@@ -62,14 +58,14 @@ public class DiffOriginalHandler implements HttpHandler {
             return;
         }
 
-        // 1) 优先尝试 git
-        String gitContent = tryGitShow(absPath);
-        if (gitContent != null) {
-            sendJson(exchange, 200, toJson(gitContent, "git"));
-            return;
-        }
+        // 1) 优先尝试 git（已注释，统一走 AI 路线）
+//        String gitContent = tryGitShow(absPath);
+//        if (gitContent != null) {
+//            sendJson(exchange, 200, toJson(gitContent, "git"));
+//            return;
+//        }
 
-        // 2) 降级到 AI 变更记录
+        // 2) AI 变更记录
         String aiContent = tryAiTracker(absPath);
         if (aiContent != null) {
             sendJson(exchange, 200, toJson(aiContent, "ai"));
@@ -81,74 +77,75 @@ public class DiffOriginalHandler implements HttpHandler {
     }
 
     /**
-     * 执行 git show HEAD:<relativePath>，成功返回内容，失败返回 null。
+     * 执行 git show HEAD:<relativePath>（已注释，当前统一走 AI 路线）。
      */
     private static String tryGitShow(Path absPath) {
-        try {
-            // 查找 git 根目录
-            Path dir = absPath.getParent();
-            ProcessBuilder rootPb = new ProcessBuilder(
-                "git", "-C", dir.toString(), "rev-parse", "--show-toplevel"
-            );
-            rootPb.redirectErrorStream(true);
-            rootPb.environment().put("GIT_PAGER", "cat");
-
-            Process rootProc = rootPb.start();
-            if (!rootProc.waitFor(3, TimeUnit.SECONDS)) {
-                rootProc.destroyForcibly();
-                return null;
-            }
-            if (rootProc.exitValue() != 0) return null;
-
-            String gitRoot;
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(rootProc.getInputStream(), StandardCharsets.UTF_8))) {
-                gitRoot = br.readLine();
-            }
-            if (gitRoot == null || gitRoot.isBlank()) return null;
-
-            // 计算相对路径
-            Path gitRootPath = Path.of(gitRoot).normalize();
-            String relativePath = gitRootPath.relativize(absPath).toString().replace('\\', '/');
-
-            // git show HEAD:<relativePath>
-            ProcessBuilder showPb = new ProcessBuilder(
-                "git", "-C", gitRoot, "show", "HEAD:" + relativePath
-            );
-            showPb.redirectErrorStream(true);
-            showPb.environment().put("GIT_PAGER", "cat");
-
-            Process showProc = showPb.start();
-            if (!showProc.waitFor(5, TimeUnit.SECONDS)) {
-                showProc.destroyForcibly();
-                return null;
-            }
-
-            // 读取全部输出
-            StringBuilder out = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(showProc.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (out.length() > 0) out.append('\n');
-                    out.append(line);
-                }
-            }
-
-            if (showProc.exitValue() != 0) return null;
-            // 空内容也是有效的原始内容（空文件）
-            return out.toString();
-        } catch (Exception e) {
-            logger.debug("git show 失败: {} - {}", absPath, e.getMessage());
-            return null;
-        }
+//        try {
+//            // 查找 git 根目录
+//            Path dir = absPath.getParent();
+//            ProcessBuilder rootPb = new ProcessBuilder(
+//                "git", "-C", dir.toString(), "rev-parse", "--show-toplevel"
+//            );
+//            rootPb.redirectErrorStream(true);
+//            rootPb.environment().put("GIT_PAGER", "cat");
+//
+//            Process rootProc = rootPb.start();
+//            if (!rootProc.waitFor(3, TimeUnit.SECONDS)) {
+//                rootProc.destroyForcibly();
+//                return null;
+//            }
+//            if (rootProc.exitValue() != 0) return null;
+//
+//            String gitRoot;
+//            try (BufferedReader br = new BufferedReader(
+//                    new InputStreamReader(rootProc.getInputStream(), StandardCharsets.UTF_8))) {
+//                gitRoot = br.readLine();
+//            }
+//            if (gitRoot == null || gitRoot.isBlank()) return null;
+//
+//            // 计算相对路径
+//            Path gitRootPath = Path.of(gitRoot).normalize();
+//            String relativePath = gitRootPath.relativize(absPath).toString().replace('\\', '/');
+//
+//            // git show HEAD:<relativePath>
+//            ProcessBuilder showPb = new ProcessBuilder(
+//                "git", "-C", gitRoot, "show", "HEAD:" + relativePath
+//            );
+//            showPb.redirectErrorStream(true);
+//            showPb.environment().put("GIT_PAGER", "cat");
+//
+//            Process showProc = showPb.start();
+//            if (!showProc.waitFor(5, TimeUnit.SECONDS)) {
+//                showProc.destroyForcibly();
+//                return null;
+//            }
+//
+//            // 读取全部输出
+//            StringBuilder out = new StringBuilder();
+//            try (BufferedReader br = new BufferedReader(
+//                    new InputStreamReader(showProc.getInputStream(), StandardCharsets.UTF_8))) {
+//                String line;
+//                while ((line = br.readLine()) != null) {
+//                    if (out.length() > 0) out.append('\n');
+//                    out.append(line);
+//                }
+//            }
+//
+//            if (showProc.exitValue() != 0) return null;
+//            // 空内容也是有效的原始内容（空文件）
+//            return out.toString();
+//        } catch (Exception e) {
+//            logger.debug("git show 失败: {} - {}", absPath, e.getMessage());
+//            return null;
+//        }
+        return null;
     }
 
     /**
      * 从 AI 变更记录中取最后一次变更的原始内容。
      * 新建文件也返回空字符串（diff 插件会标记所有行为新增）。
      * <p>
-     * 如果变更是从磁盘加载的历史记录（非 git 项目恢复旧会话），
+     * 如果变更是从磁盘加载的历史记录（恢复旧会话），
      * 则跳过 diff 展示，避免编辑器中出现不必要的行标记。
      */
     private static String tryAiTracker(Path absPath) {

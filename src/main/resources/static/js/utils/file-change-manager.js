@@ -107,7 +107,6 @@ export class FileChangeManager {
     if (rollbackBtn) {
       this._rollbackFile(filePath, rollbackBtn);
     } else {
-      console.log('📂 FileChangeManager: 点击文件变更, path=', filePath);
       diffModalManager.show(filePath);
     }
   }

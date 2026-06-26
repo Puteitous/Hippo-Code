@@ -61,6 +61,31 @@ export class FileTabs {
     document.addEventListener('contextmenu', this._onDocClick);
   }
 
+  /**
+   * 手动将 tab 滚动到容器可视区域
+   * 使用 scrollLeft 计算而非 scrollIntoView，避免在嵌套 overflow 容器中行为异常
+   * @param {HTMLElement} tabEl
+   */
+  _scrollTabIntoView(tabEl) {
+    const container = this._container;
+    const containerRect = container.getBoundingClientRect();
+    const tabRect = tabEl.getBoundingClientRect();
+
+    // 计算 tab 相对于容器的偏移
+    const tabLeft = tabRect.left - containerRect.left + container.scrollLeft;
+    const tabRight = tabLeft + tabRect.width;
+
+    // 检查 tab 是否在可视区域之外
+    if (tabLeft < container.scrollLeft) {
+      // tab 在左侧不可见 → 滚动到左侧
+      container.scrollTo({ left: tabLeft, behavior: 'smooth' });
+    } else if (tabRight > container.scrollLeft + containerRect.width) {
+      // tab 在右侧不可见 → 滚动到右侧，留 8px 间距
+      container.scrollTo({ left: tabRight - containerRect.width + 8, behavior: 'smooth' });
+    }
+    // 已在可视区域内 → 不滚动
+  }
+
   /** 获取当前激活的路径 */
   get activePath() {
     return this._activePath;
@@ -204,7 +229,7 @@ export class FileTabs {
     await this._selectTab(key);
 
     // 滚动标签到可见
-    tabEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    this._scrollTabIntoView(tabEl);
   }
 
   /** 切换到指定 tab */
@@ -226,7 +251,7 @@ export class FileTabs {
     const newEl = this._tabs.get(filePath);
     if (newEl) {
       newEl.classList.add('active');
-      newEl.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+      this._scrollTabIntoView(newEl);
     }
 
     this._onTabSelect(filePath);

@@ -167,6 +167,9 @@ export class ChatPanel {
         if (content) {
           input.value = '';
           input.style.height = 'auto';
+          if (input.id === 'heroInput') {
+            appState.heroDraft = ''; // 清空 hero 草稿，避免重建会话时恢复
+          }
           this.sendMessage(content);
         }
       }
@@ -254,6 +257,7 @@ export class ChatPanel {
           if (content) {
             input.value = '';
             input.style.height = 'auto';
+            appState.heroDraft = ''; // 清空 hero 草稿，避免重建会话时恢复
             this.sendMessage(content);
           }
         }

@@ -435,6 +435,23 @@ body.desktop-window {
     user-select: none;
 }
 
+.chat-panel-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.chat-panel-project {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    user-select: none;
+    margin-right: 6px;
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    line-height: 1.6;
+}
+
 /* ========== 聊天面板头部操作按钮 ========== */
 
 .chat-header-actions {
@@ -480,7 +497,7 @@ body.desktop-window {
     box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     z-index: 1000;
     display: none;
-    padding: 6px 0;
+    padding: 6px 4px;
 }
 
 .chat-history-wrapper:hover .chat-history-dropdown,
@@ -497,6 +514,7 @@ body.desktop-window {
     color: var(--text-primary);
     transition: background 0.1s;
     gap: 8px;
+    border-radius: var(--radius-sm);
 }
 
 .chat-history-item:hover {

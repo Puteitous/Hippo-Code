@@ -222,7 +222,13 @@ export class DiffModalManager {
 
     this.contentPanel.innerHTML = `<div class="diff-content">${html}</div>`;
 
-    this.contentPanel.scrollTop = 0;
+    // 滚动到第一个变更行（added 或 removed）
+    requestAnimationFrame(() => {
+      const firstChange = this.contentPanel.querySelector('.diff-line.added, .diff-line.removed');
+      if (firstChange) {
+        firstChange.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
   }
 
   showRollbackWarning() {
