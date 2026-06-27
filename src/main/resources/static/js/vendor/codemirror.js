@@ -4870,15 +4870,15 @@ var ViewPlugin = class _ViewPlugin {
   */
   static define(create, spec) {
     const { eventHandlers, eventObservers, provide, decorations: deco } = spec || {};
-    return new _ViewPlugin(nextPluginID++, create, eventHandlers, eventObservers, (plugin) => {
+    return new _ViewPlugin(nextPluginID++, create, eventHandlers, eventObservers, (plugin2) => {
       let ext = [];
       if (deco)
         ext.push(decorations.of((view) => {
-          let pluginInst = view.plugin(plugin);
+          let pluginInst = view.plugin(plugin2);
           return pluginInst ? deco(pluginInst) : Decoration.none;
         }));
       if (provide)
-        ext.push(provide(plugin));
+        ext.push(provide(plugin2));
       return ext;
     });
   }
@@ -7906,10 +7906,10 @@ var InputState = class {
       this.mouseSelection.destroy();
   }
 };
-function bindHandler(plugin, handler) {
+function bindHandler(plugin2, handler) {
   return (view, event) => {
     try {
-      return handler.call(plugin, event, view);
+      return handler.call(plugin2, event, view);
     } catch (e) {
       logException(view.state, e);
     }
@@ -7920,19 +7920,19 @@ function computeHandlers(plugins) {
   function record(type) {
     return result[type] || (result[type] = { observers: [], handlers: [] });
   }
-  for (let plugin of plugins) {
-    let spec = plugin.spec, handlers2 = spec && spec.plugin.domEventHandlers, observers2 = spec && spec.plugin.domEventObservers;
+  for (let plugin2 of plugins) {
+    let spec = plugin2.spec, handlers2 = spec && spec.plugin.domEventHandlers, observers2 = spec && spec.plugin.domEventObservers;
     if (handlers2)
       for (let type in handlers2) {
         let f = handlers2[type];
         if (f)
-          record(type).handlers.push(bindHandler(plugin.value, f));
+          record(type).handlers.push(bindHandler(plugin2.value, f));
       }
     if (observers2)
       for (let type in observers2) {
         let f = observers2[type];
         if (f)
-          record(type).observers.push(bindHandler(plugin.value, f));
+          record(type).observers.push(bindHandler(plugin2.value, f));
       }
   }
   for (let type in handlers)
@@ -10925,8 +10925,8 @@ var EditorView = class _EditorView {
     if (config2.scrollTo && config2.scrollTo.is(scrollIntoView))
       this.viewState.scrollTarget = config2.scrollTo.value.clip(this.viewState.state);
     this.plugins = this.state.facet(viewPlugin).map((spec) => new PluginInstance(spec));
-    for (let plugin of this.plugins)
-      plugin.update(this);
+    for (let plugin2 of this.plugins)
+      plugin2.update(this);
     this.observer = new DOMObserver(this);
     this.inputState = new InputState(this);
     this.inputState.ensureHandlers(this.plugins);
@@ -11061,13 +11061,13 @@ var EditorView = class _EditorView {
     this.updateState = 2;
     let hadFocus = this.hasFocus;
     try {
-      for (let plugin of this.plugins)
-        plugin.destroy(this);
+      for (let plugin2 of this.plugins)
+        plugin2.destroy(this);
       this.viewState = new ViewState(this, newState);
       this.plugins = newState.facet(viewPlugin).map((spec) => new PluginInstance(spec));
       this.pluginMap.clear();
-      for (let plugin of this.plugins)
-        plugin.update(this);
+      for (let plugin2 of this.plugins)
+        plugin2.update(this);
       this.docView.destroy();
       this.docView = new DocView(this);
       this.inputState.ensureHandlers(this.plugins);
@@ -11090,14 +11090,14 @@ var EditorView = class _EditorView {
         if (found < 0) {
           newPlugins.push(new PluginInstance(spec));
         } else {
-          let plugin = this.plugins[found];
-          plugin.mustUpdate = update;
-          newPlugins.push(plugin);
+          let plugin2 = this.plugins[found];
+          plugin2.mustUpdate = update;
+          newPlugins.push(plugin2);
         }
       }
-      for (let plugin of this.plugins)
-        if (plugin.mustUpdate != update)
-          plugin.destroy(this);
+      for (let plugin2 of this.plugins)
+        if (plugin2.mustUpdate != update)
+          plugin2.destroy(this);
       this.plugins = newPlugins;
       this.pluginMap.clear();
     } else {
@@ -11110,8 +11110,8 @@ var EditorView = class _EditorView {
       this.inputState.ensureHandlers(this.plugins);
   }
   docViewUpdate() {
-    for (let plugin of this.plugins) {
-      let val = plugin.value;
+    for (let plugin2 of this.plugins) {
+      let val = plugin2.value;
       if (val && val.docViewUpdate) {
         try {
           val.docViewUpdate(this);
@@ -11320,10 +11320,10 @@ var EditorView = class _EditorView {
   know you registered a given plugin, it is recommended to check
   the return value of this method.
   */
-  plugin(plugin) {
-    let known = this.pluginMap.get(plugin);
-    if (known === void 0 || known && known.plugin != plugin)
-      this.pluginMap.set(plugin, known = this.plugins.find((p) => p.plugin == plugin) || null);
+  plugin(plugin2) {
+    let known = this.pluginMap.get(plugin2);
+    if (known === void 0 || known && known.plugin != plugin2)
+      this.pluginMap.set(plugin2, known = this.plugins.find((p) => p.plugin == plugin2) || null);
     return known && known.update(this).value;
   }
   /**
@@ -11626,8 +11626,8 @@ var EditorView = class _EditorView {
   destroy() {
     if (this.root.activeElement == this.contentDOM)
       this.contentDOM.blur();
-    for (let plugin of this.plugins)
-      plugin.destroy(this);
+    for (let plugin2 of this.plugins)
+      plugin2.destroy(this);
     this.plugins = [];
     this.inputState.destroy();
     this.docView.destroy();
@@ -12596,6 +12596,26 @@ var TabWidget = class extends WidgetType {
     return false;
   }
 };
+var plugin = /* @__PURE__ */ ViewPlugin.fromClass(class {
+  constructor() {
+    this.height = 1e3;
+    this.attrs = { style: "padding-bottom: 1000px" };
+  }
+  update(update) {
+    let { view } = update;
+    let height = view.viewState.editorHeight - view.defaultLineHeight - view.documentPadding.top - 0.5;
+    if (height >= 0 && height != this.height) {
+      this.height = height;
+      this.attrs = { style: `padding-bottom: ${height}px` };
+    }
+  }
+});
+function scrollPastEnd() {
+  return [plugin, contentAttributes.of((view) => {
+    var _a2;
+    return ((_a2 = view.plugin(plugin)) === null || _a2 === void 0 ? void 0 : _a2.attrs) || null;
+  })];
+}
 function highlightActiveLine() {
   return activeLineHighlighter;
 }
@@ -12698,7 +12718,7 @@ var keys = {
 var showCrosshair = { style: "cursor: crosshair" };
 function crosshairCursor(options = {}) {
   let [code2, getter] = keys[options.key || "Alt"];
-  let plugin = ViewPlugin.fromClass(class {
+  let plugin2 = ViewPlugin.fromClass(class {
     constructor(view) {
       this.view = view;
       this.isDown = false;
@@ -12724,10 +12744,10 @@ function crosshairCursor(options = {}) {
     }
   });
   return [
-    plugin,
+    plugin2,
     EditorView.contentAttributes.of((view) => {
       var _a2;
-      return ((_a2 = view.plugin(plugin)) === null || _a2 === void 0 ? void 0 : _a2.isDown) ? showCrosshair : null;
+      return ((_a2 = view.plugin(plugin2)) === null || _a2 === void 0 ? void 0 : _a2.isDown) ? showCrosshair : null;
     })
   ];
 }
@@ -13112,11 +13132,11 @@ var showTooltip = /* @__PURE__ */ Facet.define({
   enables: [tooltipPlugin, baseTheme]
 });
 function getTooltip(view, tooltip) {
-  let plugin = view.plugin(tooltipPlugin);
-  if (!plugin)
+  let plugin2 = view.plugin(tooltipPlugin);
+  if (!plugin2)
     return null;
-  let found = plugin.manager.tooltips.indexOf(tooltip);
-  return found < 0 ? null : plugin.manager.tooltipViews[found];
+  let found = plugin2.manager.tooltips.indexOf(tooltip);
+  return found < 0 ? null : plugin2.manager.tooltipViews[found];
 }
 var panelConfig = /* @__PURE__ */ Facet.define({
   combine(configs) {
@@ -13129,9 +13149,9 @@ var panelConfig = /* @__PURE__ */ Facet.define({
   }
 });
 function getPanel(view, panel) {
-  let plugin = view.plugin(panelPlugin);
-  let index = plugin ? plugin.specs.indexOf(panel) : -1;
-  return index > -1 ? plugin.panels[index] : null;
+  let plugin2 = view.plugin(panelPlugin);
+  let index = plugin2 ? plugin2.specs.indexOf(panel) : -1;
+  return index > -1 ? plugin2.panels[index] : null;
 }
 var panelPlugin = /* @__PURE__ */ ViewPlugin.fromClass(class {
   constructor(view) {
@@ -13198,8 +13218,8 @@ var panelPlugin = /* @__PURE__ */ ViewPlugin.fromClass(class {
     this.bottom.sync([]);
   }
 }, {
-  provide: (plugin) => EditorView.scrollMargins.of((view) => {
-    let value = view.plugin(plugin);
+  provide: (plugin2) => EditorView.scrollMargins.of((view) => {
+    let value = view.plugin(plugin2);
     return value && { top: value.top.scrollMargin(), bottom: value.bottom.scrollMargin() };
   })
 });
@@ -13566,8 +13586,8 @@ var gutterView = /* @__PURE__ */ ViewPlugin.fromClass(class {
       this.domAfter.remove();
   }
 }, {
-  provide: (plugin) => EditorView.scrollMargins.of((view) => {
-    let value = view.plugin(plugin);
+  provide: (plugin2) => EditorView.scrollMargins.of((view) => {
+    let value = view.plugin(plugin2);
     if (!value || value.gutters.length == 0 || !value.fixed)
       return null;
     let before = value.dom.offsetWidth * view.scaleX, after = value.domAfter ? value.domAfter.offsetWidth * view.scaleX : 0;
@@ -33378,6 +33398,7 @@ export {
   replaceNext,
   rust,
   sass,
+  scrollPastEnd,
   search,
   searchKeymap,
   setSearchQuery,

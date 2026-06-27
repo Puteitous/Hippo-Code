@@ -58,37 +58,25 @@ public class ReadFileTool implements ToolExecutor {
 
         String generateCacheHitMessage(String filePath, Path path) {
             this.accessCount++;
-            long timeSinceRead = System.currentTimeMillis() - readTime;
-            String timeDesc;
-            if (timeSinceRead < 1000) {
-                timeDesc = "刚刚";
-            } else if (timeSinceRead < 60000) {
-                timeDesc = (timeSinceRead / 1000) + " 秒前";
-            } else {
-                timeDesc = (timeSinceRead / 60000) + " 分钟前";
-            }
-
+            
             String relativePath = PathSecurityUtils.getRelativePath(path);
             int totalLines = content.split("\n", -1).length;
 
-            return String.format(
-                "<system-reminder>\n" +
-                "文件 %s 内容未改变（%s 读取，第 %d 次访问）。\n" +
-                "内容已从缓存返回，可直接使用。\n" +
-                "</system-reminder>\n" +
-                "文件内容 (%s) [缓存]:\n" +
-                "<file_content>\n" +
-                "%s\n" +
-                "</file_content>\n" +
-                "(%d 字符, 文件共 %d 行)\n",
-                filePath,
-                timeDesc,
-                accessCount,
-                relativePath,
-                content,
-                contentLength,
-                totalLines
-            );
+            StringBuilder result = new StringBuilder();
+            result.append("文件内容 (").append(relativePath).append("):\n");
+            result.append("<file_content>\n");
+            result.append(content);
+            if (!content.endsWith("\n")) {
+                result.append("\n");
+            }
+            result.append("</file_content>\n");
+            result.append("(").append(contentLength).append(" 字符, 文件共 ").append(totalLines).append(" 行");
+            if (!content.endsWith("\n")) {
+                result.append(", 文件末尾无换行符");
+            }
+            result.append(")\n");
+
+            return result.toString();
         }
     }
 

@@ -11,7 +11,7 @@
  */
 
 import { EditorView, keymap, EditorState, Compartment, basicSetup, oneDark, vsCodeLight,
-  defaultHighlightStyle, syntaxHighlighting,
+  defaultHighlightStyle, syntaxHighlighting, scrollPastEnd,
   javascript, python, java, html, css, json, markdown, xml, yaml, sql,
   rust, php, go, sass } from '../vendor/codemirror.js'
 import { SearchPanel } from './search-panel.js'
@@ -446,6 +446,7 @@ export class FilePreview {
           '&': { height: '100%' },
           '.cm-scroller': { overflow: 'auto' },
         }),
+        scrollPastEnd(),
       ],
     });
 

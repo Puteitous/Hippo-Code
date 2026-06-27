@@ -187,13 +187,14 @@ export function initSelectionActions() {
       }
     }
 
-    // 检查光标位置是否还在容器的可视区域内
+    // 检查光标位置是否还在容器的可视区域内（含水平/垂直方向）
     const selectableEl = (container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement).closest(SELECTABLE_AREAS.join(','));
     if (selectableEl) {
       const containerRect = selectableEl.getBoundingClientRect();
       const margin = 2; // 允许 2px 容差
-      if (rect.bottom < containerRect.top - margin || rect.top > containerRect.bottom + margin) {
-        return null; // 选区已滚出可视区域
+      if (rect.bottom < containerRect.top - margin || rect.top > containerRect.bottom + margin ||
+          rect.right < containerRect.left - margin || rect.left > containerRect.right + margin) {
+        return null; // 选区已滚出可视区域（垂直或水平方向）
       }
     }
 
