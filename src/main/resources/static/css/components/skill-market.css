@@ -1,0 +1,702 @@
+/* ==========================================
+   Skill Market — 技能市场独立覆盖层
+   半透明遮罩 + 居中白底面板
+   ========================================== */
+
+/* ── 遮罩 ── */
+.skill-market-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: sm-fade-in 0.15s ease;
+}
+
+@keyframes sm-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ── 主面板 ── */
+.skill-market-panel {
+    width: 820px;
+    max-width: calc(100vw - 64px);
+    height: 680px;
+    max-height: calc(100vh - 64px);
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: sm-slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="dark"] .skill-market-panel {
+    background: var(--bg-app);
+    border-color: var(--border-color);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+}
+
+@keyframes sm-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Header ── */
+.skill-market-header {
+    display: flex;
+    align-items: center;
+    padding: 20px 24px 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.skill-market-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.skill-market-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 8px;
+}
+
+.skill-market-close {
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.skill-market-close:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* ── Body ── */
+.skill-market-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 24px 16px;
+    overflow: hidden;
+}
+
+/* ── Search ── */
+.skill-market-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+    transition: border-color var(--transition-fast);
+}
+
+.skill-market-search:focus-within {
+    border-color: var(--accent);
+}
+
+.skill-market-search-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.skill-market-search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.skill-market-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.skill-market-search-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+}
+
+.skill-market-search-clear:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+/* ── Category Tabs ── */
+.skill-market-cats {
+    display: flex;
+    gap: 4px;
+    padding: 12px 0;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.skill-market-cats-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border-color);
+    margin: 0 6px;
+    flex-shrink: 0;
+}
+
+.skill-market-installed-btn {
+    font-weight: 500;
+}
+
+.skill-market-cat-btn {
+    padding: 4px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all var(--transition-fast);
+    font-family: inherit;
+}
+
+.skill-market-cat-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.skill-market-cat-btn.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 500;
+}
+
+.skill-market-cat-btn.active:hover {
+    background: var(--accent-hover);
+}
+
+/* ── Content area (scrollable) ── */
+.skill-market-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 4px;
+}
+
+.skill-market-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.skill-market-content::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* ── Section ── */
+.skill-market-section {
+    margin-bottom: 20px;
+}
+
+.skill-market-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Source Cards ── */
+.skill-market-sources {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.skill-market-source-card {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast);
+    position: relative;
+}
+
+.skill-market-source-card:hover {
+    border-color: var(--accent);
+}
+
+.skill-market-source-tag {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.skill-market-source-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.skill-market-source-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+.skill-market-source-stars {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.skill-market-source-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.skill-market-source-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+
+/* ── Source Detail (back) ── */
+.skill-market-source-back {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.skill-market-source-detail-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+/* ── Skill Grid ── */
+.skill-market-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.skill-market-skill-card {
+    display: flex;
+    flex-direction: column;
+    padding: 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast);
+}
+
+.skill-market-skill-card:hover {
+    border-color: var(--accent);
+}
+
+.skill-market-skill-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.skill-market-skill-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.skill-market-skill-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.skill-market-skill-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.skill-market-skill-source {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.skill-market-skill-cat {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.skill-market-skill-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 10px;
+    flex: 1;
+}
+
+.skill-market-skill-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+
+/* ── Buttons ── */
+.skill-market-btn {
+    padding: 5px 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    line-height: 1.4;
+}
+
+.skill-market-btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.skill-market-btn-primary:hover {
+    background: var(--accent-hover);
+}
+
+.skill-market-btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.skill-market-btn-installed {
+    background: var(--color-success-bg, #e6f7e6);
+    color: var(--color-success, #2e7d32);
+    cursor: default;
+}
+
+[data-theme="dark"] .skill-market-btn-installed {
+    background: rgba(46, 125, 50, 0.15);
+    color: #81c784;
+}
+
+.skill-market-btn-secondary {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.skill-market-btn-secondary:hover {
+    background: var(--border-color);
+}
+
+.skill-market-btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+.skill-market-btn-ghost:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* ── Empty state ── */
+.skill-market-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* ── Preview Modal ── */
+.skill-market-preview-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.skill-market-preview-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+}
+
+.skill-market-preview-panel {
+    position: relative;
+    width: 720px;
+    max-width: calc(100vw - 64px);
+    height: 560px;
+    max-height: calc(100vh - 64px);
+    background: var(--bg-white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: sm-slide-in 0.15s ease;
+}
+
+[data-theme="dark"] .skill-market-preview-panel {
+    background: var(--bg-app);
+}
+
+.skill-market-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.skill-market-preview-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+.skill-market-preview-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+}
+
+.skill-market-preview-close:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.skill-market-preview-body {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 20px;
+    min-height: 0;
+}
+
+.skill-market-preview-loading,
+.skill-market-preview-error {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.skill-market-preview-error {
+    color: var(--color-error, #d32f2f);
+}
+
+.skill-market-preview-code {
+    margin: 0;
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.skill-market-preview-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.skill-market-preview-body::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+/* ── 已安装技能列表 ── */
+.skill-market-installed-summary {
+    padding: 12px 0 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.skill-market-installed-summary strong {
+    color: var(--text-primary);
+}
+
+.skill-market-installed-group {
+    margin-bottom: 16px;
+}
+
+.skill-market-installed-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 8px;
+}
+
+.skill-market-installed-group-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.skill-market-installed-group-count {
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--bg-hover);
+    color: var(--text-muted);
+}
+
+.skill-market-installed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.skill-market-installed-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast);
+}
+
+.skill-market-installed-item:hover {
+    border-color: var(--accent);
+}
+
+.skill-market-installed-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.skill-market-installed-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    margin-bottom: 2px;
+}
+
+.skill-market-installed-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+}
+
+.skill-market-installed-item-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: var(--accent);
+    color: #fff;
+}
+
+.skill-market-installed-item-source {
+    color: var(--text-muted);
+}
+
+.skill-market-btn-uninstall {
+    flex-shrink: 0;
+    font-size: 11px;
+    padding: 3px 10px;
+    color: var(--color-error, #d32f2f);
+    opacity: 0.6;
+    transition: opacity var(--transition-fast);
+}
+
+.skill-market-btn-uninstall:hover {
+    opacity: 1;
+    background: rgba(211, 47, 47, 0.08);
+}
+
+[data-theme="dark"] .skill-market-btn-uninstall:hover {
+    background: rgba(211, 47, 47, 0.15);
+}
+
+/* ── 已安装提示：还有未安装的精选技能 ── */
+.skill-market-installed-tip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-input);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 16px;
+}
+
+.skill-market-installed-tip strong {
+    color: var(--text-primary);
+}

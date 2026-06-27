@@ -29,6 +29,7 @@ import { ActivityBar } from './components/ActivityBar.js';
 import { CustomDropdown } from './utils/dropdown.js';
 import { ConfirmDialog } from './utils/modal.js';
 import { SettingsPanel } from './components/SettingsPanel.js';
+import { SkillMarket } from './components/SkillMarket.js';
 
 // ========== 全局状态 ==========
 let currentSessionId = null;
@@ -124,6 +125,14 @@ function init() {
       if (HippoDesktop && HippoDesktop.isAvailable) {
         HippoDesktop.openTerminal().catch(() => {});
       }
+    });
+  }
+
+  // 注册技能市场动作
+  window.skillMarket = new SkillMarket();
+  if (activityBar) {
+    activityBar.onAction('skillMarket', () => {
+      window.skillMarket.open();
     });
   }
 

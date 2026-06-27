@@ -1599,4 +1599,15 @@ export class SettingsPanel {
     this._contentEl.innerHTML = '';
     this._contentEl.appendChild(contentEl);
   }
+
+  /**
+   * 刷新技能列表（供外部调用，安装技能后自动刷新）
+   */
+  reloadSkills() {
+    const listEl = document.getElementById('settingsSkillsList');
+    if (!listEl) return;
+    if (this._activePage !== 'skills') return;
+    this._editingSkill = null;
+    this._loadSkills();
+  }
 }
