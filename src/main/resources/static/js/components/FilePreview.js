@@ -17,7 +17,7 @@ import { EditorView, keymap, EditorState, Compartment, basicSetup, oneDark, vsCo
 import { SearchPanel } from './search-panel.js'
 import { renderMarkdown } from '../markdown-renderer.js'
 import { createDiffExtension } from './FilePreviewDiff.js'
-import { BinaryPreview, isImageFile, isPdfFile, isSpreadsheetFile, isDocxFile, isPptxFile, isHtmlFile } from './file-binary-preview.js'
+import { BinaryPreview, isImageFile, isPdfFile, isSpreadsheetFile, isDocxFile, isPptxFile } from './file-binary-preview.js'
 
 /**
  * 文本/代码文件 → CodeMirror 6 编辑器（可编辑，支持 Ctrl+S 保存）。
@@ -73,6 +73,8 @@ export class FilePreview {
     this._registerSearchButton();
     // 绑定 MD 预览切换按钮
     this._registerMdToggleBtn();
+    // 绑定 HTML 预览按钮
+    this._registerHtmlPreviewBtn();
   }
 
   get currentPath() { return this._currentPath; }
@@ -94,6 +96,40 @@ export class FilePreview {
     btn.addEventListener('click', () => this._toggleMdPreview());
   }
 
+  /** @private 绑定 HTML 预览按钮 — 在内部浏览器中预览渲染效果 */
+  _registerHtmlPreviewBtn() {
+    const btn = document.getElementById('previewHtmlToggleBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!this._currentPath) return;
+      const displayName = this._currentPath.split('/').pop() || '预览';
+      console.debug('[HTML预览] 点击预览按钮, path:', this._currentPath);
+      if (!window.HippoWorkspace || !window.HippoWorkspace.openWebBrowser) return;
+      // 通过 RawFileHandler 获取 HTML 内容，注入 <base> 标签使相对路径以服务器根目录为基准
+      try {
+        const resp = await fetch(`/api/file/raw?path=${encodeURIComponent(this._currentPath)}&t=${Date.now()}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const html = await resp.text();
+        // 注入 <base> 标签让相对路径（js/vendor/...）以服务器根目录为基准正确解析
+        const patched = html.replace(/<head\b[^>]*>/i, match => `${match}<base href="${window.location.origin}/">`);
+        // 先用 about:blank 创建 iframe 浏览器，地址栏保持干净
+        window.HippoWorkspace.openWebBrowser('about:blank', displayName);
+        // 等 iframe 创建完毕后通过 srcdoc 注入带 base 的 HTML
+        setTimeout(() => {
+          const iframe = this._container?.querySelector('.browser-iframe');
+          const placeholder = this._container?.querySelector('.browser-placeholder');
+          if (iframe) {
+            iframe.style.display = '';
+            iframe.srcdoc = patched;
+          }
+          if (placeholder) placeholder.style.display = 'none';
+        }, 100);
+      } catch (err) {
+        console.error('[HTML预览] 加载失败:', err);
+      }
+    });
+  }
+
   async show(filePath) {
     // 上游（FileTabs onBeforeSwitch）已处理脏检查弹窗，此处只清理旧 dirty 状态
     if (this._dirty) {
@@ -109,6 +145,16 @@ export class FilePreview {
     this._currentPath = filePath;
     this._container.dataset.currentPath = filePath;
     this._dirty = false;
+
+    // ── URL 协议前缀 → 委托 showBrowser（防御性，防止误调用）──
+    if (filePath && filePath.startsWith('url:')) {
+      this._destroyEditor();
+      this._binaryViewType = 'browser';
+      this.showBrowser(filePath.slice(4));
+      this._updateSaveBtn();
+      this._updateMdToggleBtn();
+      return;
+    }
 
     // ── 图片 / PDF → 委托 BinaryPreview ──
     if (isImageFile(filePath) || isPdfFile(filePath)) {
@@ -150,16 +196,6 @@ export class FilePreview {
       return;
     }
 
-    // ── HTML 文件 → 委托 BinaryPreview Web 预览 ──
-    if (isHtmlFile(filePath)) {
-      this._destroyEditor();
-      this._binaryViewType = 'web';
-      this._binaryPreview.showWebPreview(filePath);
-      this._updateSaveBtn();
-      this._updateMdToggleBtn();
-      return;
-    }
-
     let content;
     try {
       const result = await window.HippoDesktop.readFile(filePath);
@@ -177,6 +213,12 @@ export class FilePreview {
     this._mdPreviewMode = false;
     this._updateSaveBtn();
     this._updateMdToggleBtn();
+    // HTML 文件显示预览按钮
+    const htmlBtn = document.getElementById('previewHtmlToggleBtn');
+    if (htmlBtn) {
+      const ext = filePath.split('.').pop().toLowerCase();
+      htmlBtn.style.display = (ext === 'html' || ext === 'htm') ? '' : 'none';
+    }
     // 异步获取原始内容用于 diff 标记（不影响打开速度）
     this._fetchOriginalContent(filePath);
   }
@@ -260,10 +302,10 @@ export class FilePreview {
                </div>
              </div>
              <iframe class="browser-iframe" style="display:none;" src="about:blank"
-               sandbox="allow-scripts allow-forms allow-popups"
+               sandbox="allow-scripts allow-forms allow-popups allow-modals"
                loading="lazy" title="${displayUrl}"></iframe>`
           : `<iframe class="browser-iframe" src="${encodedUrl}"
-               sandbox="allow-scripts allow-forms allow-popups"
+               sandbox="allow-scripts allow-forms allow-popups allow-modals"
                loading="lazy" title="${displayUrl}"></iframe>`
         }
       </div>`;

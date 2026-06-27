@@ -88,6 +88,7 @@ public class RawFileHandler implements HttpHandler {
         }
 
         // Office 文件（xlsx/xls/csv/docx/pptx）：小于 10MB 不缓存，大文件缓存 1 小时
+        // HTML 文件始终不缓存（用户可能编辑后重新预览）
         // CSV 的编码检测若缓存可能显示乱码，但 CSV 通常很小（远低于 10MB），走小文件不缓存即可
         String lower = fileName.toLowerCase();
         String cacheControl;
@@ -99,6 +100,8 @@ public class RawFileHandler implements HttpHandler {
             } else {
                 cacheControl = "private, max-age=3600";
             }
+        } else if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+            cacheControl = "no-cache, no-store, must-revalidate";
         } else {
             cacheControl = "private, max-age=3600";
         }
@@ -193,6 +196,7 @@ public class RawFileHandler implements HttpHandler {
         if (name.endsWith(".bmp")) return "image/bmp";
         if (name.endsWith(".ico")) return "image/x-icon";
         if (name.endsWith(".pdf")) return "application/pdf";
+        if (name.endsWith(".html") || name.endsWith(".htm")) return "text/html; charset=UTF-8";
         return "application/octet-stream";
     }
 }

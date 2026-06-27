@@ -195,7 +195,12 @@ const HippoWorkspace = (() => {
 
     for (const filePath of files) {
       const displayName = filePath.split('/').pop() || filePath;
-      await fileTabs.openTab(filePath, displayName);
+      if (filePath.startsWith('url:')) {
+        const url = filePath.slice(4);
+        await fileTabs.openWebTab(url, displayName);
+      } else {
+        await fileTabs.openTab(filePath, displayName);
+      }
     }
 
     // 恢复回调
@@ -360,11 +365,13 @@ const HippoWorkspace = (() => {
      */
     async openWebBrowser(url, displayName) {
       if (!url) return;
-      // 自动补全协议（跳过已有协议和 about: 这类特殊 URL）
+      console.debug('[HTML预览] openWebBrowser 接收 URL:', url, 'displayName:', displayName);
+      // 自动补全协议（跳过已有协议、绝对路径 /、about: 这类特殊 URL）
       let fullUrl = url.trim();
-      if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(fullUrl)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/i.test(fullUrl) && !fullUrl.startsWith('/')) {
         fullUrl = 'https://' + fullUrl;
       }
+      console.debug('[HTML预览] openWebBrowser 最终 URL:', fullUrl);
       // 切换到文件视图确保能显示预览
       switchView('files');
       await fileTabs.openWebTab(fullUrl, displayName);
@@ -484,6 +491,8 @@ const HippoWorkspace = (() => {
       if (els.previewToolbar) {
         els.previewToolbar.style.display = 'none';
       }
+      // 持久化标签页（包含 web tab）
+      _saveWorkspaceSession();
       return;
     }
     await fileTree.revealFile(filePath);
