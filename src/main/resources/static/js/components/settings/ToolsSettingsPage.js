@@ -1,0 +1,347 @@
+/**
+ * ToolsSettingsPage — 工具管理页面
+ *
+ * 配置内置工具行为：
+ * - bash: { enabled, whitelist, requireConfirmation }
+ * - file: { enabled, allowedPaths, maxFileSize, blockedExtensions }
+ * - webSearch: { provider, apiKey }
+ * - subagent: { enabled }
+ *
+ * 通过 HippoDesktop.getConfig() / updateConfig() 读写配置。
+ */
+import { showToast } from '../../utils/toast.js';
+
+const KEY_LABELS = {
+  bash: 'Bash 命令执行',
+  file: '文件系统操作',
+  web_search: 'Web 搜索',
+  subagent: '子代理',
+};
+
+export class ToolsSettingsPage {
+  constructor() {
+    this._config = null;
+    this._saveBtn = null;
+    this._saveStatus = null;
+  }
+
+  render(container) {
+    this._container = container;
+    container.innerHTML = '';
+
+    const page = document.createElement('div');
+    page.className = 'settings-page';
+    page.innerHTML = `
+      <h2 class="settings-page-title">工具管理</h2>
+      <p class="settings-page-desc">配置 Bash、文件、Web 搜索等内置工具的行为</p>
+      <hr class="settings-page-divider">
+
+      <div class="settings-loading" id="toolsLoading" style="display:block;">加载中...</div>
+      <div id="toolsForm" style="display:none;"></div>
+      <div class="settings-save-bar" id="toolsSaveBar" style="display:none;">
+        <button class="settings-save-btn" id="toolsSaveBtn">保存配置</button>
+        <span class="settings-editor-status" id="toolsSaveStatus" style="display:none;"></span>
+      </div>
+    `;
+
+    container.appendChild(page);
+    this._loadConfig();
+  }
+
+  destroy() {
+    this._config = null;
+    this._saveBtn = null;
+    this._saveStatus = null;
+  }
+
+  async _loadConfig() {
+    const { HippoDesktop } = window;
+
+    if (!HippoDesktop || !HippoDesktop.getConfig) {
+      this._showError('配置 API 不可用（仅桌面端支持）');
+      return;
+    }
+
+    try {
+      const config = await HippoDesktop.getConfig();
+      this._config = config.tools || {};
+      this._renderForm();
+    } catch (e) {
+      console.warn('加载工具配置失败:', e);
+      this._showError('加载配置失败: ' + e.message);
+    }
+  }
+
+  _showError(msg) {
+    const form = document.getElementById('toolsForm');
+    const loading = document.getElementById('toolsLoading');
+    if (loading) loading.style.display = 'none';
+    if (form) {
+      form.style.display = 'block';
+      form.innerHTML = `<p style="color:var(--text-muted);font-size:13px;">${msg}</p>`;
+    }
+  }
+
+  _renderForm() {
+    const loading = document.getElementById('toolsLoading');
+    const form = document.getElementById('toolsForm');
+    const saveBar = document.getElementById('toolsSaveBar');
+    if (loading) loading.style.display = 'none';
+    if (!form) return;
+
+    const tools = this._config;
+
+    // ── Bash 配置 ──
+    const bash = tools.bash || {};
+    const whitelistStr = (bash.whitelist || []).join(', ');
+
+    // ── File 配置 ──
+    const file = tools.file || {};
+    const allowedPathsStr = (file.allowed_paths || []).join(', ');
+    const blockedExtsStr = (file.blocked_extensions || []).join(', ');
+
+    // ── Web Search 配置 ──
+    const webSearch = tools.web_search || {};
+
+    // ── SubAgent 配置 ──
+    const subagent = tools.subagent || {};
+
+    form.style.display = 'block';
+    form.innerHTML = `
+      <!-- ===== Bash ===== -->
+      <h3 style="margin:0 0 8px 0;font-size:14px;font-weight:600;">${KEY_LABELS.bash}</h3>
+      <div class="settings-form">
+        <div class="settings-field-horizontal">
+          <label class="settings-field-label">启用</label>
+          <div class="settings-field-body">
+            <div class="settings-toggle-group" id="toolsBashEnabled">
+              <button class="settings-toggle-btn ${bash.enabled !== false ? 'active' : ''}" data-value="true">开</button>
+              <button class="settings-toggle-btn ${bash.enabled === false ? 'active' : ''}" data-value="false">关</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-field-horizontal">
+          <label class="settings-field-label">需确认</label>
+          <div class="settings-field-body">
+            <div class="settings-toggle-group" id="toolsBashConfirm">
+              <button class="settings-toggle-btn ${bash.require_confirmation !== false ? 'active' : ''}" data-value="true">开</button>
+              <button class="settings-toggle-btn ${bash.require_confirmation === false ? 'active' : ''}" data-value="false">关</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsBashWhitelist">
+            命令白名单 <span class="settings-field-hint">(逗号分隔，留空=允许全部)</span>
+          </label>
+          <textarea class="settings-input" id="toolsBashWhitelist" rows="3" placeholder="git, mvn, npm, docker, ls, cat, grep"
+            style="resize:vertical;font-family:var(--font-mono);font-size:12px;padding:6px 8px;">${whitelistStr}</textarea>
+        </div>
+      </div>
+
+      <hr class="settings-page-divider">
+
+      <!-- ===== File ===== -->
+      <h3 style="margin:0 0 8px 0;font-size:14px;font-weight:600;">${KEY_LABELS.file}</h3>
+      <div class="settings-form">
+        <div class="settings-field-horizontal">
+          <label class="settings-field-label">启用</label>
+          <div class="settings-field-body">
+            <div class="settings-toggle-group" id="toolsFileEnabled">
+              <button class="settings-toggle-btn ${file.enabled !== false ? 'active' : ''}" data-value="true">开</button>
+              <button class="settings-toggle-btn ${file.enabled === false ? 'active' : ''}" data-value="false">关</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsFileMaxSize">
+            最大文件大小 <span class="settings-field-hint">(如 10MB, 1GB)</span>
+          </label>
+          <input class="settings-input" id="toolsFileMaxSize" type="text" value="${file.max_file_size || '10MB'}">
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsFileAllowedPaths">
+            允许路径 <span class="settings-field-hint">(逗号分隔)</span>
+          </label>
+          <input class="settings-input" id="toolsFileAllowedPaths" type="text" value="${allowedPathsStr}" placeholder=".">
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsFileBlockedExts">
+            阻止扩展名 <span class="settings-field-hint">(逗号分隔，如 .env, .pem)</span>
+          </label>
+          <input class="settings-input" id="toolsFileBlockedExts" type="text" value="${blockedExtsStr}" placeholder=".env, .pem, .key">
+        </div>
+      </div>
+
+      <hr class="settings-page-divider">
+
+      <!-- ===== Web Search ===== -->
+      <h3 style="margin:0 0 8px 0;font-size:14px;font-weight:600;">${KEY_LABELS.web_search}</h3>
+      <div class="settings-form">
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsWebProvider">搜索 Provider</label>
+          <input class="settings-input" id="toolsWebProvider" type="text" value="${webSearch.provider || ''}" placeholder="brave">
+        </div>
+        <div class="settings-field">
+          <label class="settings-field-label" for="toolsWebApiKey">API Key</label>
+          <div class="settings-input-wrap">
+            <input class="settings-input" id="toolsWebApiKey" type="password" value="${webSearch.api_key || ''}" placeholder="输入 API Key">
+            <button class="settings-input-btn" id="toolsWebApiKeyToggle" title="显示/隐藏">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <hr class="settings-page-divider">
+
+      <!-- ===== SubAgent ===== -->
+      <h3 style="margin:0 0 8px 0;font-size:14px;font-weight:600;">${KEY_LABELS.subagent}</h3>
+      <div class="settings-form">
+        <div class="settings-field-horizontal">
+          <label class="settings-field-label">启用</label>
+          <div class="settings-field-body">
+            <div class="settings-toggle-group" id="toolsSubagentEnabled">
+              <button class="settings-toggle-btn ${subagent.enabled ? 'active' : ''}" data-value="true">开</button>
+              <button class="settings-toggle-btn ${!subagent.enabled ? 'active' : ''}" data-value="false">关</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 绑定事件：API Key 显示/隐藏
+    const toggleBtn = document.getElementById('toolsWebApiKeyToggle');
+    const apiKeyInput = document.getElementById('toolsWebApiKey');
+    if (toggleBtn && apiKeyInput) {
+      toggleBtn.addEventListener('click', () => {
+        const isPassword = apiKeyInput.type === 'password';
+        apiKeyInput.type = isPassword ? 'text' : 'password';
+        toggleBtn.innerHTML = isPassword
+          ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+          : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+      });
+    }
+
+    // 绑定 toggle
+    document.querySelectorAll('#toolsBashEnabled .settings-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#toolsBashEnabled .settings-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+    document.querySelectorAll('#toolsBashConfirm .settings-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#toolsBashConfirm .settings-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+    document.querySelectorAll('#toolsFileEnabled .settings-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#toolsFileEnabled .settings-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+    document.querySelectorAll('#toolsSubagentEnabled .settings-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#toolsSubagentEnabled .settings-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // 保存按钮
+    this._saveBtn = document.getElementById('toolsSaveBtn');
+    this._saveStatus = document.getElementById('toolsSaveStatus');
+    if (this._saveBtn) {
+      this._saveBtn.addEventListener('click', () => this._saveConfig());
+    }
+
+    if (saveBar) saveBar.style.display = '';
+  }
+
+  async _saveConfig() {
+    if (!this._saveBtn) return;
+    this._saveBtn.disabled = true;
+    this._saveBtn.textContent = '保存中…';
+
+    try {
+      const values = {};
+
+      // Bash
+      const bashEnabled = document.querySelector('#toolsBashEnabled .settings-toggle-btn.active')?.dataset.value;
+      const bashConfirm = document.querySelector('#toolsBashConfirm .settings-toggle-btn.active')?.dataset.value;
+      const whitelistRaw = document.getElementById('toolsBashWhitelist')?.value || '';
+      const whitelist = whitelistRaw.split(',').map(s => s.trim()).filter(Boolean);
+      values.bash = {
+        enabled: bashEnabled === 'true',
+        require_confirmation: bashConfirm !== 'false',
+        whitelist,
+      };
+
+      // File
+      const fileEnabled = document.querySelector('#toolsFileEnabled .settings-toggle-btn.active')?.dataset.value;
+      const maxFileSize = document.getElementById('toolsFileMaxSize')?.value?.trim() || '10MB';
+      const allowedPathsRaw = document.getElementById('toolsFileAllowedPaths')?.value || '';
+      const blockedExtsRaw = document.getElementById('toolsFileBlockedExts')?.value || '';
+      values.file = {
+        enabled: fileEnabled === 'true',
+        max_file_size: maxFileSize,
+        allowed_paths: allowedPathsRaw.split(',').map(s => s.trim()).filter(Boolean),
+        blocked_extensions: blockedExtsRaw.split(',').map(s => s.trim()).filter(Boolean),
+      };
+
+      // Web Search
+      const webProvider = document.getElementById('toolsWebProvider')?.value?.trim() || '';
+      values.web_search = {
+        provider: webProvider,
+        api_key: document.getElementById('toolsWebApiKey')?.value || '',
+      };
+
+      // SubAgent
+      const subagentEnabled = document.querySelector('#toolsSubagentEnabled .settings-toggle-btn.active')?.dataset.value;
+      values.subagent = {
+        enabled: subagentEnabled === 'true',
+      };
+
+      const { HippoDesktop } = window;
+      if (HippoDesktop?.updateConfig) {
+        await HippoDesktop.updateConfig({ tools: values });
+      } else {
+        throw new Error('updateConfig 不可用');
+      }
+
+      if (this._saveStatus) {
+        this._saveStatus.textContent = '✓ 配置已保存';
+        this._saveStatus.className = 'settings-editor-status settings-editor-status-success';
+        this._saveStatus.style.display = 'block';
+      }
+      if (this._saveBtn) {
+        this._saveBtn.textContent = '✓ 已保存';
+      }
+      setTimeout(() => {
+        if (this._saveBtn) {
+          this._saveBtn.disabled = false;
+          this._saveBtn.textContent = '保存配置';
+        }
+        if (this._saveStatus) {
+          this._saveStatus.style.display = 'none';
+        }
+        // 重新加载配置（刷新遮掩状态）
+        this._loadConfig();
+      }, 1200);
+    } catch (e) {
+      console.warn('保存工具配置失败:', e);
+      if (this._saveStatus) {
+        this._saveStatus.textContent = '⚠️ 保存失败: ' + e.message;
+        this._saveStatus.className = 'settings-editor-status settings-editor-status-error';
+        this._saveStatus.style.display = 'block';
+      }
+      if (this._saveBtn) {
+        this._saveBtn.disabled = false;
+        this._saveBtn.textContent = '保存配置';
+      }
+    }
+  }
+}

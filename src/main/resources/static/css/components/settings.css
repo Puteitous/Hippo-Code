@@ -888,3 +888,10 @@
     background: var(--bg-sidebar);
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
+
+/* ========== 运行时路径输入（等宽字体） ========== */
+.settings-input-mono {
+    font-family: var(--font-mono, 'Cascadia Code', 'Fira Code', 'Consolas', monospace);
+    font-size: 12px;
+    letter-spacing: 0;
+}
