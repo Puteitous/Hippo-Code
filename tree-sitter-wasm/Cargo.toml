@@ -1,0 +1,28 @@
+[package]
+name = "tree-sitter-wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tree-sitter = "0.24"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Tree-sitter language grammars - add/remove as needed
+tree-sitter-java = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-python = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-rust = "0.23"
+tree-sitter-html = "0.23"
+tree-sitter-css = "0.23"
+tree-sitter-json = "0.23"
+
+[profile.release]
+opt-level = 'z'
+lto = true
+strip = true

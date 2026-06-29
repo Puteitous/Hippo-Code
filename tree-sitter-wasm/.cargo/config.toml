@@ -1,0 +1,2 @@
+[target.wasm32-wasip1]
+# 使用 Rust 内置的 rust-lld（默认），无需额外配置

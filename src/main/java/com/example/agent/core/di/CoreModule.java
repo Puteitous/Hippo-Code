@@ -140,7 +140,6 @@ public final class CoreModule {
 
         registry.getBlockerChain().add(new com.example.agent.core.blocker.SchemaValidationBlocker(registry));
         registry.getBlockerChain().add(new com.example.agent.core.blocker.ConcurrentEditBlocker());
-        registry.getBlockerChain().add(new com.example.agent.core.blocker.SyntaxValidationBlocker());
         registry.getBlockerChain().add(new com.example.agent.core.blocker.BashDangerousCommandBlocker());
 
         return registry;
